@@ -3,20 +3,32 @@ import { useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import api from '../services/api';
 import XmlImportModal from '../components/XmlImportModal';
-import type { Equipment } from '../types';
+import type { Equipment, RentalInvoice } from '../types';
 
 const EQUIPMENT_TYPES = [
   'Elétrica',
-  'Diesel'
+  'Diesel',
+  'GLP'
 ];
 
 const Inventory: React.FC = () => {
   const navigate = useNavigate();
   const [equipments, setEquipments] = useState<Equipment[]>([]);
   const [loading, setLoading] = useState(true);
-  const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
+  const [viewMode, setViewMode] = useState<'grid' | 'list'>(() => {
+    const saved = localStorage.getItem('inventory_view_mode');
+    return saved === 'list' || saved === 'grid' ? saved : 'grid';
+  });
   const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    localStorage.setItem('inventory_view_mode', viewMode);
+  }, [viewMode]);
   const [selectedEquipment, setSelectedEquipment] = useState<Equipment | null>(null);
+  const [historyEquipment, setHistoryEquipment] = useState<Equipment | null>(null);
+  const [equipmentRentals, setEquipmentRentals] = useState<RentalInvoice[]>([]);
+  const [loadingHistory, setLoadingHistory] = useState(false);
+  const [historyError, setHistoryError] = useState<string | null>(null);
   const [statusFilter, setStatusFilter] = useState<string | null>(null);
   const [showFilters, setShowFilters] = useState(false);
   const [isXmlModalOpen, setIsXmlModalOpen] = useState(false);
@@ -26,6 +38,7 @@ const Inventory: React.FC = () => {
   const [yearMax, setYearMax] = useState('');
   const [valueMin, setValueMin] = useState(0);
   const [valueMax, setValueMax] = useState(0);
+  const [assetSortOrder, setAssetSortOrder] = useState<'asc' | 'desc' | null>(null);
 
   const activeAdvancedCount = [search, typeFilter, yearMin, yearMax].filter(Boolean).length + (valueMin > 0 || valueMax > 0 ? 1 : 0);
 
@@ -35,7 +48,7 @@ const Inventory: React.FC = () => {
   }, [equipments]);
 
   const filteredEquipments = useMemo(() => {
-    return equipments.filter(eq => {
+    const list = equipments.filter(eq => {
       if (statusFilter && eq.status !== statusFilter) return false;
       if (typeFilter && eq.type !== typeFilter) return false;
       if (yearMin && (eq.manufacture_year ?? 0) < parseInt(yearMin)) return false;
@@ -52,7 +65,16 @@ const Inventory: React.FC = () => {
       }
       return true;
     });
-  }, [equipments, statusFilter, typeFilter, yearMin, yearMax, search, valueMin, valueMax]);
+
+    if (assetSortOrder) {
+      list.sort((a, b) => {
+        const cmp = (a.asset_number || '').localeCompare(b.asset_number || '', undefined, { numeric: true, sensitivity: 'base' });
+        return assetSortOrder === 'asc' ? cmp : -cmp;
+      });
+    }
+
+    return list;
+  }, [equipments, statusFilter, typeFilter, yearMin, yearMax, search, valueMin, valueMax, assetSortOrder]);
 
   const clearAllFilters = () => {
     setStatusFilter(null);
@@ -62,7 +84,68 @@ const Inventory: React.FC = () => {
     setYearMax('');
     setValueMin(0);
     setValueMax(0);
+    setAssetSortOrder(null);
   };
+
+  const handleOpenHistory = async (eq: Equipment) => {
+    setHistoryEquipment(eq);
+    setLoadingHistory(true);
+    setHistoryError(null);
+    setEquipmentRentals([]);
+    try {
+      const { data } = await api.get(`/equipments/${eq.id}/rentals`);
+      const sorted = (data || []).sort((a: RentalInvoice, b: RentalInvoice) => {
+        if (!a.return_date && !b.return_date) {
+          return new Date(b.billing_period_start || b.created_at || 0).getTime() - new Date(a.billing_period_start || a.created_at || 0).getTime();
+        }
+        if (!a.return_date) return -1;
+        if (!b.return_date) return 1;
+        return new Date(b.return_date).getTime() - new Date(a.return_date).getTime();
+      });
+      setEquipmentRentals(sorted);
+    } catch (err: any) {
+      console.error('Erro ao buscar histórico de locações:', err);
+      setHistoryError('Não foi possível carregar o histórico de locações.');
+    } finally {
+      setLoadingHistory(false);
+    }
+  };
+
+  const historyStats = useMemo(() => {
+    if (!equipmentRentals || equipmentRentals.length === 0) {
+      return { avgDays: 0, avgValue: 0, totalRentals: 0, totalRevenue: 0 };
+    }
+
+    // 1. Média de dias locada
+    const durations = equipmentRentals
+      .map(r => {
+        if (!r.billing_period_start) return null;
+        const startDate = new Date(r.billing_period_start.includes('T') ? r.billing_period_start : `${r.billing_period_start}T00:00:00`);
+        const endDateStr = r.return_date || r.billing_period_end;
+        if (!endDateStr) return null;
+        const endDate = new Date(endDateStr.includes('T') ? endDateStr : `${endDateStr}T00:00:00`);
+        const diffTime = endDate.getTime() - startDate.getTime();
+        const diffDays = Math.round(diffTime / (1000 * 60 * 60 * 24));
+        return diffDays >= 0 ? Math.max(1, diffDays) : null;
+      })
+      .filter((d): d is number => d !== null);
+
+    const avgDays = durations.length > 0
+      ? Math.round(durations.reduce((acc, d) => acc + d, 0) / durations.length)
+      : 0;
+
+    // 2. Média das faturas de locação
+    const nonCancelled = equipmentRentals.filter(r => r.billing_status !== 'Cancelada');
+    const totalRevenue = nonCancelled.reduce((acc, r) => acc + Number(r.total_value || 0), 0);
+    const avgValue = nonCancelled.length > 0 ? totalRevenue / nonCancelled.length : 0;
+
+    return {
+      avgDays,
+      avgValue,
+      totalRentals: equipmentRentals.length,
+      totalRevenue,
+    };
+  }, [equipmentRentals]);
 
   useEffect(() => {
     const fetchEquipments = async () => {
@@ -305,10 +388,14 @@ const Inventory: React.FC = () => {
                         <p className="text-sm font-medium text-slate-500 dark:text-slate-400">{equipment.model || 'Modelo não informado'}</p>
                       </div>
 
-                      <div className="grid grid-cols-2 gap-y-3 gap-x-4 mb-6 mt-auto border-t border-slate-50 dark:border-slate-800 pt-4">
+                      <div className="grid grid-cols-3 gap-y-3 gap-x-2 mb-6 mt-auto border-t border-slate-50 dark:border-slate-800 pt-4">
                         <div>
                           <span className="block text-[10px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-widest">Patrimônio</span>
                           <span className="text-sm font-bold text-slate-800 dark:text-slate-200">{equipment.asset_number}</span>
+                        </div>
+                        <div>
+                          <span className="block text-[10px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-widest">Altura</span>
+                          <span className="text-sm font-bold text-slate-800 dark:text-slate-200">{equipment.height ? `${equipment.height}m` : '-'}</span>
                         </div>
                         <div>
                           <span className="block text-[10px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-widest">Ano</span>
@@ -336,6 +423,14 @@ const Inventory: React.FC = () => {
                         </button>
                         <button
                           type="button"
+                          onClick={() => handleOpenHistory(equipment)}
+                          title="Histórico de Locações"
+                          className="p-2.5 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 hover:text-mustard-600 dark:hover:text-mustard-400 hover:border-mustard-300 dark:hover:border-mustard-500/30 rounded-xl transition-all flex items-center justify-center shrink-0"
+                        >
+                          <span className="material-symbols-outlined text-[18px]">quick_reference_all</span>
+                        </button>
+                        <button
+                          type="button"
                           onClick={() => setSelectedEquipment(equipment)}
                           className="flex-1 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 py-2.5 rounded-xl font-bold text-[10px] uppercase tracking-widest hover:bg-slate-50 dark:hover:bg-slate-700 transition-colors text-center"
                         >
@@ -353,8 +448,20 @@ const Inventory: React.FC = () => {
                     <thead>
                       <tr className="bg-slate-50 dark:bg-slate-800/50 border-b border-slate-200 dark:border-slate-800">
                         <th className="px-6 py-4 text-[10px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-widest">Equipamento</th>
-                        <th className="px-6 py-4 text-[10px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-widest">Patrimônio</th>
+                        <th
+                          onClick={() => setAssetSortOrder(prev => prev === 'asc' ? 'desc' : 'asc')}
+                          className="px-6 py-4 text-[10px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-widest cursor-pointer select-none hover:text-mustard-500 transition-colors group/sort"
+                          title="Clique para ordenar por patrimônio"
+                        >
+                          <div className="flex items-center gap-1">
+                            <span>Patrimônio</span>
+                            <span className={`material-symbols-outlined text-[16px] transition-all ${assetSortOrder ? 'text-mustard-500 opacity-100' : 'opacity-0 group-hover/sort:opacity-40'}`}>
+                              {assetSortOrder === 'desc' ? 'arrow_downward' : 'arrow_upward'}
+                            </span>
+                          </div>
+                        </th>
                         <th className="px-6 py-4 text-[10px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-widest">Modelo</th>
+                        <th className="px-6 py-4 text-[10px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-widest">Altura</th>
                         <th className="px-6 py-4 text-[10px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-widest">Status</th>
                         <th className="px-6 py-4 text-[10px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-widest text-center">Ações</th>
                       </tr>
@@ -380,6 +487,9 @@ const Inventory: React.FC = () => {
                             <span className="text-sm font-medium text-slate-600 dark:text-slate-300 bg-slate-100 dark:bg-slate-800 px-2 py-1 rounded text-[11px] font-mono">{equipment.asset_number}</span>
                           </td>
                           <td className="px-6 py-4 text-sm text-slate-600 dark:text-slate-400">{equipment.model || '-'}</td>
+                          <td className="px-6 py-4 text-sm font-medium text-slate-700 dark:text-slate-300">
+                            {equipment.height ? `${equipment.height}m` : '-'}
+                          </td>
                           <td className="px-6 py-4">
                             <div className="flex items-center gap-2">
                               <div className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full font-bold text-[10px] uppercase tracking-wider border ${getStatusStyle(equipment.status)}`}>
@@ -413,6 +523,14 @@ const Inventory: React.FC = () => {
                                 title="Editar Equipamento"
                               >
                                 <span className="material-symbols-outlined text-[20px]">edit</span>
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => handleOpenHistory(equipment)}
+                                className="p-2 text-slate-400 hover:text-mustard-600 hover:bg-mustard-50 dark:hover:bg-mustard-500/10 rounded-lg transition-all"
+                                title="Histórico de Locações"
+                              >
+                                <span className="material-symbols-outlined text-[20px]">quick_reference_all</span>
                               </button>
                               <button
                                 type="button"
@@ -626,6 +744,216 @@ const Inventory: React.FC = () => {
         )}
       </AnimatePresence>
 
+      {/* Modal de Histórico de Locações */}
+      <AnimatePresence>
+        {historyEquipment && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+            {/* Backdrop */}
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              onClick={() => setHistoryEquipment(null)}
+              className="absolute inset-0 bg-slate-900/60 backdrop-blur-sm"
+            />
+
+            {/* Modal Box */}
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95, y: 20 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.95, y: 20 }}
+              className="relative w-full max-w-3xl max-h-[85vh] bg-white dark:bg-slate-900 rounded-3xl shadow-2xl border border-slate-200 dark:border-slate-800 overflow-hidden flex flex-col z-10"
+            >
+              {/* Header */}
+              <div className="p-6 border-b border-slate-100 dark:border-slate-800 flex items-center justify-between bg-slate-50/50 dark:bg-slate-800/30">
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-xl bg-mustard-500/10 text-mustard-600 dark:text-mustard-400 flex items-center justify-center">
+                    <span className="material-symbols-outlined text-2xl">quick_reference_all</span>
+                  </div>
+                  <div>
+                    <h3 className="text-lg font-bold text-slate-900 dark:text-white">Histórico de Locações</h3>
+                    <p className="text-xs text-slate-500 dark:text-slate-400">
+                      {historyEquipment.asset_number} — {historyEquipment.name} {historyEquipment.model ? `(${historyEquipment.model})` : ''}
+                    </p>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setHistoryEquipment(null)}
+                  className="w-9 h-9 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-full flex items-center justify-center text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 transition-colors"
+                >
+                  <span className="material-symbols-outlined text-xl">close</span>
+                </button>
+              </div>
+
+              {/* Content */}
+              <div className="p-6 overflow-y-auto flex-1 space-y-4">
+                {loadingHistory ? (
+                  <div className="flex flex-col items-center justify-center py-16 text-slate-400 dark:text-slate-500 gap-3">
+                    <div className="w-8 h-8 border-2 border-mustard-500/20 border-t-mustard-500 rounded-full animate-spin" />
+                    <p className="text-xs font-bold uppercase tracking-widest">Carregando histórico de locações...</p>
+                  </div>
+                ) : historyError ? (
+                  <div className="bg-red-50 dark:bg-red-500/10 border border-red-200 dark:border-red-500/20 text-red-700 dark:text-red-400 p-4 rounded-xl text-xs font-medium flex items-center gap-2">
+                    <span className="material-symbols-outlined text-base">error</span>
+                    {historyError}
+                  </div>
+                ) : equipmentRentals.length === 0 ? (
+                  <div className="flex flex-col items-center justify-center py-16 text-center">
+                    <div className="w-16 h-16 rounded-full bg-slate-100 dark:bg-slate-800/80 flex items-center justify-center text-slate-400 mb-4">
+                      <span className="material-symbols-outlined text-3xl">history_toggle_off</span>
+                    </div>
+                    <p className="text-sm font-bold text-slate-700 dark:text-slate-300">
+                      Nenhuma locação associada a esse equipamento
+                    </p>
+                    <p className="text-xs text-slate-400 dark:text-slate-500 mt-1 max-w-xs">
+                      Este equipamento ainda não possui registros de contratos ou faturas de locação vinculados.
+                    </p>
+                  </div>
+                ) : (
+                  <div className="space-y-4">
+                    {/* Seção Superior: KPIs de Médias */}
+                    <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+                      <div className="bg-slate-50 dark:bg-slate-800/60 p-4 rounded-2xl border border-slate-200/80 dark:border-slate-800 flex items-center gap-3.5">
+                        <div className="w-10 h-10 rounded-xl bg-mustard-500/10 text-mustard-600 dark:text-mustard-400 flex items-center justify-center shrink-0">
+                          <span className="material-symbols-outlined text-2xl">date_range</span>
+                        </div>
+                        <div>
+                          <span className="block text-[10px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-widest">Média de Dias</span>
+                          <span className="text-base font-black text-slate-900 dark:text-white">
+                            {historyStats.avgDays > 0 ? `${historyStats.avgDays} dias` : '-'}
+                          </span>
+                        </div>
+                      </div>
+
+                      <div className="bg-slate-50 dark:bg-slate-800/60 p-4 rounded-2xl border border-slate-200/80 dark:border-slate-800 flex items-center gap-3.5">
+                        <div className="w-10 h-10 rounded-xl bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 flex items-center justify-center shrink-0">
+                          <span className="material-symbols-outlined text-2xl">payments</span>
+                        </div>
+                        <div>
+                          <span className="block text-[10px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-widest">Média por Fatura</span>
+                          <span className="text-base font-black text-slate-900 dark:text-white">
+                            {historyStats.avgValue.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
+                          </span>
+                        </div>
+                      </div>
+
+                      <div className="col-span-2 sm:col-span-1 bg-slate-50 dark:bg-slate-800/60 p-4 rounded-2xl border border-slate-200/80 dark:border-slate-800 flex items-center gap-3.5">
+                        <div className="w-10 h-10 rounded-xl bg-blue-500/10 text-blue-600 dark:text-blue-400 flex items-center justify-center shrink-0">
+                          <span className="material-symbols-outlined text-2xl">quick_reference_all</span>
+                        </div>
+                        <div>
+                          <span className="block text-[10px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-widest">Total de Locações</span>
+                          <span className="text-base font-black text-slate-900 dark:text-white">
+                            {historyStats.totalRentals} {historyStats.totalRentals === 1 ? 'locação' : 'locações'}
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="flex items-center justify-between text-xs text-slate-500 dark:text-slate-400 px-1 pt-2 font-medium border-t border-slate-100 dark:border-slate-800">
+                      <span>{equipmentRentals.length} fatura(s) encontrada(s)</span>
+                      <span className="text-[11px] text-slate-400">Ordenado por data de retorno</span>
+                    </div>
+
+                    {equipmentRentals.map((rental) => (
+                      <div
+                        key={rental.id}
+                        className="bg-slate-50/60 dark:bg-slate-800/40 border border-slate-200/80 dark:border-slate-800 rounded-2xl p-4 hover:border-mustard-500/40 transition-all space-y-3"
+                      >
+                        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-200/50 dark:border-slate-700/50 pb-3">
+                          <div>
+                            <div className="flex items-center gap-2">
+                              <span className="font-bold text-sm text-slate-900 dark:text-white">{rental.client_name}</span>
+                              {rental.invoice_number && (
+                                <span className="px-2 py-0.5 bg-slate-200/70 dark:bg-slate-700 text-slate-700 dark:text-slate-300 rounded text-[10px] font-mono">
+                                  #{rental.invoice_number}
+                                </span>
+                              )}
+                            </div>
+                            {rental.work_site && (
+                              <p className="text-xs text-slate-500 dark:text-slate-400 flex items-center gap-1 mt-0.5">
+                                <span className="material-symbols-outlined text-[14px] text-mustard-500">location_on</span>
+                                {rental.work_site}
+                              </p>
+                            )}
+                          </div>
+
+                          <div className="flex items-center gap-2 self-start sm:self-auto">
+                            <span className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-bold ${
+                              rental.billing_status === 'Faturado'
+                                ? 'bg-emerald-100 dark:bg-emerald-500/10 text-emerald-800 dark:text-emerald-400'
+                                : rental.billing_status === 'Cancelada'
+                                ? 'bg-red-100 dark:bg-red-500/10 text-red-800 dark:text-red-400'
+                                : 'bg-amber-100 dark:bg-amber-500/10 text-amber-800 dark:text-amber-400'
+                            }`}>
+                              {rental.billing_status}
+                            </span>
+                            <span className="font-bold text-sm text-mustard-600 dark:text-mustard-400">
+                              {Number(rental.total_value || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
+                            </span>
+                          </div>
+                        </div>
+
+                        <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 text-xs">
+                          <div>
+                            <span className="block text-[10px] font-bold text-slate-400 uppercase tracking-widest">Período de Locação</span>
+                            <span className="text-slate-700 dark:text-slate-300 font-medium">
+                              {rental.billing_period_start ? new Date(rental.billing_period_start + (rental.billing_period_start.includes('T') ? '' : 'T00:00:00')).toLocaleDateString('pt-BR') : '-'}
+                              {' — '}
+                              {rental.billing_period_end ? new Date(rental.billing_period_end + (rental.billing_period_end.includes('T') ? '' : 'T00:00:00')).toLocaleDateString('pt-BR') : '-'}
+                            </span>
+                          </div>
+
+                          <div>
+                            <span className="block text-[10px] font-bold text-slate-400 uppercase tracking-widest">Data de Retorno</span>
+                            {rental.return_date ? (
+                              <span className="text-emerald-600 dark:text-emerald-400 font-bold flex items-center gap-1">
+                                <span className="material-symbols-outlined text-[14px]">event_available</span>
+                                {new Date(rental.return_date + (rental.return_date.includes('T') ? '' : 'T00:00:00')).toLocaleDateString('pt-BR')}
+                              </span>
+                            ) : (
+                              <span className="text-amber-600 dark:text-amber-400 font-medium flex items-center gap-1">
+                                <span className="material-symbols-outlined text-[14px]">schedule</span>
+                                Em andamento
+                              </span>
+                            )}
+                          </div>
+
+                          <div>
+                            <span className="block text-[10px] font-bold text-slate-400 uppercase tracking-widest">Vencimento</span>
+                            <span className="text-slate-700 dark:text-slate-300 font-medium">
+                              {rental.due_date ? new Date(rental.due_date + (rental.due_date.includes('T') ? '' : 'T00:00:00')).toLocaleDateString('pt-BR') : '-'}
+                            </span>
+                          </div>
+                        </div>
+
+                        {rental.notes && (
+                          <p className="text-[11px] text-slate-500 dark:text-slate-400 italic bg-white dark:bg-slate-900/60 p-2.5 rounded-xl border border-slate-100 dark:border-slate-800">
+                            {rental.notes}
+                          </p>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+
+              {/* Footer */}
+              <div className="p-4 border-t border-slate-100 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-800/30 flex justify-end">
+                <button
+                  type="button"
+                  onClick={() => setHistoryEquipment(null)}
+                  className="px-6 py-2.5 bg-slate-200 dark:bg-slate-700 hover:bg-slate-300 dark:hover:bg-slate-600 text-slate-700 dark:text-slate-200 rounded-xl font-bold text-xs uppercase tracking-widest transition-colors"
+                >
+                  Fechar
+                </button>
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
       {/* Offcanvas Filtros Avançados */}
       <AnimatePresence>
         {showFilters && (
@@ -683,12 +1011,12 @@ const Inventory: React.FC = () => {
                 {/* Tipo de Equipamento */}
                 <div className="space-y-2">
                   <label className="text-[11px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-widest">Tipo de Equipamento</label>
-                  <div className="grid grid-cols-2 gap-2">
+                  <div className="grid grid-cols-3 gap-2">
                     {EQUIPMENT_TYPES.map(t => (
                       <button
                         key={t}
                         onClick={() => setTypeFilter(typeFilter === t ? '' : t)}
-                        className={`px-3 py-2.5 rounded-xl text-xs font-bold text-left transition-all ${typeFilter === t ? 'bg-mustard-500 text-white shadow-md' : 'bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-700'}`}
+                        className={`px-3 py-2.5 rounded-xl text-xs font-bold text-center transition-all ${typeFilter === t ? 'bg-mustard-500 text-white shadow-md' : 'bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-700'}`}
                       >
                         {t}
                       </button>

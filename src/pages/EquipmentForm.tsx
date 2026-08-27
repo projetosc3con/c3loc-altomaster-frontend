@@ -7,6 +7,7 @@ import api from '../services/api';
 const EQUIPMENT_TYPES = [
   'Elétrica',
   'Diesel',
+  'GLP',
 ];
 
 const EquipmentForm: React.FC = () => {

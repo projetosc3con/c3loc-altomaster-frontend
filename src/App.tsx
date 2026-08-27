@@ -12,6 +12,7 @@ import Profile from './pages/Profile';
 import SetPassword from './pages/SetPassword';
 import Clients from './pages/Clients';
 import ClientForm from './pages/ClientForm';
+import RentalForm from './pages/RentalForm';
 import RentalEdit from './pages/RentalEdit';
 import Parts from './pages/Parts';
 import PartForm from './pages/PartForm';
@@ -94,6 +95,7 @@ function App() {
                 {/* FULL ACCESS ONLY: Locações, Equipamentos, Usuários, Financeiro, Configurações */}
                 <Route element={<ProtectedRoute allowedRoles={['Administrador', 'Diretoria', 'Gerente']} />}>
                   <Route path="/locacoes" element={<Rentals />} />
+                  <Route path="/locacoes/novo" element={<RentalForm />} />
                   <Route path="/locacoes/editar/:id" element={<RentalEdit />} />
                   <Route path="/equipamentos" element={<Inventory />} />
                   <Route path="/equipamentos/novo" element={<EquipmentForm />} />

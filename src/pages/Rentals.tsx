@@ -205,10 +205,20 @@ const Rentals: React.FC = () => {
   return (
     <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.4 }} className="space-y-8">
       {/* Header */}
-      <div className="flex flex-col md:flex-row md:items-end justify-between gap-4">
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>
           <h1 className="text-3xl font-bold text-slate-900 dark:text-white tracking-tight">Gestão de Locações</h1>
           <p className="text-slate-500 dark:text-slate-400 mt-1">Acompanhe contratos, faturamentos e períodos de locação.</p>
+        </div>
+
+        <div className="flex items-center gap-3">
+          <button
+            onClick={() => navigate('/locacoes/novo')}
+            className="flex items-center gap-2 bg-mustard-500 text-white px-5 py-2.5 rounded-xl shadow-lg shadow-mustard-500/20 hover:bg-mustard-600 active:scale-95 transition-all font-bold text-xs uppercase tracking-widest"
+          >
+            <span className="material-symbols-outlined text-[18px]">add_circle</span>
+            Nova Fatura de Locação
+          </button>
         </div>
       </div>
 

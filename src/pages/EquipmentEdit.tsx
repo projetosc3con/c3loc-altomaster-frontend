@@ -9,6 +9,7 @@ import type { Equipment } from '../types';
 const EQUIPMENT_TYPES = [
   'Elétrica',
   'Diesel',
+  'GLP',
 ];
 
 const EquipmentEdit: React.FC = () => {
