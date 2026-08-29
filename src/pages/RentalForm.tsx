@@ -140,6 +140,7 @@ const RentalForm: React.FC = () => {
     billing_period_start: '',
     billing_period_end: '',
     billing_status: 'Pendente' as BillingStatus,
+    billing_method: 'MANUAL' as const,
     return_date: '',
     cost_rental: 0,
     cost_insurance: 0,
@@ -231,11 +232,12 @@ const RentalForm: React.FC = () => {
         equipment_name: selectedEquip.name,
         equipment_type: selectedEquip.type,
         asset_number: selectedEquip.asset_number,
+        billing_method: 'MANUAL',
         total_value: totalValue,
       };
 
-      await api.post('/rentals', payload);
-      navigate('/locacoes');
+      const res = await api.post('/rentals', payload);
+      navigate('/locacoes', { state: { warning: res.data?.warning } });
     } catch (err: any) {
       console.error('Erro ao cadastrar fatura de locação:', err);
       setError(err.response?.data?.error || err.message || 'Erro ao cadastrar fatura de locação.');

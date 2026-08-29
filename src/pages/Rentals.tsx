@@ -1,10 +1,11 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useLocation } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import api from '../services/api';
 import { financeiroService } from '../services/financeiro';
 import { getApiErrorMessage } from '../utils/apiError';
 import { isPaidStatus } from '../utils/payment';
+import { formatDate } from '../utils/date';
 import { useTheme } from '../context/ThemeContext';
 import logoLight from '../assets/logo-completo.png';
 import logoDark from '../../config_files/logo-completo-dark.png';
@@ -44,6 +45,7 @@ const buildParams = (page: number, f: Filters) => {
 const Rentals: React.FC = () => {
   const { theme } = useTheme();
   const navigate = useNavigate();
+  const location = useLocation();
   const [rentals, setRentals] = useState<RentalInvoice[]>([]);
   const [selectedRental, setSelectedRental] = useState<RentalInvoice | null>(null);
   const [loading, setLoading] = useState(true);
@@ -86,6 +88,15 @@ const Rentals: React.FC = () => {
   useEffect(() => {
     fetchPaidPayments();
   }, [fetchPaidPayments]);
+
+  useEffect(() => {
+    if (location.state?.warning) {
+      setFeedbackToast(`⚠️ ${location.state.warning}`);
+      window.history.replaceState({}, document.title);
+      const timer = setTimeout(() => setFeedbackToast(null), 8000);
+      return () => clearTimeout(timer);
+    }
+  }, [location.state]);
 
   useEffect(() => {
     if (!selectedRental) {
@@ -332,7 +343,7 @@ const Rentals: React.FC = () => {
                       <td className="px-6 py-4 text-slate-600 dark:text-slate-400 whitespace-nowrap min-w-[180px]">
                         <div className="flex items-center gap-1">
                           <span className="material-symbols-outlined text-[16px] text-slate-400 dark:text-slate-500">date_range</span>
-                          {rental.billing_period_start ? new Date(rental.billing_period_start).toLocaleDateString() : 'N/A'} - {rental.billing_period_end ? new Date(rental.billing_period_end).toLocaleDateString() : 'N/A'}
+                          {formatDate(rental.billing_period_start)} - {formatDate(rental.billing_period_end)}
                         </div>
                       </td>
                       <td className="px-6 py-4 text-right font-bold text-mustard-500 dark:text-mustard-400">
@@ -547,8 +558,8 @@ const Rentals: React.FC = () => {
                   <h1 className="text-3xl font-black text-slate-900 dark:text-white uppercase tracking-tighter">Fatura de Locação</h1>
                   <div className="mt-2 flex flex-col gap-1 text-slate-500 dark:text-slate-400 font-mono text-xs">
                     <span>Nº {selectedRental.invoice_number || 'S/N'}</span>
-                    <span>Emissão: {new Date(selectedRental.created_at).toLocaleDateString()}</span>
-                    <span>Vencimento: {new Date(selectedRental.due_date).toLocaleDateString()}</span>
+                    <span>Emissão: {formatDate(selectedRental.created_at)}</span>
+                    <span>Vencimento: {formatDate(selectedRental.due_date)}</span>
                   </div>
                 </div>
               </div>
@@ -596,7 +607,7 @@ const Rentals: React.FC = () => {
                       <div className="text-center">
                         <span className="block text-[10px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-widest mb-1">Período</span>
                         <p className="text-sm font-bold text-slate-900 dark:text-white">
-                          {new Date(selectedRental.billing_period_start).toLocaleDateString()} a {new Date(selectedRental.billing_period_end).toLocaleDateString()}
+                          {formatDate(selectedRental.billing_period_start)} a {formatDate(selectedRental.billing_period_end)}
                         </p>
                       </div>
                       <div className="text-right">
@@ -625,36 +636,38 @@ const Rentals: React.FC = () => {
               <div className="p-8 border-t border-slate-100 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-800/50 flex justify-end">
                 <div className="flex gap-3">
                   <button onClick={() => setSelectedRental(null)} className="px-6 py-3 text-slate-400 dark:text-slate-500 font-bold text-xs uppercase tracking-widest hover:text-slate-600 dark:hover:text-slate-300 transition-all">Fechar</button>
-                  {invoicePaid ? (
-                    <span className="flex items-center gap-2 px-6 py-3 bg-emerald-100 dark:bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 rounded-xl font-bold text-xs uppercase tracking-widest border border-emerald-200 dark:border-emerald-500/20">
-                      <span className="material-symbols-outlined text-[20px]">check_circle</span>
-                      Pagamento Confirmado
-                    </span>
-                  ) : chargeResult ? (
-                    <a
-                      href={chargeResult.charge.invoiceUrl}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="flex items-center gap-2 px-6 py-3 bg-emerald-600 text-white rounded-xl font-bold text-xs uppercase tracking-widest hover:bg-emerald-700 shadow-lg shadow-emerald-600/20 transition-all"
-                    >
-                      <span className="material-symbols-outlined text-[20px]">receipt_long</span>
-                      Ver Boleto
-                    </a>
-                  ) : (
-                    <button
-                      onClick={() => setConfirmChargeOpen(true)}
-                      disabled={charging}
-                      className="flex items-center gap-2 px-6 py-3 bg-emerald-600 text-white rounded-xl font-bold text-xs uppercase tracking-widest hover:bg-emerald-700 shadow-lg shadow-emerald-600/20 transition-all disabled:opacity-50"
-                    >
-                      {charging ? (
-                        <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-                      ) : (
-                        <>
-                          <span className="material-symbols-outlined text-[20px]">payments</span>
-                          {selectedRental.billing_status === 'Faturado' ? 'Gerar Segunda Via' : 'Gerar Cobrança'}
-                        </>
-                      )}
-                    </button>
+                  {selectedRental.billing_method !== 'MANUAL' && (
+                    invoicePaid ? (
+                      <span className="flex items-center gap-2 px-6 py-3 bg-emerald-100 dark:bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 rounded-xl font-bold text-xs uppercase tracking-widest border border-emerald-200 dark:border-emerald-500/20">
+                        <span className="material-symbols-outlined text-[20px]">check_circle</span>
+                        Pagamento Confirmado
+                      </span>
+                    ) : chargeResult ? (
+                      <a
+                        href={chargeResult.charge.invoiceUrl}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="flex items-center gap-2 px-6 py-3 bg-emerald-600 text-white rounded-xl font-bold text-xs uppercase tracking-widest hover:bg-emerald-700 shadow-lg shadow-emerald-600/20 transition-all"
+                      >
+                        <span className="material-symbols-outlined text-[20px]">receipt_long</span>
+                        Ver Boleto
+                      </a>
+                    ) : (
+                      <button
+                        onClick={() => setConfirmChargeOpen(true)}
+                        disabled={charging}
+                        className="flex items-center gap-2 px-6 py-3 bg-emerald-600 text-white rounded-xl font-bold text-xs uppercase tracking-widest hover:bg-emerald-700 shadow-lg shadow-emerald-600/20 transition-all disabled:opacity-50"
+                      >
+                        {charging ? (
+                          <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                        ) : (
+                          <>
+                            <span className="material-symbols-outlined text-[20px]">payments</span>
+                            {selectedRental.billing_status === 'Faturado' ? 'Gerar Segunda Via' : 'Gerar Cobrança'}
+                          </>
+                        )}
+                      </button>
+                    )
                   )}
                   <button
                     onClick={() => {

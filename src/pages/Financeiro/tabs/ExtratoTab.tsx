@@ -4,6 +4,7 @@ import { financeiroService } from '../../../services/financeiro';
 import { getApiErrorMessage } from '../../../utils/apiError';
 import SearchableSelect from '../../../components/SearchableSelect';
 import LancamentoManualModal from '../../../components/financeiro/LancamentoManualModal';
+import BillDetailsModal from '../../../components/financeiro/BillDetailsModal';
 import XmlImportModal from '../../../components/XmlImportModal';
 import { formatDate } from '../../../utils/date';
 import type { Client, StatementItem, BillType, BillStatus } from '../../../types';
@@ -91,6 +92,7 @@ const ExtratoTab: React.FC = () => {
 
   const [lancamentoModal, setLancamentoModal] = useState<BillType | null>(null);
   const [isXmlModalOpen, setIsXmlModalOpen] = useState(false);
+  const [selectedBill, setSelectedBill] = useState<StatementItem | null>(null);
 
   useEffect(() => {
     const fetchClients = async () => {
@@ -282,10 +284,10 @@ const ExtratoTab: React.FC = () => {
                   <th className="px-6 py-3 text-[11px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-widest">Cliente / Fatura</th>
                   <th className="px-6 py-3 text-[11px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-widest">Origem</th>
                   <th className="px-6 py-3 text-[11px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-widest text-right">Valor Bruto</th>
-                  <th className="px-6 py-3 text-[11px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-widest text-right">Taxa</th>
+                  <th className="px-6 py-3 text-[11px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-widest text-center">Tipo</th>
                   <th className="px-6 py-3 text-[11px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-widest text-right">Valor Líquido</th>
                   <th className="px-6 py-3 text-[11px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-widest">Status</th>
-                  <th className="px-6 py-3 text-[11px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-widest">Asaas</th>
+                  <th className="px-6 py-3 text-[11px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-widest text-center">Ações</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
@@ -304,11 +306,12 @@ const ExtratoTab: React.FC = () => {
                 ) : (
                   items.map((item) => {
                     const badge = sourceBadge(item);
+                    const isReconciled = item.is_reconciled || Boolean(item.settled_date);
                     return (
                       <tr key={`${item.source}-${item.id}`}>
                         <td className="px-6 py-4 text-center">
-                          {item.is_reconciled ? (
-                            <span title="Conciliado com o extrato bancário" className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[11px] font-bold bg-emerald-100 dark:bg-emerald-500/10 text-emerald-800 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-500/20">
+                          {isReconciled ? (
+                            <span title="Conciliado" className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[11px] font-bold bg-emerald-100 dark:bg-emerald-500/10 text-emerald-800 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-500/20">
                               <span className="material-symbols-outlined text-[14px]">check_circle</span>
                               Conciliado
                             </span>
@@ -338,8 +341,22 @@ const ExtratoTab: React.FC = () => {
                         <td className="px-6 py-4 text-right text-slate-600 dark:text-slate-400">
                           {item.gross_value.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
                         </td>
-                        <td className="px-6 py-4 text-right text-slate-400 dark:text-slate-500">
-                          {item.fee_amount ? item.fee_amount.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' }) : '—'}
+                        <td className="px-6 py-4 text-center">
+                          {item.type === 'receivable' ? (
+                            <span
+                              title="Entrada (A Receber)"
+                              className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[11px] font-bold bg-emerald-100 dark:bg-emerald-500/10 text-emerald-800 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-500/20"
+                            >
+                              <span className="material-symbols-outlined text-[14px]">arrow_downward</span>
+                            </span>
+                          ) : (
+                            <span
+                              title="Saída (A Pagar)"
+                              className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[11px] font-bold bg-rose-100 dark:bg-rose-500/10 text-rose-800 dark:text-rose-400 border border-rose-200 dark:border-rose-500/20"
+                            >
+                              <span className="material-symbols-outlined text-[14px]">arrow_upward</span>
+                            </span>
+                          )}
                         </td>
                         <td className="px-6 py-4 text-right font-bold text-mustard-500 dark:text-mustard-400">
                           {(item.net_value ?? item.gross_value).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
@@ -350,20 +367,15 @@ const ExtratoTab: React.FC = () => {
                             {statusLabel(item)}
                           </span>
                         </td>
-                        <td className="px-6 py-4">
-                          {item.invoice_url || item.bank_slip_url ? (
-                            <a
-                              href={item.invoice_url || item.bank_slip_url || '#'}
-                              target="_blank"
-                              rel="noopener noreferrer"
-                              className="inline-flex items-center gap-1 text-xs font-bold text-mustard-600 dark:text-mustard-400 hover:underline whitespace-nowrap"
-                            >
-                              <span className="material-symbols-outlined text-[16px]">open_in_new</span>
-                              Ver no Asaas
-                            </a>
-                          ) : (
-                            <span className="text-slate-300 dark:text-slate-600">—</span>
-                          )}
+                        <td className="px-6 py-4 text-center">
+                          <button
+                            type="button"
+                            onClick={() => setSelectedBill(item)}
+                            className="p-2 text-slate-400 hover:text-mustard-600 dark:hover:text-mustard-400 hover:bg-mustard-50 dark:hover:bg-mustard-500/10 rounded-xl transition-all inline-flex items-center justify-center"
+                            title="Ver detalhes do lançamento"
+                          >
+                            <span className="material-symbols-outlined text-[20px]">visibility</span>
+                          </button>
                         </td>
                       </tr>
                     );
@@ -437,6 +449,13 @@ const ExtratoTab: React.FC = () => {
         onSuccess={() => {
           fetchExtrato();
         }}
+      />
+
+      <BillDetailsModal
+        isOpen={selectedBill !== null}
+        item={selectedBill}
+        onClose={() => setSelectedBill(null)}
+        onUpdated={fetchExtrato}
       />
     </div>
   );

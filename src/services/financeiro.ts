@@ -98,6 +98,15 @@ export const financeiroService = {
     return data;
   },
 
+  atualizarLancamento: async (billId: string, payload: { status?: string; is_reconciled?: boolean }): Promise<StatementItem> => {
+    const { data } = await api.patch<StatementItem>(`/bills/${billId}`, payload);
+    return data;
+  },
+
+  excluirLancamento: async (billId: string): Promise<void> => {
+    await api.delete(`/bills/${billId}`);
+  },
+
   // Dispara a busca do extrato bancário no BB pro período informado (default
   // últimos 30 dias no backend) e concilia automaticamente contra os `bills`
   // ainda não conciliados. A lista de linhas retornada não é persistida em

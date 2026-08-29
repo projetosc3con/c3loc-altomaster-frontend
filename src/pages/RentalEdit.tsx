@@ -160,6 +160,7 @@ const RentalEdit: React.FC = () => {
     billing_period_start: '',
     billing_period_end: '',
     billing_status: 'Pendente' as BillingStatus,
+    billing_method: '',
     return_date: '',
     cost_rental: 0,
     cost_insurance: 0,
@@ -195,6 +196,7 @@ const RentalEdit: React.FC = () => {
           billing_period_start: rental.billing_period_start ? rental.billing_period_start.split('T')[0] : '',
           billing_period_end: rental.billing_period_end ? rental.billing_period_end.split('T')[0] : '',
           billing_status: rental.billing_status,
+          billing_method: rental.billing_method || 'ASAAS',
           return_date: rental.return_date ? rental.return_date.split('T')[0] : '',
           cost_rental: rental.cost_rental || 0,
           cost_insurance: rental.cost_insurance || 0,
@@ -218,23 +220,23 @@ const RentalEdit: React.FC = () => {
   }, [id]);
 
   useEffect(() => {
-    if (!id) return;
+    if (!id || formData.billing_method === 'MANUAL') return;
     financeiroService.buscarPagamentosFatura(id)
       .then((payments) => {
         setInvoicePaid(payments.some((p) => isPaidStatus(p.status)));
         setHasCharge(payments.length > 0);
       })
       .catch((err) => console.error('Erro ao buscar pagamentos da fatura:', err));
-  }, [id]);
+  }, [id, formData.billing_method]);
 
   useEffect(() => {
-    if (!id) return;
+    if (!id || formData.billing_method === 'MANUAL') return;
     financeiroService.buscarNfseFatura(id)
       .then(setNfse)
       .catch((err) => {
         if (err?.response?.status !== 404) console.error('Erro ao buscar NFS-e da fatura:', err);
       });
-  }, [id]);
+  }, [id, formData.billing_method]);
 
   const totalValue = useMemo(() => {
     return (
@@ -431,13 +433,15 @@ const RentalEdit: React.FC = () => {
               <div className="space-y-1.5">
                 <label className="text-xs font-bold text-slate-500 dark:text-slate-500 uppercase tracking-widest ml-1 flex items-center gap-2">
                   Status Faturamento
-                  <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-black normal-case tracking-normal ${invoicePaid
-                    ? 'bg-emerald-100 dark:bg-emerald-500/10 text-emerald-700 dark:text-emerald-400'
-                    : 'bg-amber-100 dark:bg-amber-500/10 text-amber-700 dark:text-amber-400'
-                    }`}>
-                    <span className="material-symbols-outlined text-[12px]">{invoicePaid ? 'check_circle' : 'schedule'}</span>
-                    {invoicePaid ? 'Pago' : 'Aguardando pagamento'}
-                  </span>
+                  {formData.billing_method !== 'MANUAL' && (
+                    <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-black normal-case tracking-normal ${invoicePaid
+                      ? 'bg-emerald-100 dark:bg-emerald-500/10 text-emerald-700 dark:text-emerald-400'
+                      : 'bg-amber-100 dark:bg-amber-500/10 text-amber-700 dark:text-amber-400'
+                      }`}>
+                      <span className="material-symbols-outlined text-[12px]">{invoicePaid ? 'check_circle' : 'schedule'}</span>
+                      {invoicePaid ? 'Pago' : 'Aguardando pagamento'}
+                    </span>
+                  )}
                 </label>
                 <select name="billing_status" value={formData.billing_status} onChange={handleChange} className="w-full px-4 py-2.5 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-sm outline-none focus:ring-2 focus:ring-mustard-500/10 transition-all cursor-pointer dark:text-white">
                   {BILLING_STATUSES.map(s => <option key={s} value={s} className="dark:bg-slate-900">{s}</option>)}
@@ -536,158 +540,162 @@ const RentalEdit: React.FC = () => {
             </div>
 
             <div className="pt-4 space-y-4">
-              <button type="submit" disabled={saving} className="w-full py-4 bg-white text-mustard-600 dark:text-mustard-500 rounded-xl font-bold text-sm uppercase tracking-widest hover:bg-slate-50 active:scale-[0.98] transition-all flex items-center justify-center gap-2 shadow-lg disabled:opacity-70">
-                {saving ? <div className="w-5 h-5 border-2 border-mustard-500/30 border-t-mustard-500 rounded-full animate-spin" /> : 'Salvar Alterações'}
+              <button type="submit" disabled={saving} className="w-full py-4 bg-mustard-500 hover:bg-mustard-600 text-white rounded-xl font-bold text-sm uppercase tracking-widest active:scale-[0.98] transition-all flex items-center justify-center gap-2 shadow-lg shadow-mustard-500/20 disabled:opacity-70">
+                {saving ? <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" /> : 'Salvar Alterações'}
               </button>
 
-              {chargeMessage && (
-                <div className={`px-4 py-3 rounded-xl text-xs font-medium flex items-center gap-2 ${chargeMessage.type === 'success' ? 'bg-emerald-900/20 text-emerald-100' : 'bg-red-900/30 text-red-100'
-                  }`}>
-                  <span className="material-symbols-outlined text-base">{chargeMessage.type === 'success' ? 'check_circle' : 'error'}</span>
-                  {chargeMessage.text}
-                </div>
-              )}
-
-              {invoicePaid ? (
-                <span className="w-full py-3 bg-emerald-900/20 text-emerald-100 rounded-xl font-bold text-xs uppercase tracking-widest flex items-center justify-center gap-2">
-                  <span className="material-symbols-outlined text-[18px]">check_circle</span>
-                  Pagamento Confirmado
-                </span>
-              ) : chargeResult ? (
-                <a
-                  href={chargeResult.charge.invoiceUrl}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="w-full py-3 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl font-bold text-xs uppercase tracking-widest transition-all flex items-center justify-center gap-2 shadow-lg"
-                >
-                  <span className="material-symbols-outlined text-[18px]">receipt_long</span>
-                  Ver Boleto
-                </a>
-              ) : (
-                <button
-                  type="button"
-                  onClick={() => setChargeConfirmOpen(true)}
-                  disabled={charging}
-                  className="w-full py-3 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl font-bold text-xs uppercase tracking-widest transition-all flex items-center justify-center gap-2 shadow-lg disabled:opacity-70"
-                >
-                  {charging ? (
-                    <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-                  ) : (
-                    <>
-                      <span className="material-symbols-outlined text-[18px]">payments</span>
-                      {formData.billing_status === 'Faturado' ? 'Gerar Segunda Via do Boleto' : 'Gerar Cobrança'}
-                    </>
+              {formData.billing_method !== 'MANUAL' && (
+                <>
+                  {chargeMessage && (
+                    <div className={`px-4 py-3 rounded-xl text-xs font-medium flex items-center gap-2 ${chargeMessage.type === 'success' ? 'bg-emerald-900/20 text-emerald-100' : 'bg-red-900/30 text-red-100'
+                      }`}>
+                      <span className="material-symbols-outlined text-base">{chargeMessage.type === 'success' ? 'check_circle' : 'error'}</span>
+                      {chargeMessage.text}
+                    </div>
                   )}
-                </button>
-              )}
 
-              <div className="pt-4 mt-4 border-t border-white/10 space-y-3">
-                <h4 className="text-[10px] font-bold uppercase tracking-widest opacity-60 flex items-center gap-2">
-                  <span className="material-symbols-outlined text-[16px]">request_quote</span>
-                  Nota Fiscal
-                </h4>
-
-                {nfseMessage && (
-                  <div className={`px-4 py-3 rounded-xl text-xs font-medium flex items-center gap-2 ${nfseMessage.type === 'success' ? 'bg-emerald-900/20 text-emerald-100' : 'bg-red-900/30 text-red-100'
-                    }`}>
-                    <span className="material-symbols-outlined text-base">{nfseMessage.type === 'success' ? 'check_circle' : 'error'}</span>
-                    {nfseMessage.text}
-                  </div>
-                )}
-
-                {nfse ? (
-                  <>
-                    <div className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[11px] font-bold ${nfseBadgeClass(nfse.status)}`}>
-                      <span className="material-symbols-outlined text-[14px]">{nfseStatusIcon(nfse.status)}</span>
-                      {nfse.status}
-                    </div>
-
-                    {(nfse.status === 'ERROR' || nfse.status === 'ERRO') && nfse.return_message && (
-                      <p className="text-xs text-red-300">{nfse.return_message}</p>
-                    )}
-
-                    {(nfse.status === 'ERROR' || nfse.status === 'ERRO') && (
-                      <button
-                        type="button"
-                        onClick={handleEmitirNfse}
-                        disabled={!hasCharge || emittingNfse}
-                        className="w-full py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl font-bold text-xs uppercase tracking-widest transition-all flex items-center justify-center gap-2 disabled:opacity-50"
-                      >
-                        {emittingNfse ? (
-                          <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-                        ) : (
-                          <>
-                            <span className="material-symbols-outlined text-[16px]">refresh</span>
-                            Tentar Emitir Novamente
-                          </>
-                        )}
-                      </button>
-                    )}
-
-                    <div className="flex flex-wrap gap-2">
-                      {nfse.nfse_link && (
-                        <a
-                          href={nfse.nfse_link}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="flex-1 py-2.5 bg-white/10 hover:bg-white/20 text-white rounded-xl font-bold text-xs uppercase tracking-widest transition-all flex items-center justify-center gap-2"
-                        >
-                          <span className="material-symbols-outlined text-[16px]">description</span>
-                          Ver Nota
-                        </a>
-                      )}
-                      {nfse.xml_url && (
-                        <a
-                          href={nfse.xml_url}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="flex-1 py-2.5 bg-white/10 hover:bg-white/20 text-white rounded-xl font-bold text-xs uppercase tracking-widest transition-all flex items-center justify-center gap-2"
-                        >
-                          <span className="material-symbols-outlined text-[16px]">code</span>
-                          XML
-                        </a>
-                      )}
-                    </div>
-
+                  {invoicePaid ? (
+                    <span className="w-full py-3 bg-emerald-900/20 text-emerald-100 rounded-xl font-bold text-xs uppercase tracking-widest flex items-center justify-center gap-2">
+                      <span className="material-symbols-outlined text-[18px]">check_circle</span>
+                      Pagamento Confirmado
+                    </span>
+                  ) : chargeResult ? (
+                    <a
+                      href={chargeResult.charge.invoiceUrl}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="w-full py-3 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl font-bold text-xs uppercase tracking-widest transition-all flex items-center justify-center gap-2 shadow-lg"
+                    >
+                      <span className="material-symbols-outlined text-[18px]">receipt_long</span>
+                      Ver Boleto
+                    </a>
+                  ) : (
                     <button
                       type="button"
-                      onClick={handleAtualizarStatusNfse}
-                      disabled={nfseLoading}
-                      className="w-full py-2.5 bg-white/10 hover:bg-white/20 text-white rounded-xl font-bold text-xs uppercase tracking-widest transition-all flex items-center justify-center gap-2 disabled:opacity-70"
+                      onClick={() => setChargeConfirmOpen(true)}
+                      disabled={charging}
+                      className="w-full py-3 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl font-bold text-xs uppercase tracking-widest transition-all flex items-center justify-center gap-2 shadow-lg disabled:opacity-70"
                     >
-                      {nfseLoading ? (
-                        <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-                      ) : (
-                        <>
-                          <span className="material-symbols-outlined text-[16px]">refresh</span>
-                          Atualizar Status
-                        </>
-                      )}
-                    </button>
-                  </>
-                ) : (
-                  <>
-                    <button
-                      type="button"
-                      onClick={handleEmitirNfse}
-                      disabled={!hasCharge || emittingNfse}
-                      className="w-full py-3 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl font-bold text-xs uppercase tracking-widest transition-all flex items-center justify-center gap-2 shadow-lg disabled:opacity-50"
-                    >
-                      {emittingNfse ? (
+                      {charging ? (
                         <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
                       ) : (
                         <>
-                          <span className="material-symbols-outlined text-[18px]">request_quote</span>
-                          Emitir NFS-e
+                          <span className="material-symbols-outlined text-[18px]">payments</span>
+                          {formData.billing_status === 'Faturado' ? 'Gerar Segunda Via do Boleto' : 'Gerar Cobrança'}
                         </>
                       )}
                     </button>
-                    {!hasCharge && (
-                      <p className="text-[11px] text-white/50 text-center">Gere a cobrança antes de emitir a nota fiscal.</p>
+                  )}
+
+                  <div className="pt-4 mt-4 border-t border-white/10 space-y-3">
+                    <h4 className="text-[10px] font-bold uppercase tracking-widest opacity-60 flex items-center gap-2">
+                      <span className="material-symbols-outlined text-[16px]">request_quote</span>
+                      Nota Fiscal
+                    </h4>
+
+                    {nfseMessage && (
+                      <div className={`px-4 py-3 rounded-xl text-xs font-medium flex items-center gap-2 ${nfseMessage.type === 'success' ? 'bg-emerald-900/20 text-emerald-100' : 'bg-red-900/30 text-red-100'
+                        }`}>
+                        <span className="material-symbols-outlined text-base">{nfseMessage.type === 'success' ? 'check_circle' : 'error'}</span>
+                        {nfseMessage.text}
+                      </div>
                     )}
-                  </>
-                )}
-              </div>
+
+                    {nfse ? (
+                      <>
+                        <div className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[11px] font-bold ${nfseBadgeClass(nfse.status)}`}>
+                          <span className="material-symbols-outlined text-[14px]">{nfseStatusIcon(nfse.status)}</span>
+                          {nfse.status}
+                        </div>
+
+                        {(nfse.status === 'ERROR' || nfse.status === 'ERRO') && nfse.return_message && (
+                          <p className="text-xs text-red-300">{nfse.return_message}</p>
+                        )}
+
+                        {(nfse.status === 'ERROR' || nfse.status === 'ERRO') && (
+                          <button
+                            type="button"
+                            onClick={handleEmitirNfse}
+                            disabled={!hasCharge || emittingNfse}
+                            className="w-full py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl font-bold text-xs uppercase tracking-widest transition-all flex items-center justify-center gap-2 disabled:opacity-50"
+                          >
+                            {emittingNfse ? (
+                              <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                            ) : (
+                              <>
+                                <span className="material-symbols-outlined text-[16px]">refresh</span>
+                                Tentar Emitir Novamente
+                              </>
+                            )}
+                          </button>
+                        )}
+
+                        <div className="flex flex-wrap gap-2">
+                          {nfse.nfse_link && (
+                            <a
+                              href={nfse.nfse_link}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="flex-1 py-2.5 bg-white/10 hover:bg-white/20 text-white rounded-xl font-bold text-xs uppercase tracking-widest transition-all flex items-center justify-center gap-2"
+                            >
+                              <span className="material-symbols-outlined text-[16px]">description</span>
+                              Ver Nota
+                            </a>
+                          )}
+                          {nfse.xml_url && (
+                            <a
+                              href={nfse.xml_url}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="flex-1 py-2.5 bg-white/10 hover:bg-white/20 text-white rounded-xl font-bold text-xs uppercase tracking-widest transition-all flex items-center justify-center gap-2"
+                            >
+                              <span className="material-symbols-outlined text-[16px]">code</span>
+                              XML
+                            </a>
+                          )}
+                        </div>
+
+                        <button
+                          type="button"
+                          onClick={handleAtualizarStatusNfse}
+                          disabled={nfseLoading}
+                          className="w-full py-2.5 bg-white/10 hover:bg-white/20 text-white rounded-xl font-bold text-xs uppercase tracking-widest transition-all flex items-center justify-center gap-2 disabled:opacity-70"
+                        >
+                          {nfseLoading ? (
+                            <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                          ) : (
+                            <>
+                              <span className="material-symbols-outlined text-[16px]">refresh</span>
+                              Atualizar Status
+                            </>
+                          )}
+                        </button>
+                      </>
+                    ) : (
+                      <>
+                        <button
+                          type="button"
+                          onClick={handleEmitirNfse}
+                          disabled={!hasCharge || emittingNfse}
+                          className="w-full py-3 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl font-bold text-xs uppercase tracking-widest transition-all flex items-center justify-center gap-2 shadow-lg disabled:opacity-50"
+                        >
+                          {emittingNfse ? (
+                            <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                          ) : (
+                            <>
+                              <span className="material-symbols-outlined text-[18px]">request_quote</span>
+                              Emitir NFS-e
+                            </>
+                          )}
+                        </button>
+                        {!hasCharge && (
+                          <p className="text-[11px] text-white/50 text-center">Gere a cobrança antes de emitir a nota fiscal.</p>
+                        )}
+                      </>
+                    )}
+                  </div>
+                </>
+              )}
 
               <button type="button" onClick={() => navigate('/locacoes')} className="w-full py-2 text-[10px] font-bold uppercase tracking-widest opacity-60 hover:opacity-100 transition-opacity">
                 Cancelar e Voltar

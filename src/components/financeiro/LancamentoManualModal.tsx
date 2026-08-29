@@ -1,8 +1,9 @@
 import React, { useEffect, useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
+import { useAuth } from '../../contexts/AuthContext';
 import { financeiroService } from '../../services/financeiro';
 import { getApiErrorMessage } from '../../utils/apiError';
-import type { Bill, BillType } from '../../types';
+import type { Bill, BillType, BillStatus } from '../../types';
 
 interface LancamentoManualModalInitialValues {
   counterparty_name?: string;
@@ -29,25 +30,32 @@ interface LancamentoManualModalProps {
   presetSettlement?: LancamentoManualModalPresetSettlement;
 }
 
+const STATUS_OPTIONS: BillStatus[] = ['Pendente', 'Atrasado', 'Recebido', 'Divergente', 'No prazo'];
+
 const LancamentoManualModal: React.FC<LancamentoManualModalProps> = ({ isOpen, type, onClose, onCreated, initialValues, presetSettlement }) => {
+  const { user } = useAuth();
   const [counterpartyName, setCounterpartyName] = useState('');
   const [description, setDescription] = useState('');
   const [barcode, setBarcode] = useState('');
   const [grossValue, setGrossValue] = useState(0);
   const [dueDate, setDueDate] = useState('');
-  const [alreadySettled, setAlreadySettled] = useState(false);
+  const [status, setStatus] = useState<BillStatus>('Pendente');
+  const [isReconciled, setIsReconciled] = useState(false);
   const [settledDate, setSettledDate] = useState('');
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    if (!isOpen || !initialValues) return;
-    if (initialValues.counterparty_name !== undefined) setCounterpartyName(initialValues.counterparty_name);
-    if (initialValues.description !== undefined) setDescription(initialValues.description);
-    if (initialValues.gross_value !== undefined) setGrossValue(initialValues.gross_value);
-    if (initialValues.due_date !== undefined) setDueDate(initialValues.due_date);
+    if (!isOpen) return;
+    if (initialValues) {
+      if (initialValues.counterparty_name !== undefined) setCounterpartyName(initialValues.counterparty_name);
+      if (initialValues.description !== undefined) setDescription(initialValues.description);
+      if (initialValues.gross_value !== undefined) setGrossValue(initialValues.gross_value);
+      if (initialValues.due_date !== undefined) setDueDate(initialValues.due_date);
+    }
     if (presetSettlement) {
-      setAlreadySettled(true);
+      setIsReconciled(true);
+      setStatus('Recebido');
       setSettledDate(presetSettlement.settled_date);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -63,7 +71,8 @@ const LancamentoManualModal: React.FC<LancamentoManualModalProps> = ({ isOpen, t
     setBarcode('');
     setGrossValue(0);
     setDueDate('');
-    setAlreadySettled(false);
+    setStatus('Pendente');
+    setIsReconciled(false);
     setSettledDate('');
     setError(null);
   };
@@ -90,10 +99,6 @@ const LancamentoManualModal: React.FC<LancamentoManualModalProps> = ({ isOpen, t
       setError('Informe a data de vencimento.');
       return;
     }
-    if (alreadySettled && !settledDate) {
-      setError(`Informe a data em que foi ${isReceivable ? 'recebido' : 'pago'}.`);
-      return;
-    }
 
     setSubmitting(true);
     try {
@@ -104,10 +109,13 @@ const LancamentoManualModal: React.FC<LancamentoManualModalProps> = ({ isOpen, t
         barcode: isReceivable ? undefined : barcode.trim() || undefined,
         gross_value: grossValue,
         due_date: dueDate,
-        already_settled: alreadySettled,
-        settled_date: alreadySettled ? settledDate : undefined,
+        status,
+        is_reconciled: isReconciled,
+        already_settled: isReconciled,
+        settled_date: isReconciled ? (settledDate || dueDate || new Date().toISOString().split('T')[0]) : undefined,
         bank_transaction_date: presetSettlement?.bank_transaction_date,
         bank_raw_snapshot: presetSettlement?.bank_raw_snapshot,
+        created_by: user?.id,
       });
       onCreated(bill);
       resetForm();
@@ -130,16 +138,16 @@ const LancamentoManualModal: React.FC<LancamentoManualModalProps> = ({ isOpen, t
           />
           <motion.div
             initial={{ opacity: 0, scale: 0.95, y: 20 }} animate={{ opacity: 1, scale: 1, y: 0 }} exit={{ opacity: 0, scale: 0.95, y: 20 }}
-            className="relative w-full max-w-md bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-3xl shadow-2xl p-6"
+            className="relative w-full max-w-md bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-3xl shadow-2xl p-6 max-h-[90vh] flex flex-col"
           >
-            <div className="flex items-center gap-3 mb-6">
+            <div className="flex items-center gap-3 mb-5">
               <div className="w-12 h-12 bg-mustard-100 dark:bg-mustard-500/10 rounded-2xl flex items-center justify-center text-mustard-500">
                 <span className="material-symbols-outlined text-2xl">{icon}</span>
               </div>
               <h3 className="text-lg font-black text-slate-900 dark:text-white">{title}</h3>
             </div>
 
-            <div className="space-y-4">
+            <div className="space-y-4 overflow-y-auto pr-1 flex-1">
               {isReceivable ? (
                 <div className="space-y-1.5">
                   <label className="text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-widest ml-1">Nome</label>
@@ -211,6 +219,50 @@ const LancamentoManualModal: React.FC<LancamentoManualModalProps> = ({ isOpen, t
                 />
               </div>
 
+              {/* Status Financeiro */}
+              <div className="space-y-1.5">
+                <label className="text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-widest ml-1">Status Financeiro</label>
+                <select
+                  value={status}
+                  onChange={(e) => setStatus(e.target.value as BillStatus)}
+                  className="w-full px-4 py-2.5 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-slate-900 dark:text-white focus:bg-white dark:focus:bg-slate-900 focus:ring-2 focus:ring-mustard-500/10 focus:border-mustard-500 transition-all outline-none text-sm font-semibold"
+                >
+                  {STATUS_OPTIONS.map((opt) => (
+                    <option key={opt} value={opt}>
+                      {opt}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              {/* Conciliação */}
+              <div className="p-3.5 bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700 rounded-2xl space-y-2.5">
+                <label className="flex items-center gap-2.5 cursor-pointer select-none">
+                  <input
+                    type="checkbox"
+                    checked={isReconciled}
+                    onChange={(e) => setIsReconciled(e.target.checked)}
+                    className="w-4 h-4 text-mustard-500 rounded border-slate-300 dark:border-slate-600 focus:ring-mustard-500"
+                  />
+                  <span className="text-xs font-bold text-slate-700 dark:text-slate-300">
+                    Marcar como já conciliado
+                  </span>
+                </label>
+                {isReconciled && (
+                  <div className="pt-1">
+                    <label className="text-[11px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wider block mb-1">
+                      Data da Conciliação / Quitação
+                    </label>
+                    <input
+                      type="date"
+                      value={settledDate || dueDate}
+                      onChange={(e) => setSettledDate(e.target.value)}
+                      className="w-full px-3 py-2 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl text-xs font-semibold text-slate-900 dark:text-white focus:ring-2 focus:ring-mustard-500/10 focus:border-mustard-500 transition-all outline-none [color-scheme:light] dark:[color-scheme:dark]"
+                    />
+                  </div>
+                )}
+              </div>
+
               {isReceivable && (
                 <div className="space-y-1.5">
                   <label className="text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-widest ml-1">Descrição</label>
@@ -231,7 +283,7 @@ const LancamentoManualModal: React.FC<LancamentoManualModalProps> = ({ isOpen, t
               )}
             </div>
 
-            <div className="flex gap-3 mt-6">
+            <div className="flex gap-3 mt-6 pt-2 border-t border-slate-100 dark:border-slate-800">
               <button
                 type="button"
                 disabled={submitting}
