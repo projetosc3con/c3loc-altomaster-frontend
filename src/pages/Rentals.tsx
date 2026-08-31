@@ -53,7 +53,7 @@ const Rentals: React.FC = () => {
   const [currentPage, setCurrentPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
   const [totalItems, setTotalItems] = useState(0);
-  const [stats, setStats] = useState({ pendingReconciliationCount: 0, monthlyReceivedTotal: 0 });
+  const [stats, setStats] = useState({ pendingReconciliationCount: 0, totalValue: 0, monthlyReceivedTotal: 0 });
   const [filters, setFilters] = useState<Filters>(emptyFilters);
   const [showFilters, setShowFilters] = useState(false);
   const [searchInput, setSearchInput] = useState('');
@@ -141,7 +141,7 @@ const Rentals: React.FC = () => {
       setRentals(res.data);
       setTotalItems(res.total);
       setTotalPages(res.totalPages);
-      setStats(res.stats || { pendingReconciliationCount: 0, monthlyReceivedTotal: 0 });
+      setStats(res.stats || { pendingReconciliationCount: 0, totalValue: 0, monthlyReceivedTotal: 0 });
       setCurrentPage(res.page);
       setError(null);
     } catch {
@@ -238,7 +238,7 @@ const Rentals: React.FC = () => {
         {[
           { label: 'Total de Locações', value: totalItems.toString(), color: 'bg-blue-100 dark:bg-blue-900/20 text-blue-800 dark:text-blue-400', icon: 'sync' },
           { label: 'Aguardando conciliação', value: stats.pendingReconciliationCount.toString(), color: 'bg-amber-100 dark:bg-amber-900/20 text-amber-800 dark:text-amber-400', icon: 'pending_actions' },
-          { label: 'Total Faturado Mês', value: stats.monthlyReceivedTotal.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' }), color: 'bg-emerald-100 dark:bg-emerald-900/20 text-emerald-800 dark:text-emerald-400', icon: 'payments' },
+          { label: 'Total Faturado', value: (stats.totalValue ?? stats.monthlyReceivedTotal ?? 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' }), color: 'bg-emerald-100 dark:bg-emerald-900/20 text-emerald-800 dark:text-emerald-400', icon: 'payments' },
         ].map((stat, i) => (
           <motion.div key={i} initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} transition={{ delay: 0.1 + i * 0.1 }} className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-5 rounded-xl shadow-sm flex items-center gap-4">
             <div className={`w-12 h-12 rounded-full flex items-center justify-center ${stat.color}`}>
@@ -317,7 +317,7 @@ const Rentals: React.FC = () => {
                     <td colSpan={6} className="px-6 py-12 text-center">
                       <div className="flex flex-col items-center justify-center">
                         <div className="w-8 h-8 border-4 border-mustard-500/20 border-t-mustard-500 rounded-full animate-spin" />
-                        <p className="text-slate-400 text-sm font-medium mt-4">Carregando novidade...</p>
+                        <p className="text-slate-400 text-sm font-medium mt-4">Carregando locações...</p>
                       </div>
                     </td>
                   </motion.tr>

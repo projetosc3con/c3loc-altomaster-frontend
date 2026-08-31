@@ -164,7 +164,7 @@ const RentalForm: React.FC = () => {
         ]);
 
         setClients(clientsRes.data.filter((c: Client) => c.active !== false));
-        setEquipments(equipmentsRes.data);
+        setEquipments(equipmentsRes.data.filter((eq: Equipment) => eq.status === 'Disponível'));
       } catch (err: any) {
         console.error('Erro ao buscar dados para o formulário de locação:', err);
         setError('Erro ao carregar os clientes e equipamentos.');

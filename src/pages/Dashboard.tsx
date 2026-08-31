@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import api from '../services/api';
 import ComercialDashboard from './dashboards/ComercialDashboard';
+import { formatDate } from '../utils/date';
 
 // ═══════════════════════════════════════
 // Admin Dashboard Data Interface
@@ -127,7 +128,7 @@ const AdminDashboard: React.FC<{ data: AdminDashboardData }> = ({ data }) => {
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
         <KpiCard
           index={0}
-          title="Faturamento Mensal"
+          title="Saldo Mensal"
           value={kpis.currentMonthTotal.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
           trend={variationLabel}
           trendPositive={kpis.variation >= 0}
@@ -171,7 +172,7 @@ const AdminDashboard: React.FC<{ data: AdminDashboardData }> = ({ data }) => {
           <div className="flex justify-between items-center mb-10">
             <h3 className="font-bold text-slate-900 dark:text-white uppercase text-xs tracking-widest flex items-center gap-2">
               <span className="w-2 h-2 rounded-full bg-mustard-500"></span>
-              Faturamento Bruto (12 meses)
+              Saldo Financeiro (6 meses)
             </h3>
           </div>
           <div className="h-64 flex items-end justify-between gap-3 border-b border-slate-100 dark:border-slate-800/50 pb-2 relative">
@@ -281,7 +282,7 @@ const AdminDashboard: React.FC<{ data: AdminDashboardData }> = ({ data }) => {
                       <div className="text-slate-700 dark:text-slate-300 font-medium">{invoice.equipment_name}</div>
                       <div className="text-[10px] text-slate-400 dark:text-slate-500 font-bold uppercase mt-0.5">{invoice.asset_number}</div>
                     </td>
-                    <td className="px-6 py-5 text-slate-600 dark:text-slate-400 font-medium">{new Date(invoice.due_date).toLocaleDateString()}</td>
+                    <td className="px-6 py-5 text-slate-600 dark:text-slate-400 font-medium">{formatDate(invoice.due_date)}</td>
                     <td className="px-6 py-5 text-right font-bold text-slate-900 dark:text-white">
                       {Number(invoice.total_value).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
                     </td>
