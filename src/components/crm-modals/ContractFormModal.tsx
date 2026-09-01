@@ -15,33 +15,60 @@ interface ContractFormModalProps {
 const ContractFormModal: React.FC<ContractFormModalProps> = ({ isOpen, onClose, onSuccess, dealId, deal, initialData }) => {
   const [loading, setLoading] = useState(false);
   const [formData, setFormData] = useState(initialData || {});
-  const [contacts, setContacts] = useState<any[]>([]);
   const [addressFetched, setAddressFetched] = useState(false);
 
   useEffect(() => {
-    const fetchAddress = async () => {
-      // Prevent fetching if already fetched or if the form already has address data
-      if (addressFetched || formData.locatario_address_full) return;
+    if (isOpen) {
+      if (initialData && Object.keys(initialData).length > 0) {
+        setFormData(initialData);
+      } else if (dealId) {
+        setLoading(true);
+        crmService.getContractForm(dealId)
+          .then((data) => {
+            if (data) setFormData(data);
+          })
+          .catch((err) => console.error('Erro ao buscar dados do formulário de contrato:', err))
+          .finally(() => setLoading(false));
+      }
+    }
+  }, [isOpen, initialData, dealId]);
+
+  useEffect(() => {
+    const fetchClientDetails = async () => {
+      if (addressFetched) return;
 
       if (deal?.client_id) {
         try {
           const { data } = await api.get(`/clients/${deal.client_id}`);
-          if (data && data.address_complement) {
-            setFormData((prev: any) => ({ ...prev, locatario_address_full: data.address_complement }));
+          if (data) {
+            setFormData((prev: any) => {
+              const fullAddr = prev.locatario_address_full || data.address_complement || [
+                data.address_street,
+                data.address_number,
+                data.address_city && data.address_state ? `${data.address_city}/${data.address_state}` : data.address_city,
+                data.address_zip ? `CEP: ${data.address_zip}` : ''
+              ].filter(Boolean).join(', ');
+
+              return {
+                ...prev,
+                locatario_address_full: fullAddr,
+                site_contact_name: prev.site_contact_name || data.contact_name || '',
+                site_contact_phone: prev.site_contact_phone || data.phone || ''
+              };
+            });
           }
         } catch (err) {
-          console.error('Erro ao buscar endereço do cliente', err);
+          console.error('Erro ao buscar dados do cliente', err);
         } finally {
           setAddressFetched(true);
         }
-      } else if (deal?.lead_id && formData.locatario_cnpj) {
+      } else if (deal?.lead_id && formData.locatario_cnpj && !formData.locatario_address_full) {
         try {
           const cleanCnpj = formData.locatario_cnpj.replace(/\D/g, '');
           if (cleanCnpj.length === 14) {
             const response = await fetch(`https://api.opencnpj.org/${cleanCnpj}`);
             if (response.ok) {
               const result = await response.json();
-              console.log(result);
               const logradouro = result.logradouro || '';
               const numero = result.numero || 'S/N';
               const bairro = result.bairro || '';
@@ -57,7 +84,6 @@ const ContractFormModal: React.FC<ContractFormModalProps> = ({ isOpen, onClose, 
               ].filter(Boolean);
 
               const fullAddress = parts.join(', ').replace(/^[,\s]+|[,\s]+$/g, '');
-
               setFormData((prev: any) => ({ ...prev, locatario_address_full: fullAddress }));
             }
           }
@@ -70,26 +96,9 @@ const ContractFormModal: React.FC<ContractFormModalProps> = ({ isOpen, onClose, 
     };
 
     if (isOpen) {
-      fetchAddress();
+      fetchClientDetails();
     }
-  }, [deal, formData.locatario_cnpj, addressFetched, formData.locatario_address_full, isOpen]);
-
-  useEffect(() => {
-    const fetchContacts = async () => {
-      if (!deal) return;
-      try {
-        const allContacts = await crmService.getAllContacts();
-        const dealContacts = allContacts.filter((c: any) =>
-          (deal.client_id && c.client_id === deal.client_id) ||
-          (deal.lead_id && c.lead_id === deal.lead_id)
-        );
-        setContacts(dealContacts);
-      } catch (err) {
-        console.error('Erro ao carregar contatos', err);
-      }
-    };
-    fetchContacts();
-  }, [deal]);
+  }, [deal, formData.locatario_cnpj, addressFetched, isOpen]);
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) => {
     const { name, value } = e.target;
@@ -140,24 +149,6 @@ const ContractFormModal: React.FC<ContractFormModalProps> = ({ isOpen, onClose, 
         Number(next.cost_training || 0);
       return next;
     });
-  };
-
-  const handleContactSelect = (e: React.ChangeEvent<HTMLSelectElement>) => {
-    const contactId = e.target.value;
-    const selectedContact = contacts.find(c => c.id === contactId);
-    if (selectedContact) {
-      setFormData((prev: any) => ({
-        ...prev,
-        site_contact_name: selectedContact.full_name,
-        site_contact_phone: selectedContact.phone || selectedContact.mobile || ''
-      }));
-    } else {
-      setFormData((prev: any) => ({
-        ...prev,
-        site_contact_name: '',
-        site_contact_phone: ''
-      }));
-    }
   };
 
   const handleSave = async (status: 'Rascunho' | 'Pronto para Gerar') => {
@@ -290,6 +281,20 @@ const ContractFormModal: React.FC<ContractFormModalProps> = ({ isOpen, onClose, 
               </div>
             </div>
             <div className="col-span-12 md:col-span-3">
+              <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-2 uppercase">Pagamento</label>
+              <select
+                name="billing_interval_days"
+                value={formData.billing_interval_days || '28 dias'}
+                onChange={handleChange}
+                className="w-full px-4 py-3 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-sm appearance-none cursor-pointer outline-none focus:ring-2 focus:ring-mustard-500/20"
+              >
+                <option value="7 dias">7 dias</option>
+                <option value="15 dias">15 dias</option>
+                <option value="28 dias">28 dias</option>
+                <option value="A vista">A vista</option>
+              </select>
+            </div>
+            <div className="col-span-12 md:col-span-3">
               <label className="block text-xs font-bold text-emerald-600 dark:text-emerald-400 mb-2 uppercase">Valor Total</label>
               <div className="relative">
                 <span className="absolute left-3 top-1/2 -translate-y-1/2 text-emerald-500 text-xs font-bold">R$</span>
@@ -310,18 +315,11 @@ const ContractFormModal: React.FC<ContractFormModalProps> = ({ isOpen, onClose, 
             </div>
             <div className="col-span-12 md:col-span-3">
               <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-2 uppercase">Contato da Obra</label>
-              <select onChange={handleContactSelect} className="w-full px-4 py-3 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-sm appearance-none cursor-pointer">
-                <option value="">Selecione um contato...</option>
-                {contacts.map((c) => (
-                  <option key={c.id} value={c.id} selected={formData.site_contact_name === c.full_name}>
-                    {c.full_name}
-                  </option>
-                ))}
-              </select>
+              <input type="text" name="site_contact_name" placeholder="Nome do contato" value={formData.site_contact_name || ''} onChange={handleChange} className="w-full px-4 py-3 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-sm" />
             </div>
             <div className="col-span-12 md:col-span-3">
               <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-2 uppercase">Telefone do Contato</label>
-              <input type="text" name="site_contact_phone" value={formData.site_contact_phone || ''} onChange={handleChange} className="w-full px-4 py-3 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-sm" />
+              <input type="text" name="site_contact_phone" placeholder="(00) 00000-0000" value={formData.site_contact_phone || ''} onChange={handleChange} className="w-full px-4 py-3 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-sm" />
             </div>
           </div>
         </div>

@@ -343,6 +343,14 @@ Abaixo estão listadas as 46 tabelas ativas no esquema `public` do banco de dado
 | `created_by` | `uuid` | Sim | - |  |
 | `invoice_number` | `text` | Sim | - |  |
 | `client_score` | `integer` | Sim | - | CHECK: client_score >= 1 AND client_score <= 5 |
+| `deal_id` | `uuid` | Sim | - | Chave estrangeira para o negócio no CRM |
+
+#### Relacionamentos de Saída (Chaves Estrangeiras Referenciadas)
+
+* A coluna `deal_id` aponta para [`crm_deals.id`](#crm-deals)`(id)` (Constraint: `rental_invoices_deal_id_fkey`)
+* A coluna `client_id` aponta para [`clients.id`](#clients)`(id)` (Constraint: `rental_invoices_client_id_fkey`)
+* A coluna `equipment_id` aponta para [`equipments.id`](#equipments)`(id)` (Constraint: `rental_invoices_equipment_id_fkey`)
+* A coluna `created_by` aponta para [`users_profiles.id`](#users-profiles)`(id)` (Constraint: `rental_invoices_created_by_fkey`)
 
 #### Relacionamentos de Entrada (Tabelas que Referenciam esta)
 
@@ -350,6 +358,7 @@ Abaixo estão listadas as 46 tabelas ativas no esquema `public` do banco de dado
 * [`invoice_nfse.invoice_id`](#invoice-nfse)`(invoice_id)` aponta para a coluna local `id` (Constraint: `invoice_nfse_invoice_id_fkey`)
 * [`payments.invoice_id`](#payments)`(invoice_id)` aponta para a coluna local `id` (Constraint: `payments_invoice_id_fkey`)
 * [`crm_deal_contracts.rental_invoice_id`](#crm-deal-contracts)`(rental_invoice_id)` aponta para a coluna local `id` (Constraint: `crm_deal_contracts_rental_invoice_id_fkey`)
+* [`crm_deals.rental_invoice_id`](#crm-deals)`(rental_invoice_id)` aponta para a coluna local `id` (Constraint: `crm_deals_rental_invoice_id_fkey`)
 
 #### Gatilhos (Triggers)
 
@@ -1117,11 +1126,19 @@ Abaixo estão listadas as 46 tabelas ativas no esquema `public` do banco de dado
 | `updated_at` | `timestamp with time zone` | Não | `now()` |  |
 | `active_contract_id` | `uuid` | Sim | - |  |
 | `contract_form_id` | `uuid` | Sim | - |  |
+| `rental_invoice_id` | `uuid` | Sim | - | Chave estrangeira para fatura de locação vinculada |
 
 #### Relacionamentos de Saída (Chaves Estrangeiras Referenciadas)
 
 * A coluna `active_contract_id` aponta para [`crm_deal_contracts.id`](#crm-deal-contracts)`(id)` (Constraint: `crm_deals_active_contract_id_fkey`)
 * A coluna `contract_form_id` aponta para [`crm_deal_contract_forms.id`](#crm-deal-contract-forms)`(id)` (Constraint: `crm_deals_contract_form_id_fkey`)
+* A coluna `rental_invoice_id` aponta para [`rental_invoices.id`](#rental-invoices)`(id)` (Constraint: `crm_deals_rental_invoice_id_fkey`)
+* A coluna `pipeline_id` aponta para [`crm_pipelines.id`](#crm-pipelines)`(id)` (Constraint: `crm_deals_pipeline_id_fkey`)
+* A coluna `stage_id` aponta para [`crm_pipeline_stages.id`](#crm-pipeline-stages)`(id)` (Constraint: `crm_deals_stage_id_fkey`)
+* A coluna `client_id` aponta para [`clients.id`](#clients)`(id)` (Constraint: `crm_deals_client_id_fkey`)
+* A coluna `lead_id` aponta para [`crm_leads.id`](#crm-leads)`(id)` (Constraint: `crm_deals_lead_id_fkey`)
+* A coluna `primary_contact_id` aponta para [`crm_contacts.id`](#crm-contacts)`(id)` (Constraint: `crm_deals_primary_contact_id_fkey`)
+* A coluna `owner_id` aponta para [`users_profiles.id`](#users-profiles)`(id)` (Constraint: `crm_deals_owner_id_fkey`)
 
 #### Relacionamentos de Entrada (Tabelas que Referenciam esta)
 
@@ -1129,6 +1146,7 @@ Abaixo estão listadas as 46 tabelas ativas no esquema `public` do banco de dado
 * [`crm_deal_activities.deal_id`](#crm-deal-activities)`(deal_id)` aponta para a coluna local `id` (Constraint: `crm_deal_activities_deal_id_fkey`)
 * [`crm_deal_contract_forms.deal_id`](#crm-deal-contract-forms)`(deal_id)` aponta para a coluna local `id` (Constraint: `crm_deal_contract_forms_deal_id_fkey`)
 * [`crm_deal_contracts.deal_id`](#crm-deal-contracts)`(deal_id)` aponta para a coluna local `id` (Constraint: `crm_deal_contracts_deal_id_fkey`)
+* [`rental_invoices.deal_id`](#rental-invoices)`(deal_id)` aponta para a coluna local `id` (Constraint: `rental_invoices_deal_id_fkey`)
 
 #### Índices (Indexes)
 
@@ -1326,7 +1344,7 @@ Abaixo estão listadas as 46 tabelas ativas no esquema `public` do banco de dado
 | `cost_third_party` | `numeric` | Não | `0` |  |
 | `cost_training` | `numeric` | Não | `0` |  |
 | `cost_total` | `numeric` | Não | - |  |
-| `billing_interval_days` | `integer` | Não | - |  |
+| `billing_interval_days` | `text` | Sim | - | Condições de Pagamento (ex: '7 dias', '15 dias', '28 dias', 'A vista') |  |
 | `work_site` | `text` | Não | - |  |
 | `site_contact_name` | `text` | Sim | - |  |
 | `site_contact_phone` | `text` | Sim | - |  |

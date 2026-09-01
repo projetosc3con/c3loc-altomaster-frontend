@@ -133,6 +133,23 @@ const EditDealModal: React.FC<EditDealModalProps> = ({ isOpen, onClose, onSucces
     }
   };
 
+  const openContractModal = async () => {
+    if (deal?.id) {
+      try {
+        setContractLoading(true);
+        const form = await crmService.getContractForm(deal.id);
+        if (form) {
+          setContractForm(form);
+        }
+      } catch (e) {
+        console.error('Erro ao buscar formulário antes de abrir modal:', e);
+      } finally {
+        setContractLoading(false);
+      }
+    }
+    setIsContractModalOpen(true);
+  };
+
   const handleDeleteContract = () => {
     setShowContractDeleteConfirm(true);
     setContractError(null);
@@ -352,7 +369,7 @@ const EditDealModal: React.FC<EditDealModalProps> = ({ isOpen, onClose, onSucces
                               </p>
                               <button
                                 type="button"
-                                onClick={() => setIsContractModalOpen(true)}
+                                onClick={openContractModal}
                                 className="px-4 py-2 bg-mustard-500 text-white rounded-xl text-sm font-bold shadow-lg shadow-mustard-500/20 hover:bg-mustard-600 transition-colors"
                               >
                                 Preencher Dados do Contrato
@@ -369,13 +386,13 @@ const EditDealModal: React.FC<EditDealModalProps> = ({ isOpen, onClose, onSucces
                               </p>
                               <button
                                 type="button"
-                                onClick={() => setIsContractModalOpen(true)}
+                                onClick={openContractModal}
                                 className="px-4 py-2 border border-mustard-500 text-mustard-600 dark:text-mustard-400 rounded-xl text-sm font-bold hover:bg-mustard-50 dark:hover:bg-mustard-500/10 transition-colors"
                               >
                                 Continuar Edição
                               </button>
                             </div>
-                          ) : contractForm?.form_status === 'Pronto para Gerar' ? (
+                          ) : contractForm?.form_status === 'Pronto para Gerar' && contracts.length === 0 ? (
                             <div>
                               <div className="flex items-center gap-2 mb-4">
                                 <span className="w-2 h-2 rounded-full bg-green-500"></span>
@@ -384,7 +401,7 @@ const EditDealModal: React.FC<EditDealModalProps> = ({ isOpen, onClose, onSucces
                               <div className="flex gap-3">
                                 <button
                                   type="button"
-                                  onClick={() => setIsContractModalOpen(true)}
+                                  onClick={openContractModal}
                                   className="px-4 py-2 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 rounded-xl text-sm font-bold hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors"
                                 >
                                   Editar Formulário
@@ -394,15 +411,13 @@ const EditDealModal: React.FC<EditDealModalProps> = ({ isOpen, onClose, onSucces
                                   onClick={async () => {
                                     try {
                                       setContractLoading(true);
-                                      const result = await crmService.generateContractRecord(deal.id);
+                                      await crmService.generateContractRecord(deal.id);
                                       await loadContractData();
-                                      
-                                      // Generate PDF blob from snapshot and send email
+                                      /* STANDBY: Disparo de e-mail ao cliente desativado temporariamente
                                       try {
                                         const snapshot = result.snapshot || result.record?.snapshot;
                                         if (snapshot && result.record?.id) {
                                           const blob = await pdf(<ContractDocument data={snapshot} generatedAt={result.record.generated_at} />).toBlob();
-                                          // Convert blob to base64
                                           const reader = new FileReader();
                                           reader.onloadend = async () => {
                                             const base64 = (reader.result as string).split(',')[1];
@@ -419,6 +434,8 @@ const EditDealModal: React.FC<EditDealModalProps> = ({ isOpen, onClose, onSucces
                                       } catch (pdfErr) {
                                         console.error('Erro ao gerar PDF para envio:', pdfErr);
                                       }
+                                      */
+                                      setToast({ type: 'success', title: 'Contrato gerado com sucesso!', message: 'O contrato foi gerado e está disponível para download e visualização.' });
                                     } catch (e) {
                                       setToast({ type: 'error', title: 'Erro', message: 'Não foi possível gerar o contrato. Tente novamente.' });
                                     } finally {
@@ -445,7 +462,7 @@ const EditDealModal: React.FC<EditDealModalProps> = ({ isOpen, onClose, onSucces
                               <div className="flex flex-wrap gap-3">
                                 <button
                                   type="button"
-                                  onClick={() => setIsContractModalOpen(true)}
+                                  onClick={openContractModal}
                                   className="px-4 py-2 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 rounded-xl text-sm font-bold hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors"
                                 >
                                   Editar e Regerar

@@ -1,7 +1,6 @@
 import React from 'react';
 import { Document, Page, Text, View, StyleSheet, Image } from '@react-pdf/renderer';
 import logoAltoMaster from '../../assets/altomaster-dark.png';
-import signatureImg from '../../assets/signature.png';
 
 const styles = StyleSheet.create({
   page: {
@@ -335,7 +334,17 @@ const ContractDocument: React.FC<ContractDocumentProps> = ({ data, generatedAt }
   const contractNumberFormatted = data.contract_number ? String(data.contract_number).padStart(5, '0') : '00190';
 
   const totalInvestment = Number(data.costs?.total ?? data.value ?? 0);
-  const billingIntervalDays = data.billing_interval_days ? `${data.billing_interval_days} DIAS` : '7 DIAS';
+  
+  const getBillingConditionText = () => {
+    const val = data.billing_interval_days;
+    if (!val) return '28 dias';
+    const s = String(val).trim().toLowerCase();
+    if (s === '7' || s === '7dias' || s === '7 dias') return '7 dias';
+    if (s === '15' || s === '15 dias' || s === '15dias') return '15 dias';
+    if (s === '28' || s === '28 dias' || s === '28dias') return '28 dias';
+    if (s === 'a vista' || s === 'à vista' || s === 'avista') return 'A vista';
+    return String(val);
+  };
 
   const renderHeader = () => (
     <View style={styles.headerRow}>
@@ -444,7 +453,7 @@ const ContractDocument: React.FC<ContractDocumentProps> = ({ data, generatedAt }
           </Text>
           <Text style={styles.proposalLine}>
             <Text style={styles.proposalLabel}>Condições de Faturamento: </Text>
-            <Text style={styles.bold}>{billingIntervalDays}</Text>
+            <Text style={styles.bold}>{getBillingConditionText()}</Text>
           </Text>
         </View>
 
@@ -457,7 +466,7 @@ const ContractDocument: React.FC<ContractDocumentProps> = ({ data, generatedAt }
           <View style={styles.locationRightCol}>
             <Text style={styles.locationValueText}>{data.work_site || locatarioAddress}</Text>
             <Text style={styles.locationValueText}>
-              {data.site_contact_name || 'DOUGLAS'} {data.site_contact_phone ? `(${data.site_contact_phone})` : '(66) 99283-1664'}
+              {data.site_contact_name} - {data.site_contact_phone}
             </Text>
           </View>
         </View>
@@ -591,8 +600,9 @@ const ContractDocument: React.FC<ContractDocumentProps> = ({ data, generatedAt }
         <View style={styles.signatureBox}>
           <View style={styles.signatureColLeft}>
             <Text style={styles.signaturePartyTitle}>LOCADOR: {locadorName}</Text>
-            <Image style={styles.locadorImgSign} src={signatureImg} />
-            <Text style={{ fontSize: 7, textAlign: 'center', color: '#555' }}>Assinatura do Locador</Text>
+            <Text style={styles.signatureLineText}>Nome: _____________________________________</Text>
+            <Text style={styles.signatureLineText}>Assinatura: ________________________________</Text>
+            <Text style={styles.signatureLineText}>CPF: ______________________________________</Text>
           </View>
           <View style={styles.signatureColRight}>
             <Text style={styles.signaturePartyTitle}>LOCATÁRIA:</Text>

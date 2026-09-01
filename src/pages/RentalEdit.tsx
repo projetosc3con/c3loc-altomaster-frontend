@@ -6,6 +6,12 @@ import { financeiroService } from '../services/financeiro';
 import { getApiErrorMessage } from '../utils/apiError';
 import { isPaidStatus } from '../utils/payment';
 import type { BillingStatus, ReconciliationStatus, Client, Equipment, AsaasChargeResult, InvoiceNfse, NfseStatus } from '../types';
+import { useAuth } from '../contexts/AuthContext';
+import { crmService } from '../services/crm';
+import ContractFormModal from '../components/crm-modals/ContractFormModal';
+import ContractDocument from '../components/crm-modals/ContractDocument';
+import { pdf } from '@react-pdf/renderer';
+import { saveAs } from 'file-saver';
 
 const BILLING_STATUSES: BillingStatus[] = ['Pendente', 'Faturado', 'Emitida', 'Cancelada'];
 const RECONCILIATION_STATUSES: ReconciliationStatus[] = ['Pendente', 'Atrasado', 'Recebido', 'Divergente', 'No prazo'];
@@ -134,11 +140,21 @@ function SearchableSelect<T extends { id: string }>({
 const RentalEdit: React.FC = () => {
   const { id } = useParams();
   const navigate = useNavigate();
+  const { user, profile } = useAuth();
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [clients, setClients] = useState<Client[]>([]);
   const [equipments, setEquipments] = useState<Equipment[]>([]);
+
+  // Contract State
+  const [deal, setDeal] = useState<any>(null);
+  const [contractForm, setContractForm] = useState<any>(null);
+  const [contracts, setContracts] = useState<any[]>([]);
+  const [contractLoading, setContractLoading] = useState(false);
+  const [contractError, setContractError] = useState<string | null>(null);
+  const [isContractModalOpen, setIsContractModalOpen] = useState(false);
+  const [showContractDeleteConfirm, setShowContractDeleteConfirm] = useState(false);
 
   const [charging, setCharging] = useState(false);
   const [chargeResult, setChargeResult] = useState<AsaasChargeResult | null>(null);
@@ -209,6 +225,10 @@ const RentalEdit: React.FC = () => {
           reconciliation_status: rental.reconciliation_status,
           notes: rental.notes || '',
         });
+
+        if (id) {
+          loadRentalDeal(id);
+        }
       } catch (err: any) {
         console.error('Erro ao buscar dados:', err);
         setError('Erro ao carregar os dados da locação.');
@@ -218,6 +238,137 @@ const RentalEdit: React.FC = () => {
     };
     fetchData();
   }, [id]);
+
+  const loadContractData = async (targetDealId?: string) => {
+    const currentDealId = targetDealId || deal?.id;
+    if (!currentDealId) return;
+    try {
+      setContractLoading(true);
+      const form = await crmService.getContractForm(currentDealId);
+      setContractForm(form);
+      const generated = await crmService.getContracts(currentDealId);
+      setContracts(generated);
+    } catch (err) {
+      console.error('Erro ao carregar dados do contrato:', err);
+    } finally {
+      setContractLoading(false);
+    }
+  };
+
+  const loadRentalDeal = async (rentalId: string) => {
+    try {
+      setContractLoading(true);
+      const res = await api.get(`/rentals/${rentalId}/contract-deal`);
+      if (res.data?.deal) {
+        setDeal(res.data.deal);
+        const form = await crmService.getContractForm(res.data.deal.id);
+        setContractForm(form);
+        const generated = await crmService.getContracts(res.data.deal.id);
+        setContracts(generated);
+      }
+    } catch (err) {
+      console.error('Erro ao obter/criar deal de contrato para locação:', err);
+    } finally {
+      setContractLoading(false);
+    }
+  };
+
+  const openContractModal = async () => {
+    if (deal?.id) {
+      try {
+        setContractLoading(true);
+        const form = await crmService.getContractForm(deal.id);
+        if (form) {
+          setContractForm(form);
+        }
+      } catch (e) {
+        console.error('Erro ao buscar formulário antes de abrir modal:', e);
+      } finally {
+        setContractLoading(false);
+      }
+    }
+    setIsContractModalOpen(true);
+  };
+
+  const handleDeleteContract = () => {
+    setShowContractDeleteConfirm(true);
+    setContractError(null);
+  };
+
+  const executeDeleteContract = async () => {
+    if (!deal || contracts.length === 0) return;
+    try {
+      setContractLoading(true);
+      setContractError(null);
+      setShowContractDeleteConfirm(false);
+      await crmService.deleteContract(deal.id, contracts[0].id);
+      await loadContractData(deal.id);
+    } catch (err: any) {
+      console.error(err);
+      setContractError(err.response?.data?.error || 'Erro ao excluir contrato');
+    } finally {
+      setContractLoading(false);
+    }
+  };
+
+  const handleGeneratePdf = async () => {
+    if (!deal) return;
+    try {
+      setContractLoading(true);
+      await crmService.generateContractRecord(deal.id);
+      await loadContractData(deal.id);
+
+      /* STANDBY: Disparo de e-mail ao cliente desativado temporariamente
+      try {
+        const snapshot = result.snapshot || result.record?.snapshot;
+        if (snapshot && result.record?.id) {
+          const blob = await pdf(<ContractDocument data={snapshot} generatedAt={result.record.generated_at} />).toBlob();
+          const reader = new FileReader();
+          reader.onloadend = async () => {
+            const base64 = (reader.result as string).split(',')[1];
+            try {
+              const emailResult = await crmService.sendContractEmail(deal.id, result.record.id, base64);
+              alert(`Contrato gerado com sucesso! Proposta enviada para ${emailResult.sentTo}`);
+            } catch (emailErr: any) {
+              const msg = emailErr?.response?.data?.error || 'Erro ao enviar e-mail';
+              console.warn('Aviso ao enviar e-mail do contrato:', msg);
+            }
+          };
+          reader.readAsDataURL(blob);
+        }
+      } catch (pdfErr) {
+        console.error('Erro ao gerar PDF para envio:', pdfErr);
+      }
+      */
+      alert('Contrato gerado com sucesso!');
+    } catch (e: any) {
+      setContractError(e?.message || 'Não foi possível gerar o contrato. Tente novamente.');
+    } finally {
+      setContractLoading(false);
+    }
+  };
+
+  const handleUploadSigned = () => {
+    const input = document.createElement('input');
+    input.type = 'file';
+    input.accept = 'application/pdf';
+    input.onchange = async (e: any) => {
+      const file = e.target.files[0];
+      if (file && deal && contracts[0]) {
+        try {
+          setContractLoading(true);
+          await crmService.uploadSignedContract(deal.id, contracts[0].id, file);
+          await loadContractData(deal.id);
+          alert('Contrato assinado anexado com sucesso!');
+        } catch (err) {
+          alert('Erro ao enviar contrato');
+        } finally {
+          setContractLoading(false);
+        }
+      }
+    };
+    input.click();
+  };
 
   useEffect(() => {
     if (!id || formData.billing_method === 'MANUAL') return;
@@ -481,6 +632,219 @@ const RentalEdit: React.FC = () => {
               ))}
             </div>
           </div>
+
+          {/* Section: Contract */}
+          {deal && contractLoading && (
+            <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 p-6 space-y-4 animate-pulse">
+              <div className="flex items-center gap-2">
+                <div className="w-5 h-5 rounded-full bg-slate-200 dark:bg-slate-700"></div>
+                <div className="h-5 bg-slate-200 dark:bg-slate-700 rounded w-1/4"></div>
+              </div>
+              <div className="bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-2xl p-6 space-y-4">
+                <div className="h-4 bg-slate-200 dark:bg-slate-700 rounded w-3/4"></div>
+                <div className="h-4 bg-slate-200 dark:bg-slate-700 rounded w-1/2"></div>
+                <div className="flex gap-3 pt-2">
+                  <div className="h-10 bg-slate-200 dark:bg-slate-700 rounded-xl w-32"></div>
+                  <div className="h-10 bg-slate-200 dark:bg-slate-700 rounded-xl w-32"></div>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {deal && !contractLoading && (
+            <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm overflow-hidden">
+              <div className="p-6 border-b border-slate-100 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-800/20 rounded-t-2xl flex items-center justify-between">
+                <h3 className="font-bold text-slate-900 dark:text-white flex items-center gap-2">
+                  <span className="material-symbols-outlined text-mustard-500 text-xl">description</span>
+                  Contrato de Locação
+                </h3>
+              </div>
+              <div className="p-6 relative">
+                {contracts.length > 0 && deal && !showContractDeleteConfirm && (
+                  (deal.owner_id === user?.id || ['Administrador', 'Diretoria', 'Gerente'].includes(profile?.access_level || '')) && (
+                    <button
+                      type="button"
+                      onClick={handleDeleteContract}
+                      className="absolute top-4 right-4 text-slate-400 hover:text-red-500 hover:bg-slate-100 dark:hover:bg-slate-700 p-1.5 rounded-lg transition-colors"
+                      title="Excluir Contrato"
+                    >
+                      <span className="material-symbols-outlined text-[20px]">delete</span>
+                    </button>
+                  )
+                )}
+
+                {showContractDeleteConfirm ? (
+                  <div className="space-y-4">
+                    <div className="flex items-center gap-2 text-red-600 dark:text-red-400">
+                      <span className="material-symbols-outlined">warning</span>
+                      <p className="text-sm font-bold">Deseja realmente excluir este contrato?</p>
+                    </div>
+                    <p className="text-sm text-slate-600 dark:text-slate-400">
+                      Esta ação é irreversível e removerá o arquivo e o registro do contrato gerado.
+                    </p>
+                    <div className="flex gap-3">
+                      <button
+                        type="button"
+                        onClick={() => setShowContractDeleteConfirm(false)}
+                        className="px-4 py-2 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 rounded-xl text-sm font-bold hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors"
+                      >
+                        Cancelar
+                      </button>
+                      <button
+                        type="button"
+                        onClick={executeDeleteContract}
+                        className="px-4 py-2 bg-red-600 text-white rounded-xl text-sm font-bold hover:bg-red-700 transition-colors"
+                      >
+                        Sim, Excluir
+                      </button>
+                    </div>
+                  </div>
+                ) : (
+                  <>
+                    {contractError && (
+                      <div className="mb-4 bg-red-50 dark:bg-red-500/5 border border-red-200 dark:border-red-500/20 text-red-600 dark:text-red-400 p-3 rounded-xl text-xs flex items-center justify-between">
+                        <span>{contractError}</span>
+                        <button type="button" onClick={() => setContractError(null)}>
+                          <span className="material-symbols-outlined text-[16px]">close</span>
+                        </button>
+                      </div>
+                    )}
+                    {!contractForm?.id && contracts.length === 0 ? (
+                      <div>
+                        <p className="text-sm text-slate-600 dark:text-slate-400 mb-4">
+                          Nenhum formulário de contrato criado. Preencha os dados para gerar o PDF.
+                        </p>
+                        <button
+                          type="button"
+                          onClick={openContractModal}
+                          className="px-4 py-2 bg-mustard-500 text-white rounded-xl text-sm font-bold shadow-lg shadow-mustard-500/20 hover:bg-mustard-600 transition-colors"
+                        >
+                          Preencher Dados do Contrato
+                        </button>
+                      </div>
+                    ) : contractForm?.id && contractForm.form_status === 'Rascunho' && contracts.length === 0 ? (
+                      <div>
+                        <div className="flex items-center gap-2 mb-4">
+                          <span className="w-2 h-2 rounded-full bg-slate-400"></span>
+                          <p className="text-sm font-bold text-slate-900 dark:text-white">Rascunho Salvo</p>
+                        </div>
+                        <p className="text-sm text-slate-600 dark:text-slate-400 mb-4">
+                          Você possui um rascunho de contrato salvo. Finalize o preenchimento para gerar o PDF.
+                        </p>
+                        <button
+                          type="button"
+                          onClick={openContractModal}
+                          className="px-4 py-2 border border-mustard-500 text-mustard-600 dark:text-mustard-400 rounded-xl text-sm font-bold hover:bg-mustard-50 dark:hover:bg-mustard-500/10 transition-colors"
+                        >
+                          Continuar Edição
+                        </button>
+                      </div>
+                    ) : contractForm?.form_status === 'Pronto para Gerar' && contracts.length === 0 ? (
+                      <div>
+                        <div className="flex items-center gap-2 mb-4">
+                          <span className="w-2 h-2 rounded-full bg-green-500"></span>
+                          <p className="text-sm font-bold text-slate-900 dark:text-white">Pronto para Gerar PDF</p>
+                        </div>
+                        <div className="flex gap-3">
+                          <button
+                            type="button"
+                            onClick={openContractModal}
+                            className="px-4 py-2 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 rounded-xl text-sm font-bold hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors"
+                          >
+                            Editar Formulário
+                          </button>
+                          <button
+                            type="button"
+                            onClick={handleGeneratePdf}
+                            className="px-4 py-2 bg-mustard-500 text-white rounded-xl text-sm font-bold shadow-lg shadow-mustard-500/20 hover:bg-mustard-600 transition-colors"
+                          >
+                            Gerar PDF
+                          </button>
+                        </div>
+                      </div>
+                    ) : contracts.length > 0 ? (
+                      <div>
+                        <div className="flex items-center gap-2 mb-4">
+                          <span className={`w-2 h-2 rounded-full ${contracts[0].status === 'Assinado' ? 'bg-green-500' : 'bg-blue-500'}`}></span>
+                          <p className="text-sm font-bold text-slate-900 dark:text-white">
+                            Contrato Nº {contracts[0].contract_number} • {contracts[0].status}
+                          </p>
+                        </div>
+                        <p className="text-xs text-slate-500 dark:text-slate-400 mb-4">
+                          Gerado em {new Date(contracts[0].generated_at).toLocaleDateString('pt-BR')}
+                        </p>
+                        <div className="flex flex-wrap gap-3">
+                          <button
+                            type="button"
+                            onClick={openContractModal}
+                            className="px-4 py-2 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 rounded-xl text-sm font-bold hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors"
+                          >
+                            Editar e Regerar
+                          </button>
+                          {contracts[0].status !== 'Assinado' && (
+                            <button
+                              type="button"
+                              onClick={async () => {
+                                try {
+                                  const blob = await pdf(<ContractDocument data={contracts[0].snapshot} generatedAt={contracts[0].generated_at} />).toBlob();
+                                  const blobUrl = URL.createObjectURL(blob);
+                                  window.open(blobUrl, '_blank');
+                                } catch (err) {
+                                  console.error('Erro ao abrir PDF', err);
+                                  alert('Erro ao abrir PDF.');
+                                }
+                              }}
+                              className="px-4 py-2 border border-mustard-500 text-mustard-600 dark:text-mustard-400 rounded-xl text-sm font-bold hover:bg-mustard-50 dark:hover:bg-mustard-500/10 transition-colors flex items-center gap-2"
+                            >
+                              <span className="material-symbols-outlined text-[18px]">visibility</span>
+                              Visualizar PDF
+                            </button>
+                          )}
+                          {contracts[0].status !== 'Assinado' && (
+                            <button
+                              type="button"
+                              onClick={async () => {
+                                try {
+                                  const blob = await pdf(<ContractDocument data={contracts[0].snapshot} generatedAt={contracts[0].generated_at} />).toBlob();
+                                  saveAs(blob, `PROPOSTA DE LOCAÇÃO - ${contracts[0].snapshot?.locatario?.company_name || 'Contrato'}.pdf`);
+                                } catch (err) {
+                                  console.error('Erro ao gerar PDF', err);
+                                  alert('Erro ao gerar arquivo PDF.');
+                                }
+                              }}
+                              className="px-4 py-2 border border-mustard-500 text-mustard-600 dark:text-mustard-400 rounded-xl text-sm font-bold hover:bg-mustard-50 dark:hover:bg-mustard-500/10 transition-colors flex items-center gap-2"
+                            >
+                              <span className="material-symbols-outlined text-[18px]">download</span>
+                            </button>
+                          )}
+                          {contracts[0].status !== 'Assinado' && (
+                            <button
+                              type="button"
+                              onClick={handleUploadSigned}
+                              className="px-4 py-2 bg-slate-900 dark:bg-white text-white dark:text-slate-900 rounded-xl text-sm font-bold hover:bg-slate-800 dark:hover:bg-slate-100 transition-colors"
+                            >
+                              Anexar Assinado
+                            </button>
+                          )}
+                          {contracts[0].status === 'Assinado' && contracts[0].signed_file_url && (
+                            <a
+                              href={contracts[0].signed_file_url}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="px-4 py-2 bg-slate-900 dark:bg-white text-white dark:text-slate-900 rounded-xl text-sm font-bold hover:bg-slate-800 dark:hover:bg-slate-100 transition-colors flex items-center gap-2"
+                            >
+                              <span className="material-symbols-outlined text-[18px]">download</span>
+                              Ver Assinado
+                            </a>
+                          )}
+                        </div>
+                      </div>
+                    ) : null}
+                  </>
+                )}
+              </div>
+            </div>
+          )}
 
           {/* Section: Notes */}
           <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm">
@@ -751,6 +1115,20 @@ const RentalEdit: React.FC = () => {
           </div>
         )}
       </AnimatePresence>
+
+      {/* Modal de Formulário de Contrato */}
+      {deal && (
+        <ContractFormModal
+          isOpen={isContractModalOpen}
+          onClose={() => setIsContractModalOpen(false)}
+          onSuccess={() => {
+            if (deal?.id) loadContractData(deal.id);
+          }}
+          dealId={deal.id}
+          deal={deal}
+          initialData={contractForm}
+        />
+      )}
     </motion.div>
   );
 };
