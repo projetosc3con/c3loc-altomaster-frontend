@@ -269,17 +269,41 @@ export interface ServiceOrderLabor {
   created_at?: string;
 }
 
+export interface RentalInvoiceEquipment {
+  id?: string;
+  rental_invoice_id?: string;
+  deal_contract_id?: string;
+  equipment_id: string;
+  equipment_name?: string;
+  equipment_type?: string;
+  equipment_size?: string;
+  asset_number?: string;
+  billing_period_start: string;
+  billing_period_end: string;
+  return_date?: string | null;
+  cost_rental: number;
+  cost_insurance: number;
+  cost_freight: number;
+  cost_rcd: number;
+  cost_third_party: number;
+  cost_training: number;
+  total_value: number;
+  notes?: string;
+  created_at?: string;
+  updated_at?: string;
+}
+
 export interface RentalInvoice {
   id: string;
   invoice_number?: string;
   client_id: string;
   client_name: string;
   cnpj: string;
-  equipment_id: string;
-  equipment_name: string;
-  equipment_type: string;
+  equipment_id?: string;
+  equipment_name?: string;
+  equipment_type?: string;
   equipment_size?: string;
-  asset_number: string;
+  asset_number?: string;
   work_site: string;
   billing_period_start: string;
   billing_period_end: string;
@@ -304,6 +328,7 @@ export interface RentalInvoice {
   notes?: string;
   created_at: string;
   updated_at: string;
+  equipments?: RentalInvoiceEquipment[];
 }
 
 export interface Client {

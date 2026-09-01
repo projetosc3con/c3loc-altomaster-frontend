@@ -103,10 +103,20 @@ const Rentals: React.FC = () => {
       setInvoicePaid(false);
       return;
     }
+
+    // Carregar dados completos com equipamentos
+    api.get(`/rentals/${selectedRental.id}`)
+      .then((res) => {
+        if (res.data?.equipments) {
+          setSelectedRental(prev => prev && prev.id === res.data.id ? { ...prev, equipments: res.data.equipments } : prev);
+        }
+      })
+      .catch((err) => console.error('Erro ao carregar detalhes dos equipamentos:', err));
+
     financeiroService.buscarPagamentosFatura(selectedRental.id)
       .then((payments) => setInvoicePaid(payments.some((p) => isPaidStatus(p.status))))
       .catch((err) => console.error('Erro ao buscar pagamentos da fatura:', err));
-  }, [selectedRental]);
+  }, [selectedRental?.id]);
 
   const handleGerarCobranca = async () => {
     if (!selectedRental) return;
@@ -596,28 +606,67 @@ const Rentals: React.FC = () => {
 
                 {/* Itens / Detalhamento */}
                 <div className="space-y-4">
-                  <h3 className="text-[11px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-widest border-b border-slate-100 dark:border-slate-800 pb-2">Detalhamento da Fatura</h3>
-                  <div className="bg-slate-50 dark:bg-slate-800/50 rounded-2xl p-6 border border-slate-100 dark:border-slate-800">
-                    <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                      <div className="md:col-span-1">
-                        <span className="block text-[10px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-widest mb-1">Equipamento</span>
-                        <p className="text-sm font-bold text-slate-900 dark:text-white">{selectedRental.equipment_name}</p>
-                        <p className="text-[10px] text-slate-500 dark:text-slate-400 font-mono mt-0.5">{selectedRental.asset_number} — {selectedRental.equipment_type}</p>
-                      </div>
-                      <div className="text-center">
-                        <span className="block text-[10px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-widest mb-1">Período</span>
-                        <p className="text-sm font-bold text-slate-900 dark:text-white">
-                          {formatDate(selectedRental.billing_period_start)} a {formatDate(selectedRental.billing_period_end)}
-                        </p>
-                      </div>
-                      <div className="text-right">
-                        <span className="block text-[10px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-widest mb-1">Valor Total</span>
-                        <p className="text-xl font-black text-mustard-500 dark:text-mustard-400">
-                          {Number(selectedRental.total_value).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
-                        </p>
+                  <h3 className="text-[11px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-widest border-b border-slate-100 dark:border-slate-800 pb-2">
+                    Equipamentos e Detalhamento da Fatura
+                  </h3>
+                  {selectedRental.equipments && selectedRental.equipments.length > 0 ? (
+                    <div className="space-y-3">
+                      {selectedRental.equipments.map((item, idx) => (
+                        <div key={item.id || idx} className="bg-slate-50 dark:bg-slate-800/50 rounded-2xl p-5 border border-slate-100 dark:border-slate-800">
+                          <div className="grid grid-cols-1 md:grid-cols-3 gap-4 items-center">
+                            <div>
+                              <span className="block text-[10px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-widest mb-0.5">
+                                Equipamento #{idx + 1}
+                              </span>
+                              <p className="text-sm font-bold text-slate-900 dark:text-white">{item.equipment_name || 'Equipamento'}</p>
+                              <p className="text-[10px] text-slate-500 dark:text-slate-400 font-mono mt-0.5">
+                                {item.asset_number} {item.equipment_type ? `— ${item.equipment_type}` : ''}
+                              </p>
+                            </div>
+                            <div className="text-left md:text-center">
+                              <span className="block text-[10px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-widest mb-0.5">Período</span>
+                              <p className="text-xs font-semibold text-slate-700 dark:text-slate-300">
+                                {formatDate(item.billing_period_start)} a {formatDate(item.billing_period_end)}
+                              </p>
+                              {item.return_date && (
+                                <p className="text-[10px] text-emerald-600 dark:text-emerald-400 mt-0.5">
+                                  Devolvido em: {formatDate(item.return_date)}
+                                </p>
+                              )}
+                            </div>
+                            <div className="text-left md:text-right">
+                              <span className="block text-[10px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-widest mb-0.5">Subtotal</span>
+                              <p className="text-base font-black text-mustard-500 dark:text-mustard-400">
+                                {Number(item.total_value).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
+                              </p>
+                            </div>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <div className="bg-slate-50 dark:bg-slate-800/50 rounded-2xl p-6 border border-slate-100 dark:border-slate-800">
+                      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                        <div className="md:col-span-1">
+                          <span className="block text-[10px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-widest mb-1">Equipamento</span>
+                          <p className="text-sm font-bold text-slate-900 dark:text-white">{selectedRental.equipment_name}</p>
+                          <p className="text-[10px] text-slate-500 dark:text-slate-400 font-mono mt-0.5">{selectedRental.asset_number} — {selectedRental.equipment_type}</p>
+                        </div>
+                        <div className="text-center">
+                          <span className="block text-[10px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-widest mb-1">Período</span>
+                          <p className="text-sm font-bold text-slate-900 dark:text-white">
+                            {formatDate(selectedRental.billing_period_start)} a {formatDate(selectedRental.billing_period_end)}
+                          </p>
+                        </div>
+                        <div className="text-right">
+                          <span className="block text-[10px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-widest mb-1">Valor Total</span>
+                          <p className="text-xl font-black text-mustard-500 dark:text-mustard-400">
+                            {Number(selectedRental.total_value).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
+                          </p>
+                        </div>
                       </div>
                     </div>
-                  </div>
+                  )}
                 </div>
 
                 {/* Observações */}

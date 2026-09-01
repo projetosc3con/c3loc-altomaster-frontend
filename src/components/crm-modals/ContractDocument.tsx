@@ -1,6 +1,6 @@
 import React from 'react';
 import { Document, Page, Text, View, StyleSheet, Image } from '@react-pdf/renderer';
-import logoAltoMaster from '../../assets/altomaster-dark.png';
+import logoAltoMaster from '../../assets/cabecalho-contrato.jpeg';
 
 const styles = StyleSheet.create({
   page: {
@@ -327,6 +327,51 @@ const ContractDocument: React.FC<ContractDocumentProps> = ({ data, generatedAt }
     ? data.locatario.state_registration
     : '13.308.407-8';
 
+  const equipmentsList = (data.equipments && data.equipments.length > 0)
+    ? data.equipments
+    : (data.equipment?.items && data.equipment.items.length > 0)
+      ? data.equipment.items
+      : null;
+
+  const buildItemCostsText = (item: any) => {
+    const items = [
+      { label: 'Locação', value: item.cost_rental ?? item.rental },
+      { label: 'Seguro', value: item.cost_insurance ?? item.insurance },
+      { label: 'Frete', value: item.cost_freight ?? item.freight },
+      { label: 'RCD', value: item.cost_rcd ?? item.rcd },
+      { label: 'Terceiros', value: item.cost_third_party ?? item.third_party },
+      { label: 'Treinamento', value: item.cost_training ?? item.training },
+    ];
+
+    const rentalVal = item.cost_rental ?? item.rental ?? item.total_value ?? item.total ?? 0;
+    const rentalPart = formatCurrency(Number(rentalVal));
+
+    const additions = items
+      .slice(1)
+      .filter(it => it.value !== undefined && it.value !== null && Number(it.value) > 0)
+      .map(it => `${it.label} ${formatCurrency(Number(it.value))}`);
+
+    if (additions.length > 0) {
+      return `${rentalPart} + ${additions.join(' + ')}.`;
+    }
+    return `${rentalPart}.`;
+  };
+
+  const getItemDurationDaysText = (item: any) => {
+    const start = item.billing_period_start || item.period_start || data.period_start;
+    const end = item.billing_period_end || item.period_end || data.period_end;
+    if (start && end) {
+      const startDate = new Date(start.split('T')[0] + 'T00:00:00');
+      const endDate = new Date(end.split('T')[0] + 'T00:00:00');
+      const diffTime = Math.abs(endDate.getTime() - startDate.getTime());
+      const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+      if (!isNaN(diffDays) && diffDays > 0) {
+        return `${diffDays} dias`;
+      }
+    }
+    return getDurationDaysText();
+  };
+
   const equipmentDesc = data.equipment?.description || 'Plataforma Elevatória Articulada 20 metros';
   const equipmentType = data.equipment?.type ? data.equipment.type.toUpperCase() : 'PLATAFORMA ELEVATÓRIA';
 
@@ -334,7 +379,7 @@ const ContractDocument: React.FC<ContractDocumentProps> = ({ data, generatedAt }
   const contractNumberFormatted = data.contract_number ? String(data.contract_number).padStart(5, '0') : '00190';
 
   const totalInvestment = Number(data.costs?.total ?? data.value ?? 0);
-  
+
   const getBillingConditionText = () => {
     const val = data.billing_interval_days;
     if (!val) return '28 dias';
@@ -423,36 +468,87 @@ const ContractDocument: React.FC<ContractDocumentProps> = ({ data, generatedAt }
         {/* Proposta e Valores */}
         <Text style={styles.proposalHeader}>PROPOSTA E VALORES</Text>
         <View style={styles.proposalBox}>
-          <Text style={styles.proposalLine}>
-            <Text style={styles.proposalLabel}>Informações do equipamento: </Text>
-            {equipmentDesc}
-          </Text>
-          <Text style={styles.proposalLine}>
-            <Text style={styles.proposalLabel}>Duração do Contrato: </Text>
-            {getDurationDaysText()}
-          </Text>
-          <Text style={styles.proposalLine}>
-            <Text style={styles.proposalLabel}>Período início: </Text>
-            {formatDate(data.period_start)}
-          </Text>
-          <Text style={styles.proposalLine}>
-            <Text style={styles.proposalLabel}>Período final: </Text>
-            {data.period_end ? formatDate(data.period_end) : 'Indefinido'}
-          </Text>
-          <Text style={styles.proposalLine}>
-            <Text style={styles.proposalLabel}>Valor da locação: </Text>
-            {buildCostsText()}
-          </Text>
-          <Text style={styles.proposalLine}>
-            <Text style={styles.proposalLabel}>Total do investimento: </Text>
+          {equipmentsList && equipmentsList.length > 0 ? (
+            equipmentsList.map((item: any, idx: number) => {
+              const itemDesc = item.equipment_name || item.description || item.name || equipmentDesc;
+              const itemWorkingHeight = item.equipment_size ? ` - ${item.equipment_size} mts` : '';
+              const fullItemDesc = `${itemDesc}${itemWorkingHeight}`.trim();
+              const itemStart = item.billing_period_start || item.period_start || data.period_start;
+              const itemEnd = item.billing_period_end || item.period_end || data.period_end;
+
+              return (
+                <View key={idx} style={{ marginBottom: idx < equipmentsList.length - 1 ? 5 : 3 }}>
+                  {equipmentsList.length > 1 && (
+                    <Text style={[styles.proposalLabel, { fontSize: 8.5, marginBottom: 1, color: '#000' }]}>
+                      EQUIPAMENTO {idx + 1}:
+                    </Text>
+                  )}
+                  <Text style={styles.proposalLine}>
+                    <Text style={styles.proposalLabel}>Informações do equipamento: </Text>
+                    {fullItemDesc}
+                  </Text>
+                  <Text style={styles.proposalLine}>
+                    <Text style={styles.proposalLabel}>Duração do Contrato: </Text>
+                    {getItemDurationDaysText(item)}
+                  </Text>
+                  <Text style={styles.proposalLine}>
+                    <Text style={styles.proposalLabel}>Período início: </Text>
+                    {formatDate(itemStart)}
+                  </Text>
+                  <Text style={styles.proposalLine}>
+                    <Text style={styles.proposalLabel}>Período final: </Text>
+                    {itemEnd ? formatDate(itemEnd) : 'Indefinido'}
+                  </Text>
+                  <Text style={styles.proposalLine}>
+                    <Text style={styles.proposalLabel}>Valor da locação: </Text>
+                    {buildItemCostsText(item)}
+                  </Text>
+                </View>
+              );
+            })
+          ) : (
+            <>
+              <Text style={styles.proposalLine}>
+                <Text style={styles.proposalLabel}>Informações do equipamento: </Text>
+                {equipmentDesc}
+              </Text>
+              <Text style={styles.proposalLine}>
+                <Text style={styles.proposalLabel}>Duração do Contrato: </Text>
+                {getDurationDaysText()}
+              </Text>
+              <Text style={styles.proposalLine}>
+                <Text style={styles.proposalLabel}>Período início: </Text>
+                {formatDate(data.period_start)}
+              </Text>
+              <Text style={styles.proposalLine}>
+                <Text style={styles.proposalLabel}>Período final: </Text>
+                {data.period_end ? formatDate(data.period_end) : 'Indefinido'}
+              </Text>
+              <Text style={styles.proposalLine}>
+                <Text style={styles.proposalLabel}>Valor da locação: </Text>
+                {buildCostsText()}
+              </Text>
+            </>
+          )}
+
+          <Text style={[styles.proposalLine, { marginTop: 8, marginBottom: 8 }]}>
+            <Text style={styles.proposalLabel}>TOTAL DO INVESTIMENTO: </Text>
             <Text style={styles.bold}>{formatCurrency(totalInvestment)}</Text>
           </Text>
           <Text style={styles.proposalLine}>
-            <Text style={styles.proposalLabel}>Dados bancarios: </Text>
-            {locadorBankInfo}
+            <Text style={styles.proposalLabel}>Dados bancários: </Text>
+            Banco do Brasil Agencia: 1917-8 Conta Corrente: 14.677-3
           </Text>
           <Text style={styles.proposalLine}>
-            <Text style={styles.proposalLabel}>Condições de Faturamento: </Text>
+            <Text style={styles.proposalLabel}>Nome: </Text>
+            ALTO MASTER LOCADORA DE EQUIPAMENTOS LTDA
+          </Text>
+          <Text style={styles.proposalLine}>
+            <Text style={styles.proposalLabel}>Chave pix: </Text>
+            CNPJ 48.477.385/0001-09
+          </Text>
+          <Text style={styles.proposalLine}>
+            <Text style={styles.proposalLabel}>CONDIÇÕES DE FATURAMENTO: </Text>
             <Text style={styles.bold}>{getBillingConditionText()}</Text>
           </Text>
         </View>
@@ -579,11 +675,6 @@ const ContractDocument: React.FC<ContractDocumentProps> = ({ data, generatedAt }
           <Text style={styles.listItem}><Text style={styles.bold}>(VI)</Text> O custo da hora trabalhada e de deslocamento (valor por hora), (R$ 250,00 por hora);</Text>
           <Text style={styles.listItem}><Text style={styles.bold}>(VII)</Text> O custo das peças e óleo nos casos de Manutenção Corretiva.</Text>
         </View>
-      </Page>
-
-      {/* ===================== PAGE 4 ===================== */}
-      <Page size="A4" style={styles.page}>
-        {renderHeader()}
 
         <Text style={styles.clauseParagraph}>
           <Text style={styles.bold}>Acesso do Técnico.</Text> Independentemente do tipo de manutenção (preventiva ou corretiva) a ser realizada é obrigação da LOCATÁRIA oferecer todos os meios necessários para que os técnicos da LOCADORA possam ir e retornar entre a recepção de pessoal é onde o(s) Equipamento(s) estiver(em) situado(s). Caberá a LOCATÁRIA providenciar integração, além todos os recursos necessários para que o técnico chegue o mais rápido possível ao local onde o Equipamento(s) estiverem situado(s), ainda que o Local seja gerenciado, por terceiro ou de difícil acesso, permitindo o efetivo atendimento e assumindo eventuais despesas que sobrevierem, mesmo que por culpa de terceiros. A demora entre a chegada do técnico e o efetivo acesso ao(s) Equipamento(s) poderá ensejar a cobrança de despesas extraordinárias.
@@ -600,9 +691,6 @@ const ContractDocument: React.FC<ContractDocumentProps> = ({ data, generatedAt }
         <View style={styles.signatureBox}>
           <View style={styles.signatureColLeft}>
             <Text style={styles.signaturePartyTitle}>LOCADOR: {locadorName}</Text>
-            <Text style={styles.signatureLineText}>Nome: _____________________________________</Text>
-            <Text style={styles.signatureLineText}>Assinatura: ________________________________</Text>
-            <Text style={styles.signatureLineText}>CPF: ______________________________________</Text>
           </View>
           <View style={styles.signatureColRight}>
             <Text style={styles.signaturePartyTitle}>LOCATÁRIA:</Text>

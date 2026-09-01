@@ -359,6 +359,7 @@ Abaixo estão listadas as 46 tabelas ativas no esquema `public` do banco de dado
 * [`payments.invoice_id`](#payments)`(invoice_id)` aponta para a coluna local `id` (Constraint: `payments_invoice_id_fkey`)
 * [`crm_deal_contracts.rental_invoice_id`](#crm-deal-contracts)`(rental_invoice_id)` aponta para a coluna local `id` (Constraint: `crm_deal_contracts_rental_invoice_id_fkey`)
 * [`crm_deals.rental_invoice_id`](#crm-deals)`(rental_invoice_id)` aponta para a coluna local `id` (Constraint: `crm_deals_rental_invoice_id_fkey`)
+* [`rental_invoice_equipments.rental_invoice_id`](#rental-invoice-equipments)`(rental_invoice_id)` aponta para a coluna local `id` (Constraint: `rental_invoice_equipments_rental_invoice_id_fkey`)
 
 #### Gatilhos (Triggers)
 
@@ -373,6 +374,60 @@ Abaixo estão listadas as 46 tabelas ativas no esquema `public` do banco de dado
 * **`tr_update_client_score`**
   ```sql
   CREATE TRIGGER tr_update_client_score AFTER INSERT OR UPDATE OF client_score ON public.rental_invoices FOR EACH ROW EXECUTE FUNCTION update_client_average_score()
+  ```
+
+---
+
+### rental_invoice_equipments
+
+* **Segurança de Nível de Linha (RLS):** Habilitada (Enabled)
+* **Propósito:** Armazena cada equipamento vinculado a uma fatura de locação (`rental_invoices`) ou contrato de CRM (`crm_deal_contracts`), permitindo que uma locação contenha múltiplos equipamentos com datas e valores individuais.
+
+#### Colunas
+
+| Coluna | Tipo | Nulável | Padrão | Restrições / Notas |
+| :--- | :--- | :---: | :--- | :--- |
+| `id` | `uuid` | Não | `gen_random_uuid()` | 🔑 PK |
+| `rental_invoice_id` | `uuid` | Sim | - | Chave estrangeira para `rental_invoices.id` (ON DELETE CASCADE) |
+| `deal_contract_id` | `uuid` | Sim | - | Chave estrangeira para `crm_deal_contracts.id` (ON DELETE CASCADE) |
+| `equipment_id` | `uuid` | Não | - | Chave estrangeira para `equipments.id` (ON DELETE RESTRICT) |
+| `equipment_name` | `text` | Sim | - | Nome denormalizado do equipamento |
+| `equipment_type` | `text` | Sim | - | Tipo/Modelo do equipamento |
+| `equipment_size` | `text` | Sim | - | Altura/Tamanho do equipamento |
+| `asset_number` | `text` | Sim | - | Número de patrimônio |
+| `billing_period_start` | `date` | Não | - | Início da locação deste equipamento |
+| `billing_period_end` | `date` | Não | - | Fim previsto da locação deste equipamento |
+| `return_date` | `date` | Sim | - | Data de devolução real/efetiva |
+| `cost_rental` | `numeric` | Sim | `0` | Valor da locação deste item |
+| `cost_insurance` | `numeric` | Sim | `0` | Valor do seguro deste item |
+| `cost_freight` | `numeric` | Sim | `0` | Valor do frete deste item |
+| `cost_rcd` | `numeric` | Sim | `0` | Valor de RCD deste item |
+| `cost_third_party` | `numeric` | Sim | `0` | Valor de terceiros deste item |
+| `cost_training` | `numeric` | Sim | `0` | Valor de treinamento deste item |
+| `total_value` | `numeric` | Sim | `0` | Valor total consolidado deste equipamento |
+| `notes` | `text` | Sim | - | Observações adicionais do item |
+| `created_at` | `timestamp with time zone` | Sim | `now()` |  |
+| `updated_at` | `timestamp with time zone` | Sim | `now()` |  |
+
+#### Relacionamentos de Saída (Chaves Estrangeiras Referenciadas)
+
+* A coluna `rental_invoice_id` aponta para [`rental_invoices.id`](#rental-invoices)`(id)` (Constraint: `rental_invoice_equipments_rental_invoice_id_fkey`)
+* A coluna `deal_contract_id` aponta para [`crm_deal_contracts.id`](#crm-deal-contracts)`(id)` (Constraint: `rental_invoice_equipments_deal_contract_id_fkey`)
+* A coluna `equipment_id` aponta para [`equipments.id`](#equipments)`(id)` (Constraint: `rental_invoice_equipments_equipment_id_fkey`)
+
+#### Índices (Indexes)
+
+* **`idx_rental_invoice_equipments_invoice`**
+  ```sql
+  CREATE INDEX idx_rental_invoice_equipments_invoice ON public.rental_invoice_equipments USING btree (rental_invoice_id)
+  ```
+* **`idx_rental_invoice_equipments_contract`**
+  ```sql
+  CREATE INDEX idx_rental_invoice_equipments_contract ON public.rental_invoice_equipments USING btree (deal_contract_id)
+  ```
+* **`idx_rental_invoice_equipments_equipment`**
+  ```sql
+  CREATE INDEX idx_rental_invoice_equipments_equipment ON public.rental_invoice_equipments USING btree (equipment_id)
   ```
 
 ---
