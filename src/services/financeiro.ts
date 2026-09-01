@@ -26,6 +26,7 @@ export interface ExtratoBancarioFilters {
   client_id?: string;
   status?: string;
   origin?: string;
+  type?: 'payable' | 'receivable';
   from?: string;
   to?: string;
   page?: number;

@@ -16,6 +16,7 @@ import { useAuth } from '../contexts/AuthContext';
 import ContractFormModal from '../components/crm-modals/ContractFormModal';
 import { pdf } from '@react-pdf/renderer';
 import ContractDocument from '../components/crm-modals/ContractDocument';
+import { FaturaLocacaoDocument } from '../components/logistics/FaturaLocacaoDocument';
 import { saveAs } from 'file-saver';
 
 type NfseRecord = any;
@@ -257,6 +258,7 @@ const RentalEdit: React.FC = () => {
   const [contractError, setContractError] = useState<string | null>(null);
   const [isContractModalOpen, setIsContractModalOpen] = useState(false);
   const [showContractDeleteConfirm, setShowContractDeleteConfirm] = useState(false);
+  const [faturaPdfLoading, setFaturaPdfLoading] = useState(false);
 
   useEffect(() => {
     const fetchData = async () => {
@@ -497,6 +499,89 @@ const RentalEdit: React.FC = () => {
         if (err?.response?.status !== 404) console.error('Erro ao buscar NFS-e da fatura:', err);
       });
   }, [id, generalData.billing_method]);
+
+  const getContractObjectForFatura = () => {
+    const selectedClient = clients.find(c => c.id === generalData.client_id);
+    const clientName = selectedClient?.company_name || contractForm?.locatario_company_name || '';
+    const clientCnpj = selectedClient?.cnpj || contractForm?.locatario_cnpj || '';
+    const clientPhone = selectedClient?.phone || contractForm?.site_contact_phone || (deal as any)?.clients?.phone || '';
+    const clientAddress = selectedClient ? (
+      (selectedClient as any).address_full || [
+        selectedClient.address_street,
+        selectedClient.address_number,
+        selectedClient.address_city && selectedClient.address_state ? `${selectedClient.address_city}/${selectedClient.address_state}` : selectedClient.address_city
+      ].filter(Boolean).join(', ')
+    ) : contractForm?.locatario_address_full || '';
+    const clientIe = selectedClient?.state_subscription || contractForm?.locatario_state_registration || '';
+
+    return {
+      contract_number: contracts[0]?.contract_number || generalData.invoice_number,
+      rental_invoice_id: id,
+      deal: deal || { client: { company_name: clientName, cnpj: clientCnpj, phone: clientPhone, address_full: clientAddress, state_subscription: clientIe } },
+      contract_form: {
+        ...contractForm,
+        locatario_company_name: clientName,
+        locatario_cnpj: clientCnpj,
+        locatario_phone: clientPhone,
+        locatario_address: clientAddress,
+        locatario_state_subscription: clientIe,
+        work_site: generalData.work_site || contractForm?.work_site || clientAddress,
+        period_start: equipmentItems[0]?.billing_period_start || generalData.due_date,
+        period_end: equipmentItems[0]?.billing_period_end || generalData.due_date,
+        cost_rental: totals.cost_rental,
+        cost_total: totals.total_value,
+        equipments: equipmentItems
+      },
+      snapshot: contracts[0]?.snapshot,
+      equipments: equipmentItems
+    };
+  };
+
+  const handleVisualizarFaturaPdf = async () => {
+    try {
+      setFaturaPdfLoading(true);
+      const contractObj = getContractObjectForFatura();
+      const invoiceNum = generalData.invoice_number || (contracts[0]?.contract_number ? `ND-${String(contracts[0].contract_number).padStart(6, '0')}` : undefined);
+      const blob = await pdf(
+        <FaturaLocacaoDocument
+          contract={contractObj}
+          invoiceNumber={invoiceNum}
+          dueDate={generalData.due_date || undefined}
+          paymentMethod={generalData.payment_method || (generalData.billing_method === 'MANUAL' ? 'Lançamento Manual' : 'Boleto Bancário')}
+        />
+      ).toBlob();
+      const blobUrl = URL.createObjectURL(blob);
+      window.open(blobUrl, '_blank');
+    } catch (err) {
+      console.error('Erro ao gerar PDF da Fatura de Locação', err);
+      alert('Erro ao abrir PDF da Fatura.');
+    } finally {
+      setFaturaPdfLoading(false);
+    }
+  };
+
+  const handleBaixarFaturaPdf = async () => {
+    try {
+      setFaturaPdfLoading(true);
+      const contractObj = getContractObjectForFatura();
+      const invoiceNum = generalData.invoice_number || (contracts[0]?.contract_number ? `ND-${String(contracts[0].contract_number).padStart(6, '0')}` : undefined);
+      const blob = await pdf(
+        <FaturaLocacaoDocument
+          contract={contractObj}
+          invoiceNumber={invoiceNum}
+          dueDate={generalData.due_date || undefined}
+          paymentMethod={generalData.payment_method || (generalData.billing_method === 'MANUAL' ? 'Lançamento Manual' : 'Boleto Bancário')}
+        />
+      ).toBlob();
+      const invoiceName = generalData.invoice_number || (contracts[0]?.contract_number ? `Contrato_${contracts[0].contract_number}` : 'ND-000001');
+      saveAs(blob, `FATURA_LOCACAO - ${invoiceName}.pdf`);
+    } catch (err) {
+      console.error('Erro ao gerar PDF da Fatura de Locação', err);
+      alert('Erro ao baixar PDF da Fatura.');
+    } finally {
+      setFaturaPdfLoading(false);
+    }
+  };
 
   const handleGeneralChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) => {
     const { name, value } = e.target;
@@ -1400,6 +1485,50 @@ const RentalEdit: React.FC = () => {
                   </div>
                 </>
               )}
+
+              {/* Fatura de Locação (PDF) */}
+              <div className="pt-4 mt-4 border-t border-slate-100 dark:border-slate-800 space-y-3">
+                <h4 className="text-[10px] font-bold uppercase tracking-widest text-slate-500 dark:text-slate-400 flex items-center gap-2">
+                  <span className="material-symbols-outlined text-[16px] text-emerald-500">description</span>
+                  Fatura de Locação (PDF)
+                </h4>
+                <p className="text-[11px] text-slate-400">
+                  Documento oficial com discriminação dos equipamentos e valores
+                </p>
+
+                <div className="flex flex-wrap gap-2">
+                  <button
+                    type="button"
+                    disabled={faturaPdfLoading}
+                    onClick={handleVisualizarFaturaPdf}
+                    className="flex-1 py-2.5 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-900 dark:text-white rounded-xl font-bold text-xs uppercase tracking-widest transition-all flex items-center justify-center gap-1.5 disabled:opacity-50"
+                  >
+                    {faturaPdfLoading ? (
+                      <div className="w-4 h-4 border-2 border-slate-400 border-t-slate-900 dark:border-t-white rounded-full animate-spin" />
+                    ) : (
+                      <>
+                        <span className="material-symbols-outlined text-[16px]">visibility</span>
+                        Visualizar
+                      </>
+                    )}
+                  </button>
+                  <button
+                    type="button"
+                    disabled={faturaPdfLoading}
+                    onClick={handleBaixarFaturaPdf}
+                    className="flex-1 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl font-bold text-xs uppercase tracking-widest transition-all flex items-center justify-center gap-1.5 shadow-sm disabled:opacity-50"
+                  >
+                    {faturaPdfLoading ? (
+                      <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                    ) : (
+                      <>
+                        <span className="material-symbols-outlined text-[16px]">download</span>
+                        Baixar PDF
+                      </>
+                    )}
+                  </button>
+                </div>
+              </div>
 
               <button type="button" onClick={() => navigate('/locacoes')} className="w-full py-2.5 text-xs font-bold text-slate-500 hover:text-slate-800 dark:hover:text-slate-200 uppercase tracking-widest transition-colors text-center">
                 Cancelar e Voltar

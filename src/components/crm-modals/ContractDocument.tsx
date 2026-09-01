@@ -17,16 +17,16 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     alignItems: 'center',
     marginBottom: 8,
-    minHeight: 42,
+    minHeight: 52,
   },
   headerLogoLeft: {
-    width: 140,
-    height: 40,
+    width: 175,
+    height: 50,
     objectFit: 'contain',
   },
   headerLogoRight: {
-    width: 60,
-    height: 40,
+    width: 75,
+    height: 50,
     objectFit: 'contain',
   },
   // Title on Page 1
@@ -547,7 +547,7 @@ const ContractDocument: React.FC<ContractDocumentProps> = ({ data, generatedAt }
             <Text style={styles.proposalLabel}>Chave pix: </Text>
             CNPJ 48.477.385/0001-09
           </Text>
-          <Text style={styles.proposalLine}>
+          <Text style={[styles.proposalLine, { marginTop: 8 }]}>
             <Text style={styles.proposalLabel}>CONDIÇÕES DE FATURAMENTO: </Text>
             <Text style={styles.bold}>{getBillingConditionText()}</Text>
           </Text>

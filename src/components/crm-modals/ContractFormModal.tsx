@@ -58,8 +58,15 @@ const ContractFormModal: React.FC<ContractFormModalProps> = ({ isOpen, onClose, 
       try {
         setLoading(true);
         let form = initialData;
-        if (!form || Object.keys(form).length === 0) {
-          form = await crmService.getContractForm(dealId);
+        if (!form || Object.keys(form).length === 0 || !form.equipments || form.equipments.length === 0) {
+          try {
+            const fetched = await crmService.getContractForm(dealId);
+            if (fetched) {
+              form = { ...(form || {}), ...fetched };
+            }
+          } catch (e) {
+            console.error('Erro ao buscar dados do formulário:', e);
+          }
         }
 
         if (form) {
@@ -82,10 +89,14 @@ const ContractFormModal: React.FC<ContractFormModalProps> = ({ isOpen, onClose, 
             cost_training: Number(eq.cost_training) || 0,
             total_value: Number(eq.total_value) || 0
           })));
-        } else if (deal?.rental_invoice_id) {
+          return;
+        }
+
+        const rentalId = deal?.rental_invoice_id || form?.rental_invoice_id;
+        if (rentalId) {
           // Fetch rental invoice to populate multi-equipments
           try {
-            const { data: rental } = await api.get(`/rentals/${deal.rental_invoice_id}`);
+            const { data: rental } = await api.get(`/rentals/${rentalId}`);
             if (rental?.equipments && Array.isArray(rental.equipments) && rental.equipments.length > 0) {
               setEquipmentItems(rental.equipments.map((eq: any) => ({
                 tempId: eq.id || Math.random().toString(36).substring(2, 9),
@@ -106,27 +117,9 @@ const ContractFormModal: React.FC<ContractFormModalProps> = ({ isOpen, onClose, 
           } catch (e) {
             console.warn('Não foi possível buscar equipamentos da locação vinculada:', e);
           }
+        }
 
-          // Fallback if rental had single equipment
-          if (form?.equipment_description) {
-            setEquipmentItems([{
-              tempId: Math.random().toString(36).substring(2, 9),
-              equipment_name: form.equipment_description,
-              equipment_size: form.equipment_size || '',
-              billing_period_start: form.period_start || '',
-              billing_period_end: form.period_end || '',
-              cost_rental: Number(form.cost_rental) || 0,
-              cost_insurance: Number(form.cost_insurance) || 0,
-              cost_freight: Number(form.cost_freight) || 0,
-              cost_rcd: Number(form.cost_rcd) || 0,
-              cost_third_party: Number(form.cost_third_party) || 0,
-              cost_training: Number(form.cost_training) || 0,
-              total_value: Number(form.cost_total) || 0
-            }]);
-          } else {
-            setEquipmentItems([createDefaultEquipmentItem(form?.period_start, form?.period_end)]);
-          }
-        } else if (form?.equipment_description) {
+        if (form?.equipment_description) {
           setEquipmentItems([{
             tempId: Math.random().toString(36).substring(2, 9),
             equipment_name: form.equipment_description,
@@ -142,7 +135,7 @@ const ContractFormModal: React.FC<ContractFormModalProps> = ({ isOpen, onClose, 
             total_value: Number(form.cost_total) || 0
           }]);
         } else {
-          setEquipmentItems([createDefaultEquipmentItem()]);
+          setEquipmentItems([createDefaultEquipmentItem(form?.period_start, form?.period_end)]);
         }
       } catch (err) {
         console.error('Erro ao carregar dados do formulário de contrato:', err);

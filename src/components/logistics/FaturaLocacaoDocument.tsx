@@ -1,7 +1,6 @@
 import React from 'react';
 import { Document, Page, Text, View, StyleSheet, Image } from '@react-pdf/renderer';
 import logoAltoMaster from '../../assets/altomaster-dark.png';
-import type { LogisticsContract } from '../../services/logistics';
 import { formatDate } from '../../utils/date';
 
 const styles = StyleSheet.create({
@@ -219,7 +218,7 @@ const styles = StyleSheet.create({
 });
 
 interface FaturaLocacaoDocumentProps {
-  contract: LogisticsContract;
+  contract: any;
   invoiceNumber?: string;
   issueDate?: string;
   dueDate?: string;
@@ -286,6 +285,16 @@ export const FaturaLocacaoDocument: React.FC<FaturaLocacaoDocumentProps> = ({
   // Valores e Itens
   const rentalCost = Number(form.cost_rental ?? snapshot.costs?.rental ?? deal.value ?? 0);
   const totalCost = Number(form.cost_total ?? snapshot.costs?.total ?? deal.value ?? 0);
+
+  const equipmentsList = (contract.equipments && contract.equipments.length > 0)
+    ? contract.equipments
+    : (form.equipments && form.equipments.length > 0)
+    ? form.equipments
+    : (snapshot.equipments && snapshot.equipments.length > 0)
+    ? snapshot.equipments
+    : (snapshot.equipment?.items && snapshot.equipment.items.length > 0)
+    ? snapshot.equipment.items
+    : null;
 
   const equipmentDesc = form.equipment_description || snapshot.equipment?.description || 'EQUIPAMENTO DE LOCAÇÃO';
 
@@ -382,20 +391,45 @@ export const FaturaLocacaoDocument: React.FC<FaturaLocacaoDocumentProps> = ({
             <Text style={[styles.tableHeaderCellLast, { width: '12%', textAlign: 'right' }]}>Valor Total</Text>
           </View>
 
-          {/* 7. Tabela de Itens - Linha Principal */}
-          <View style={styles.tableRow}>
-            <Text style={[styles.tableCell, { width: '12%', textAlign: 'center' }]}>1</Text>
-            <Text style={[styles.tableCell, { width: '10%', textAlign: 'center' }]}>UN</Text>
-            <View style={[styles.tableCell, { width: '54%' }]}>
-              <Text style={{ fontWeight: 'normal' }}>Locação do equipamento abaixo conforme contrato:</Text>
-              <Text style={{ fontWeight: 'bold', marginTop: 2 }}>{equipmentDesc}</Text>
-              {contract.contract_number && (
-                <Text style={{ fontSize: 6.5, color: '#444', marginTop: 1 }}>Contrato Nº {contract.contract_number}</Text>
-              )}
+          {/* 7. Tabela de Itens */}
+          {equipmentsList && equipmentsList.length > 0 ? (
+            equipmentsList.map((eq: any, idx: number) => {
+              const eqDesc = eq.equipment_name || eq.description || equipmentDesc;
+              const eqHeight = eq.equipment_size ? ` - ${eq.equipment_size}` : '';
+              const eqAsset = eq.asset_number ? ` (Patrimônio: ${eq.asset_number})` : '';
+              const eqVal = Number(eq.total_value ?? eq.cost_rental ?? 0);
+
+              return (
+                <View key={idx} style={[styles.tableRow, { borderBottomWidth: idx === equipmentsList.length - 1 ? 0 : 0.5 }]}>
+                  <Text style={[styles.tableCell, { width: '12%', textAlign: 'center' }]}>1</Text>
+                  <Text style={[styles.tableCell, { width: '10%', textAlign: 'center' }]}>UN</Text>
+                  <View style={[styles.tableCell, { width: '54%' }]}>
+                    <Text style={{ fontWeight: 'normal' }}>Locação de Equipamento:</Text>
+                    <Text style={{ fontWeight: 'bold', marginTop: 2 }}>{eqDesc}{eqHeight}{eqAsset}</Text>
+                    {contract.contract_number && (
+                      <Text style={{ fontSize: 6.5, color: '#444', marginTop: 1 }}>Contrato Nº {contract.contract_number}</Text>
+                    )}
+                  </View>
+                  <Text style={[styles.tableCell, { width: '12%', textAlign: 'right' }]}>{formatCurrency(eqVal)}</Text>
+                  <Text style={[styles.tableCellLast, { width: '12%', textAlign: 'right' }]}>{formatCurrency(eqVal)}</Text>
+                </View>
+              );
+            })
+          ) : (
+            <View style={styles.tableRow}>
+              <Text style={[styles.tableCell, { width: '12%', textAlign: 'center' }]}>1</Text>
+              <Text style={[styles.tableCell, { width: '10%', textAlign: 'center' }]}>UN</Text>
+              <View style={[styles.tableCell, { width: '54%' }]}>
+                <Text style={{ fontWeight: 'normal' }}>Locação do equipamento abaixo conforme contrato:</Text>
+                <Text style={{ fontWeight: 'bold', marginTop: 2 }}>{equipmentDesc}</Text>
+                {contract.contract_number && (
+                  <Text style={{ fontSize: 6.5, color: '#444', marginTop: 1 }}>Contrato Nº {contract.contract_number}</Text>
+                )}
+              </View>
+              <Text style={[styles.tableCell, { width: '12%', textAlign: 'right' }]}>{formatCurrency(rentalCost || totalCost)}</Text>
+              <Text style={[styles.tableCellLast, { width: '12%', textAlign: 'right' }]}>{formatCurrency(rentalCost || totalCost)}</Text>
             </View>
-            <Text style={[styles.tableCell, { width: '12%', textAlign: 'right' }]}>{formatCurrency(rentalCost || totalCost)}</Text>
-            <Text style={[styles.tableCellLast, { width: '12%', textAlign: 'right' }]}>{formatCurrency(rentalCost || totalCost)}</Text>
-          </View>
+          )}
 
           {/* 8. Observações */}
           <View style={styles.obsContainer}>
