@@ -613,6 +613,7 @@ export interface StatementItem {
   client_name: string | null;
   counterparty_name: string | null;
   invoice_number: string | null;
+  rental_invoice_id?: string | null;
   description: string | null;
   invoice_url: string | null;
   bank_slip_url: string | null;
@@ -621,6 +622,10 @@ export interface StatementItem {
   created_by_photo?: string | null;
   created_at?: string | null;
   updated_at?: string | null;
+  access_key?: string | null;
+  installments?: StatementItem[];
+  installments_count?: number;
+  paid_installments_count?: number;
   raw: Record<string, any> | any;
 }
 

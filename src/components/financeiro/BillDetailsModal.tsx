@@ -1,9 +1,13 @@
 import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
+import { pdf } from '@react-pdf/renderer';
+import { saveAs } from 'file-saver';
+import api from '../../services/api';
 import { formatDate, formatDateTime } from '../../utils/date';
 import { useAuth } from '../../contexts/AuthContext';
 import { financeiroService } from '../../services/financeiro';
 import { getApiErrorMessage } from '../../utils/apiError';
+import { FaturaLocacaoDocument } from '../logistics/FaturaLocacaoDocument';
 import type { StatementItem, BillStatus } from '../../types';
 
 interface BillDetailsModalProps {
@@ -34,6 +38,10 @@ const BillDetailsModal: React.FC<BillDetailsModalProps> = ({ isOpen, item, onClo
 
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [deleting, setDeleting] = useState(false);
+  const [updatingInstallmentId, setUpdatingInstallmentId] = useState<string | null>(null);
+
+  const [generatingFatura, setGeneratingFatura] = useState(false);
+  const [faturaSuccessMessage, setFaturaSuccessMessage] = useState<string | null>(null);
 
   useEffect(() => {
     if (item) {
@@ -43,6 +51,7 @@ const BillDetailsModal: React.FC<BillDetailsModalProps> = ({ isOpen, item, onClo
       setIsEditing(false);
       setConfirmDelete(false);
       setError(null);
+      setFaturaSuccessMessage(null);
     }
   }, [item]);
 
@@ -57,8 +66,10 @@ const BillDetailsModal: React.FC<BillDetailsModalProps> = ({ isOpen, item, onClo
   const cnpj = raw.client?.cnpj;
 
   const isManual = currentItem.origin === 'MANUAL';
-  const canEdit = isManual && Boolean(profile && ['Administrador', 'Gerente', 'Diretoria'].includes(profile.access_level));
+  const canEdit = Boolean(profile && ['Administrador', 'Gerente', 'Diretoria', 'Financeiro'].includes(profile.access_level));
   const canDelete = isManual && profile?.access_level === 'Administrador';
+
+  const rentalInvoiceId = currentItem.rental_invoice_id || raw.rental_invoice_id || raw.invoice_id || raw.invoice?.id;
 
   const creatorName = currentItem.created_by_name || raw.creator?.full_name || null;
   const creatorPhoto = currentItem.created_by_photo || raw.creator?.photo_url || null;
@@ -78,6 +89,131 @@ const BillDetailsModal: React.FC<BillDetailsModalProps> = ({ isOpen, item, onClo
       navigator.clipboard.writeText(String(barcode));
       setCopiedBarcode(true);
       setTimeout(() => setCopiedBarcode(false), 2000);
+    }
+  };
+
+  const handleGerarFaturaLocacao = async (action: 'view' | 'download' = 'view') => {
+    if (!rentalInvoiceId) return;
+    setGeneratingFatura(true);
+    setError(null);
+    setFaturaSuccessMessage(null);
+    try {
+      // 1. Carregar dados completos da locação e contrato/deal
+      const [rentalRes, dealRes] = await Promise.all([
+        api.get(`/rentals/${rentalInvoiceId}`),
+        api.get(`/rentals/${rentalInvoiceId}/contract-deal`).catch(() => ({ data: null })),
+      ]);
+
+      const rental = rentalRes.data;
+      const dealData = dealRes?.data;
+      let contracts = dealData?.contracts || [];
+      const deal = dealData?.deal;
+      const contractForm = dealData?.contract_form;
+
+      // Se a lista de contratos estiver vazia, buscar por deal.id
+      if (contracts.length === 0 && deal?.id) {
+        try {
+          const { data: cData } = await api.get(`/crm/deals/${deal.id}/contracts`);
+          if (cData && Array.isArray(cData) && cData.length > 0) {
+            contracts = cData;
+          }
+        } catch {
+          // ignore
+        }
+      }
+
+      let clientObj = deal?.clients || deal?.client;
+      if (!clientObj && rental.client_id) {
+        try {
+          const { data: clientData } = await api.get(`/clients/${rental.client_id}`);
+          clientObj = clientData;
+        } catch {
+          // ignore
+        }
+      }
+
+      // Número real do contrato em crm_deal_contracts (ex: "002")
+      const realContractNumber = contracts[0]?.contract_number || null;
+
+      const contractObj: any = {
+        contract_number: realContractNumber,
+        rental_invoice_id: rental.id,
+        notes: rental.notes,
+        deal: {
+          ...deal,
+          client: clientObj || {
+            company_name: rental.client_name || currentItem.client_name,
+            cnpj: rental.cnpj || raw.client?.cnpj,
+            state_subscription: rental.state_subscription || raw.client?.state_subscription || '',
+            state_registration: rental.state_subscription || raw.client?.state_subscription || '',
+            phone: rental.phone || '',
+            address_full: rental.delivery_address || rental.work_site || ''
+          }
+        },
+        contract_form: {
+          ...contractForm,
+          notes: rental.notes || contractForm?.notes || '',
+          observations: rental.notes || contractForm?.observations || '',
+          locatario_company_name: rental.client_name || currentItem.client_name,
+          locatario_cnpj: rental.cnpj || raw.client?.cnpj,
+          locatario_state_registration: clientObj?.state_subscription || clientObj?.state_registration || contractForm?.locatario_state_registration || '',
+          locatario_state_subscription: clientObj?.state_subscription || clientObj?.state_registration || contractForm?.locatario_state_subscription || '',
+          locatario_phone: rental.phone || contractForm?.site_contact_phone || '',
+          locatario_address: rental.delivery_address || rental.work_site || contractForm?.locatario_address_full || '',
+          work_site: rental.work_site || rental.delivery_address || contractForm?.work_site || '',
+          period_start: rental.equipments?.[0]?.billing_period_start || rental.billing_period_start || rental.due_date || currentItem.due_date,
+          period_end: rental.equipments?.[0]?.billing_period_end || rental.billing_period_end || rental.due_date || currentItem.due_date,
+          cost_rental: rental.cost_rental ?? rental.total_value ?? currentItem.gross_value,
+          cost_total: rental.total_value ?? currentItem.gross_value,
+          equipments: rental.equipments || []
+        },
+        snapshot: contracts[0]?.snapshot,
+        equipments: rental.equipments || []
+      };
+
+      const invoiceNum = rental.invoice_number || currentItem.invoice_number || (realContractNumber ? `ND-${String(realContractNumber).padStart(6, '0')}` : undefined);
+      const dueDateFormatted = rental.due_date || currentItem.due_date || undefined;
+      const paymentMethodFormatted = rental.payment_method || (rental.billing_method === 'MANUAL' ? 'Lançamento Manual' : 'Boleto Bancário');
+
+      // 2. Gerar PDF da Fatura de Locação
+      const blob = await pdf(
+        <FaturaLocacaoDocument
+          contract={contractObj}
+          invoiceNumber={invoiceNum}
+          dueDate={dueDateFormatted}
+          paymentMethod={paymentMethodFormatted}
+        />
+      ).toBlob();
+
+      if (action === 'download') {
+        saveAs(blob, `FATURA_LOCACAO - ${invoiceNum || 'ND'}.pdf`);
+      } else {
+        const blobUrl = URL.createObjectURL(blob);
+        window.open(blobUrl, '_blank');
+      }
+
+      // 3. Atualizar status da locação para 'Faturado'
+      await api.put(`/rentals/${rentalInvoiceId}`, { billing_status: 'Faturado' });
+
+      // 4. Atualizar status do registro financeiro para 'Pendente'
+      if (currentItem.source === 'bill') {
+        const updatedBill = await financeiroService.atualizarLancamento(currentItem.id, { status: 'Pendente' });
+        setCurrentItem(updatedBill);
+        setStatusValue('Pendente');
+        onUpdated?.(updatedBill);
+      } else {
+        setStatusValue('Pendente');
+        const updatedItem = { ...currentItem, status: 'Pendente' };
+        setCurrentItem(updatedItem);
+        onUpdated?.(updatedItem);
+      }
+
+      setFaturaSuccessMessage('Fatura de locação gerada com sucesso! Status da locação atualizado para "Faturado" e financeiro para "Pendente".');
+    } catch (err: any) {
+      console.error('Erro ao gerar Fatura de Locação:', err);
+      setError(getApiErrorMessage(err));
+    } finally {
+      setGeneratingFatura(false);
     }
   };
 
@@ -105,6 +241,63 @@ const BillDetailsModal: React.FC<BillDetailsModalProps> = ({ isOpen, item, onClo
     setIsReconciledValue(isReconciled);
     setIsEditing(false);
     setError(null);
+  };
+
+  const handleUpdateInstallmentStatus = async (instId: string, nextStatus: string, nextReconciled?: boolean) => {
+    if (!currentItem) return;
+    setUpdatingInstallmentId(instId);
+    setError(null);
+    try {
+      await financeiroService.atualizarLancamento(instId, {
+        status: nextStatus as any,
+        ...(nextReconciled !== undefined ? { is_reconciled: nextReconciled } : {}),
+      });
+
+      const updatedInstallments = (currentItem.installments || []).map((i) => {
+        if (i.id === instId) {
+          return {
+            ...i,
+            status: nextStatus,
+            is_reconciled: nextReconciled !== undefined ? nextReconciled : (nextStatus === 'Recebido' || nextStatus === 'No prazo'),
+            settled_date: (nextStatus === 'Recebido' || nextStatus === 'No prazo') ? new Date().toISOString() : null,
+          };
+        }
+        return i;
+      });
+
+      const totalCount = updatedInstallments.length;
+      const paidCount = updatedInstallments.filter((i) => i.status === 'Recebido' || i.status === 'No prazo').length;
+      const allReconciled = updatedInstallments.every((i) => i.is_reconciled);
+
+      let consolidatedStatus = 'Pendente';
+      if (paidCount === totalCount) {
+        consolidatedStatus = 'Recebido';
+      } else if (paidCount > 0) {
+        consolidatedStatus = `Parcial (${paidCount}/${totalCount})`;
+      } else {
+        const anyOverdue = updatedInstallments.some((i) => i.status === 'Atrasado');
+        if (anyOverdue) consolidatedStatus = 'Atrasado';
+      }
+
+      const pendingInst = updatedInstallments.find((i) => i.status !== 'Recebido' && i.status !== 'No prazo');
+      const targetDueDate = pendingInst?.due_date || updatedInstallments[updatedInstallments.length - 1]?.due_date || currentItem.due_date;
+
+      const newCurrentItem: StatementItem = {
+        ...currentItem,
+        installments: updatedInstallments,
+        paid_installments_count: paidCount,
+        status: consolidatedStatus,
+        due_date: targetDueDate,
+        is_reconciled: allReconciled,
+      };
+
+      setCurrentItem(newCurrentItem);
+      onUpdated?.(newCurrentItem);
+    } catch (err: any) {
+      setError(getApiErrorMessage(err));
+    } finally {
+      setUpdatingInstallmentId(null);
+    }
   };
 
   const handleDelete = async () => {
@@ -204,6 +397,13 @@ const BillDetailsModal: React.FC<BillDetailsModalProps> = ({ isOpen, item, onClo
               <div className="p-4 bg-red-50 dark:bg-red-500/10 border border-red-200 dark:border-red-500/20 rounded-2xl text-xs font-semibold text-red-600 dark:text-red-400 flex items-center gap-2">
                 <span className="material-symbols-outlined text-[18px]">error</span>
                 {error}
+              </div>
+            )}
+
+            {faturaSuccessMessage && (
+              <div className="p-4 bg-emerald-50 dark:bg-emerald-500/10 border border-emerald-200 dark:border-emerald-500/20 rounded-2xl text-xs font-semibold text-emerald-700 dark:text-emerald-400 flex items-center gap-2">
+                <span className="material-symbols-outlined text-[18px]">check_circle</span>
+                {faturaSuccessMessage}
               </div>
             )}
 
@@ -364,6 +564,186 @@ const BillDetailsModal: React.FC<BillDetailsModalProps> = ({ isOpen, item, onClo
                 )}
               </div>
             </div>
+
+            {/* Ocorrências Mensais (Parcelas da NF-e) */}
+            {currentItem.installments && currentItem.installments.length > 1 && (
+              <div className="bg-slate-50/70 dark:bg-slate-800/30 border border-slate-200/80 dark:border-slate-800 rounded-3xl p-5 space-y-4 shadow-sm">
+                <div className="flex flex-wrap items-center justify-between gap-3">
+                  <div className="flex items-center gap-2.5">
+                    <div className="w-9 h-9 rounded-2xl bg-indigo-50 dark:bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 flex items-center justify-center">
+                      <span className="material-symbols-outlined text-[20px]">calendar_month</span>
+                    </div>
+                    <div>
+                      <h4 className="text-xs font-bold uppercase tracking-wider text-slate-900 dark:text-white">
+                        Ocorrências Mensais da NF-e
+                      </h4>
+                      <p className="text-[11px] text-slate-400 dark:text-slate-500">
+                        {currentItem.installments.length} parcelas registradas para este documento
+                      </p>
+                    </div>
+                  </div>
+
+                  <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold bg-indigo-50 dark:bg-indigo-500/10 text-indigo-700 dark:text-indigo-400 border border-indigo-200 dark:border-indigo-500/20">
+                    <span className="material-symbols-outlined text-[14px]">check_circle</span>
+                    {currentItem.paid_installments_count || 0} de {currentItem.installments.length} parcelas quitadas
+                  </span>
+                </div>
+
+                <div className="overflow-x-auto rounded-2xl border border-slate-200/60 dark:border-slate-800 bg-white dark:bg-slate-900">
+                  <table className="w-full text-left text-xs">
+                    <thead>
+                      <tr className="bg-slate-50 dark:bg-slate-800/60 border-b border-slate-200/60 dark:border-slate-800">
+                        <th className="px-4 py-3 font-bold text-slate-400 dark:text-slate-500 uppercase tracking-widest text-[10px]">Parcela</th>
+                        <th className="px-4 py-3 font-bold text-slate-400 dark:text-slate-500 uppercase tracking-widest text-[10px]">Vencimento</th>
+                        <th className="px-4 py-3 font-bold text-slate-400 dark:text-slate-500 uppercase tracking-widest text-[10px]">Valor</th>
+                        <th className="px-4 py-3 font-bold text-slate-400 dark:text-slate-500 uppercase tracking-widest text-[10px]">Status</th>
+                        <th className="px-4 py-3 font-bold text-slate-400 dark:text-slate-500 uppercase tracking-widest text-[10px] text-center">Conciliado</th>
+                        {canEdit && (
+                          <th className="px-4 py-3 font-bold text-slate-400 dark:text-slate-500 uppercase tracking-widest text-[10px] text-center">Ações</th>
+                        )}
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-100 dark:divide-slate-800/60">
+                      {currentItem.installments.map((inst, index) => {
+                        const rawInst = (inst.raw as any)?.bank_raw_snapshot || {};
+                        const instNum = rawInst.installment_number || (index + 1);
+                        const isPaid = inst.status === 'Recebido' || inst.status === 'No prazo';
+                        const isOverdue = inst.status === 'Atrasado';
+                        const isUpdating = updatingInstallmentId === inst.id;
+
+                        return (
+                          <tr key={inst.id} className="hover:bg-slate-50/50 dark:hover:bg-slate-800/30 transition-colors">
+                            <td className="px-4 py-3 font-bold text-slate-800 dark:text-slate-200 whitespace-nowrap">
+                              <span className="inline-flex items-center gap-1.5">
+                                <span className="w-5 h-5 rounded-full bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 text-[10px] font-bold flex items-center justify-center">
+                                  {instNum}
+                                </span>
+                                Parcela {instNum}/{currentItem.installments!.length}
+                              </span>
+                            </td>
+                            <td className="px-4 py-3 text-slate-600 dark:text-slate-400 whitespace-nowrap font-medium">
+                              {formatDate(inst.due_date)}
+                            </td>
+                            <td className="px-4 py-3 font-bold text-rose-600 dark:text-rose-400 whitespace-nowrap">
+                              {formatMoney(inst.gross_value)}
+                            </td>
+                            <td className="px-4 py-3 whitespace-nowrap">
+                              <span
+                                className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold ${
+                                  isPaid
+                                    ? 'bg-emerald-100 dark:bg-emerald-500/10 text-emerald-800 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-500/20'
+                                    : isOverdue
+                                    ? 'bg-rose-100 dark:bg-rose-500/10 text-rose-800 dark:text-rose-400 border border-rose-200 dark:border-rose-500/20'
+                                    : 'bg-amber-100 dark:bg-amber-500/10 text-amber-800 dark:text-amber-400 border border-amber-200 dark:border-amber-500/20'
+                                }`}
+                              >
+                                <span className="material-symbols-outlined text-[12px]">
+                                  {isPaid ? 'check_circle' : isOverdue ? 'cancel' : 'schedule'}
+                                </span>
+                                {inst.status || 'Pendente'}
+                              </span>
+                            </td>
+                            <td className="px-4 py-3 text-center whitespace-nowrap">
+                              {inst.is_reconciled ? (
+                                <span className="inline-flex items-center gap-1 text-[11px] font-bold text-emerald-600 dark:text-emerald-400">
+                                  <span className="material-symbols-outlined text-[14px]">done_all</span>
+                                  Sim
+                                </span>
+                              ) : (
+                                <span className="text-[11px] text-slate-400 dark:text-slate-500">
+                                  Não
+                                </span>
+                              )}
+                            </td>
+                            {canEdit && (
+                              <td className="px-4 py-3 text-center whitespace-nowrap">
+                                <button
+                                  type="button"
+                                  disabled={isUpdating}
+                                  onClick={() => handleUpdateInstallmentStatus(inst.id, isPaid ? 'Pendente' : 'Recebido', !isPaid)}
+                                  className={`px-2.5 py-1 rounded-lg text-[10px] font-bold uppercase tracking-wider transition-all flex items-center gap-1 mx-auto ${
+                                    isPaid
+                                      ? 'bg-slate-100 dark:bg-slate-800 hover:bg-rose-50 text-slate-600 dark:text-slate-400 hover:text-rose-600 border border-slate-200 dark:border-slate-700'
+                                      : 'bg-emerald-600 hover:bg-emerald-700 text-white shadow-sm'
+                                  }`}
+                                  title={isPaid ? 'Marcar como Pendente' : 'Marcar como Paga/Recebida'}
+                                >
+                                  {isUpdating ? (
+                                    <div className="w-3 h-3 border-2 border-slate-400 border-t-white rounded-full animate-spin" />
+                                  ) : (
+                                    <>
+                                      <span className="material-symbols-outlined text-[13px]">
+                                        {isPaid ? 'undo' : 'check'}
+                                      </span>
+                                      <span>{isPaid ? 'Desfazer' : 'Dar Baixa'}</span>
+                                    </>
+                                  )}
+                                </button>
+                              </td>
+                            )}
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            )}
+
+            {/* Fatura de Locação (Bens Móveis) - Quando vinculado a rental_invoice */}
+            {rentalInvoiceId && (
+              <div className="bg-emerald-50/50 dark:bg-emerald-500/10 border border-emerald-200 dark:border-emerald-500/20 rounded-2xl p-5 space-y-3">
+                <div className="flex items-center justify-between">
+                  <span className="text-xs font-bold uppercase tracking-wider text-emerald-800 dark:text-emerald-300 flex items-center gap-1.5">
+                    <span className="material-symbols-outlined text-[18px] text-emerald-600 dark:text-emerald-400">receipt_long</span>
+                    Fatura de Locação (Bens Móveis)
+                  </span>
+                  {currentItem.invoice_number && (
+                    <span className="px-2.5 py-0.5 rounded-full text-[10px] font-mono font-bold bg-emerald-100 dark:bg-emerald-500/20 text-emerald-800 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-500/30">
+                      {currentItem.invoice_number}
+                    </span>
+                  )}
+                </div>
+
+                <p className="text-xs text-slate-600 dark:text-slate-400 leading-relaxed">
+                  Esta conta a receber está vinculada a uma locação. Ao gerar a fatura oficial, o status da locação será atualizado para <strong className="text-emerald-700 dark:text-emerald-300">Faturado</strong> e o status deste lançamento ficará como <strong className="text-amber-700 dark:text-amber-300">Pendente</strong>.
+                </p>
+
+                <div className="flex flex-wrap items-center gap-2.5 pt-1">
+                  <button
+                    type="button"
+                    disabled={generatingFatura}
+                    onClick={() => handleGerarFaturaLocacao('view')}
+                    className="px-4 py-2.5 bg-white dark:bg-slate-800 hover:bg-slate-50 dark:hover:bg-slate-700 text-slate-800 dark:text-white border border-slate-200 dark:border-slate-700 rounded-xl text-xs font-bold uppercase tracking-wider transition-all flex items-center gap-2 shadow-sm disabled:opacity-50"
+                  >
+                    {generatingFatura ? (
+                      <div className="w-4 h-4 border-2 border-slate-400 border-t-slate-800 dark:border-t-white rounded-full animate-spin" />
+                    ) : (
+                      <>
+                        <span className="material-symbols-outlined text-[16px]">visibility</span>
+                        Visualizar Fatura
+                      </>
+                    )}
+                  </button>
+
+                  <button
+                    type="button"
+                    disabled={generatingFatura}
+                    onClick={() => handleGerarFaturaLocacao('download')}
+                    className="px-4 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold uppercase tracking-wider transition-all flex items-center gap-2 shadow-md shadow-emerald-600/20 disabled:opacity-50"
+                  >
+                    {generatingFatura ? (
+                      <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                    ) : (
+                      <>
+                        <span className="material-symbols-outlined text-[16px]">download</span>
+                        Baixar Fatura (PDF)
+                      </>
+                    )}
+                  </button>
+                </div>
+              </div>
+            )}
 
             {/* Description / Notes */}
             <div className="bg-slate-50/50 dark:bg-slate-800/20 border border-slate-100 dark:border-slate-800 rounded-2xl p-5 space-y-2">

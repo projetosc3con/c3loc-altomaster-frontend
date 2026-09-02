@@ -21,19 +21,23 @@ const isOverdueOrCancelled = (item: StatementItem) =>
 
 const statusBadgeClass = (item: StatementItem) => {
   if (isSettled(item)) return 'bg-emerald-100 dark:bg-emerald-500/10 text-emerald-800 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-500/20';
+  if (item.status.startsWith('Parcial')) return 'bg-blue-100 dark:bg-blue-500/10 text-blue-800 dark:text-blue-400 border border-blue-200 dark:border-blue-500/20';
   if (isOverdueOrCancelled(item)) return 'bg-red-100 dark:bg-red-500/10 text-red-800 dark:text-red-400 border border-red-200 dark:border-red-500/20';
   return 'bg-amber-100 dark:bg-amber-500/10 text-amber-800 dark:text-amber-400 border border-amber-200 dark:border-amber-500/20';
 };
 
 const statusIcon = (item: StatementItem) => {
   if (isSettled(item)) return 'check_circle';
+  if (item.status.startsWith('Parcial')) return 'pie_chart';
   if (isOverdueOrCancelled(item)) return 'cancel';
   return 'schedule';
 };
 
 const sourceBadge = (item: StatementItem) => {
   if (item.origin === 'NFE') {
-    return { label: 'NF-E', className: 'bg-indigo-100 dark:bg-indigo-500/10 text-indigo-700 dark:text-indigo-400 border border-indigo-200 dark:border-indigo-500/20' };
+    const count = item.installments_count || item.installments?.length;
+    const label = count && count > 1 ? `NF-E (${count}x)` : 'NF-E';
+    return { label, className: 'bg-indigo-100 dark:bg-indigo-500/10 text-indigo-700 dark:text-indigo-400 border border-indigo-200 dark:border-indigo-500/20' };
   }
   if (item.origin === 'ASAAS') {
     return { label: 'ASAAS', className: 'bg-mustard-100 dark:bg-mustard-500/10 text-mustard-700 dark:text-mustard-400 border border-mustard-200 dark:border-mustard-500/20' };
@@ -48,6 +52,7 @@ const ContasPagarTab: React.FC = () => {
   const [origin, setOrigin] = useState('');
   const [dateFrom, setDateFrom] = useState('');
   const [dateTo, setDateTo] = useState('');
+  const [groupNfe, setGroupNfe] = useState<boolean>(true);
 
   const [items, setItems] = useState<StatementItem[]>([]);
   const [loading, setLoading] = useState(true);
@@ -84,6 +89,7 @@ const ContasPagarTab: React.FC = () => {
         origin: origin || undefined,
         from: dateFrom || undefined,
         to: dateTo || undefined,
+        group_nfe: groupNfe,
         page: currentPage,
         limit: ITEMS_PER_PAGE,
       });
@@ -96,7 +102,7 @@ const ContasPagarTab: React.FC = () => {
     } finally {
       setLoading(false);
     }
-  }, [selectedClientId, status, origin, dateFrom, dateTo, currentPage]);
+  }, [selectedClientId, status, origin, dateFrom, dateTo, groupNfe, currentPage]);
 
   useEffect(() => {
     fetchContasPagar();
@@ -210,15 +216,35 @@ const ContasPagarTab: React.FC = () => {
             </div>
           </div>
 
-          {hasActiveFilters && (
-            <button
-              type="button"
-              onClick={handleClearFilters}
-              className="text-xs font-bold text-rose-600 dark:text-rose-400 uppercase tracking-widest hover:underline"
-            >
-              Limpar filtros
-            </button>
-          )}
+          <div className="flex flex-wrap items-center justify-between gap-4 pt-1">
+            <div className="flex items-center gap-3">
+              <button
+                type="button"
+                onClick={() => setGroupNfe((prev) => !prev)}
+                className={`px-3.5 py-2 rounded-xl border text-xs font-bold transition-all flex items-center gap-2 shadow-sm ${
+                  groupNfe
+                    ? 'bg-indigo-50 dark:bg-indigo-500/10 border-indigo-200 dark:border-indigo-500/30 text-indigo-700 dark:text-indigo-400'
+                    : 'bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-400 hover:bg-slate-50'
+                }`}
+                title="Alternar entre visualizar a nota consolidada ou parcelas avulsas"
+              >
+                <span className="material-symbols-outlined text-[18px]">
+                  {groupNfe ? 'layers' : 'layers_clear'}
+                </span>
+                <span>{groupNfe ? 'Agrupado por NF-e' : 'Parcelas Individuais'}</span>
+              </button>
+            </div>
+
+            {hasActiveFilters && (
+              <button
+                type="button"
+                onClick={handleClearFilters}
+                className="text-xs font-bold text-rose-600 dark:text-rose-400 uppercase tracking-widest hover:underline"
+              >
+                Limpar filtros
+              </button>
+            )}
+          </div>
 
           {error && (
             <div className="bg-red-50 dark:bg-red-500/10 border border-red-200 dark:border-red-500/20 text-red-600 dark:text-red-400 rounded-2xl p-4 text-sm font-medium">
@@ -272,15 +298,32 @@ const ContasPagarTab: React.FC = () => {
                           )}
                         </td>
                         <td className="px-6 py-4 text-slate-600 dark:text-slate-400 whitespace-nowrap">
-                          {formatDate(item.due_date)}
+                          <div>
+                            <p className="font-medium text-slate-900 dark:text-white">
+                              {formatDate(item.due_date)}
+                            </p>
+                            {item.installments_count && item.installments_count > 1 ? (
+                              <span className="text-[10px] text-slate-400 dark:text-slate-500 block">
+                                {item.status === 'Recebido' ? 'Todas pagas' : 'Próx. vencimento'}
+                              </span>
+                            ) : null}
+                          </div>
                         </td>
                         <td className="px-6 py-4">
                           <p className="font-bold text-slate-900 dark:text-white">
                             {item.counterparty_name || item.client_name || '—'}
                           </p>
-                          <p className="text-[11px] text-slate-400 dark:text-slate-500 font-mono">
-                            {item.invoice_number || item.description || '—'}
-                          </p>
+                          <div className="flex flex-wrap items-center gap-1.5 mt-0.5">
+                            <span className="text-[11px] text-slate-400 dark:text-slate-500 font-mono">
+                              {item.invoice_number || item.description || '—'}
+                            </span>
+                            {item.installments_count && item.installments_count > 1 ? (
+                              <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-bold bg-indigo-50 dark:bg-indigo-500/10 text-indigo-700 dark:text-indigo-400 border border-indigo-200/60 dark:border-indigo-500/20">
+                                <span className="material-symbols-outlined text-[11px]">payments</span>
+                                {item.paid_installments_count || 0}/{item.installments_count} pagas
+                              </span>
+                            ) : null}
+                          </div>
                         </td>
                         <td className="px-6 py-4">
                           <span className={`inline-flex items-center px-2.5 py-1 rounded-full text-[11px] font-bold ${badge.className}`}>

@@ -1,6 +1,6 @@
 export const navItems = [
   { name: 'Dashboard', path: '/', icon: 'dashboard', allowedRoles: ['Administrador', 'Diretoria', 'Gerente', 'Comercial', 'Manutenção', 'Recursos Humanos', 'Logística'] },
-  { name: 'Contratos', path: '/locacoes', icon: 'contract', allowedRoles: ['Administrador', 'Diretoria', 'Gerente'] },
+  { name: 'Locações', path: '/locacoes', icon: 'contract', allowedRoles: ['Administrador', 'Diretoria', 'Gerente'] },
   { name: 'CRM', path: '/crm', icon: 'monitoring', allowedRoles: ['Administrador', 'Diretoria', 'Gerente'] },
 
   // Sub-rotas do CRM como itens principais apenas para o Comercial

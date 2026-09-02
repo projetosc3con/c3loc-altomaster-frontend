@@ -1,6 +1,6 @@
 import React from 'react';
 import { Document, Page, Text, View, StyleSheet, Image } from '@react-pdf/renderer';
-import logoAltoMaster from '../../assets/altomaster-dark.png';
+import logoAltoMaster from '../../assets/cabecalho-contrato.jpeg';
 import { formatDate } from '../../utils/date';
 
 const styles = StyleSheet.create({
@@ -48,7 +48,6 @@ const styles = StyleSheet.create({
   },
   companyTitle: {
     fontSize: 9,
-    fontWeight: 'bold',
     marginBottom: 2,
     textAlign: 'center',
     textTransform: 'uppercase',
@@ -248,7 +247,7 @@ export const FaturaLocacaoDocument: React.FC<FaturaLocacaoDocumentProps> = ({
 }) => {
   const form = contract.contract_form || ({} as any);
   const deal = contract.deal || ({} as any);
-  const client = deal.client || ({} as any);
+  const client = deal.client || deal.clients || contract.client || ({} as any);
   const snapshot = contract.snapshot || ({} as any);
 
   // Informações da Locadora (Alto Master / Configurações)
@@ -261,9 +260,80 @@ export const FaturaLocacaoDocument: React.FC<FaturaLocacaoDocumentProps> = ({
   // Informações do Tomador (Cliente)
   const clientName = form.locatario_company_name || client.company_name || 'CLIENTE NÃO INFORMADO';
   const clientCnpj = form.locatario_cnpj || client.cnpj || '-';
-  const clientPhone = form.locatario_phone || client.phone || '(34) 99918-1433';
-  const clientAddress = form.locatario_address || client.address_full || '-';
-  const clientIe = form.locatario_state_subscription || client.state_subscription || '-';
+  const clientPhone = form.locatario_phone || form.site_contact_phone || client.phone || '-';
+  const clientIe =
+    form.locatario_state_registration ||
+    form.locatario_state_subscription ||
+    form.state_subscription ||
+    form.state_registration ||
+    client.state_subscription ||
+    client.state_registration ||
+    client.ie ||
+    client.inscricao_estadual ||
+    deal.clients?.state_subscription ||
+    deal.clients?.state_registration ||
+    deal.client?.state_subscription ||
+    deal.client?.state_registration ||
+    snapshot.locatario?.state_registration ||
+    snapshot.locatario?.state_subscription ||
+    snapshot.client?.state_subscription ||
+    snapshot.client?.state_registration ||
+    (contract as any).state_subscription ||
+    (contract as any).state_registration ||
+    '-';
+
+  // Formatação do Endereço do Cliente
+  // Composto por: Rua, Número, Complemento, Cidade - Estado, CEP
+  const formatClientAddress = () => {
+    const c = client || {};
+    const f = form || {};
+    const s = snapshot?.client || snapshot || {};
+
+    const street = c.address_street || f.address_street || f.locatario_street || s.address_street || '';
+    const number = c.address_number || f.address_number || f.locatario_number || s.address_number || '';
+    const complement = c.address_complement || f.address_complement || f.locatario_complement || s.address_complement || '';
+    const city = c.address_city || f.address_city || f.locatario_city || s.address_city || '';
+    const state = c.address_state || c.address_sate || f.address_state || f.locatario_state || s.address_state || '';
+    const zip = c.address_zip || f.address_zip || f.locatario_zip || s.address_zip || '';
+
+    const parts: string[] = [];
+
+    // Logradouro e Número
+    if (street && number) {
+      parts.push(`${street}, Nº ${number}`);
+    } else if (street) {
+      parts.push(street);
+    } else if (number) {
+      parts.push(`Nº ${number}`);
+    }
+
+    // Complemento
+    if (complement) {
+      parts.push(complement);
+    }
+
+    // Cidade e Estado (ex: Sorriso - MT)
+    if (city && state) {
+      parts.push(`${city} - ${state}`);
+    } else if (city) {
+      parts.push(city);
+    } else if (state) {
+      parts.push(state);
+    }
+
+    // CEP
+    if (zip) {
+      parts.push(zip.toUpperCase().includes('CEP') ? zip : `CEP: ${zip}`);
+    }
+
+    if (parts.length > 0) {
+      return parts.join(', ');
+    }
+
+    return form.locatario_address || form.locatario_address_full || client.address_full || '-';
+  };
+
+  const clientAddress = formatClientAddress();
   const workSite = form.work_site || snapshot.work_site || clientAddress;
 
   // Datas
@@ -272,8 +342,8 @@ export const FaturaLocacaoDocument: React.FC<FaturaLocacaoDocumentProps> = ({
   const periodString = periodStart && periodEnd
     ? `${formatDate(periodStart)} a ${formatDate(periodEnd)}`
     : periodStart
-    ? `A partir de ${formatDate(periodStart)}`
-    : 'Conforme Contrato';
+      ? `A partir de ${formatDate(periodStart)}`
+      : 'Conforme Contrato';
 
   const formattedIssueDate = issueDate ? formatDate(issueDate) : formatDate(new Date().toISOString());
   const finalDueDate = dueDate || form.period_end || periodEnd;
@@ -289,12 +359,12 @@ export const FaturaLocacaoDocument: React.FC<FaturaLocacaoDocumentProps> = ({
   const equipmentsList = (contract.equipments && contract.equipments.length > 0)
     ? contract.equipments
     : (form.equipments && form.equipments.length > 0)
-    ? form.equipments
-    : (snapshot.equipments && snapshot.equipments.length > 0)
-    ? snapshot.equipments
-    : (snapshot.equipment?.items && snapshot.equipment.items.length > 0)
-    ? snapshot.equipment.items
-    : null;
+      ? form.equipments
+      : (snapshot.equipments && snapshot.equipments.length > 0)
+        ? snapshot.equipments
+        : (snapshot.equipment?.items && snapshot.equipment.items.length > 0)
+          ? snapshot.equipment.items
+          : null;
 
   const equipmentDesc = form.equipment_description || snapshot.equipment?.description || 'EQUIPAMENTO DE LOCAÇÃO';
 
@@ -361,7 +431,7 @@ export const FaturaLocacaoDocument: React.FC<FaturaLocacaoDocumentProps> = ({
           {/* 4. Metadados - Linha 3 (Endereço) */}
           <View style={styles.gridRow}>
             <View style={[styles.gridCell, { width: '78%' }]}>
-              <Text style={styles.cellLabel}>ENDEREÇO</Text>
+              <Text style={styles.cellLabel}>ENDEREÇO DO CLIENTE</Text>
               <Text style={styles.cellValue}>{clientAddress}</Text>
             </View>
             <View style={[styles.gridCellLast, { width: '22%' }]}>
@@ -373,7 +443,7 @@ export const FaturaLocacaoDocument: React.FC<FaturaLocacaoDocumentProps> = ({
           {/* 5. Metadados - Linha 4 (Entrega) */}
           <View style={styles.gridRow}>
             <View style={[styles.gridCell, { width: '78%' }]}>
-              <Text style={styles.cellLabel}>ENTREGA</Text>
+              <Text style={styles.cellLabel}>ENDEREÇO DE ENTREGA</Text>
               <Text style={styles.cellValue}>{workSite}</Text>
             </View>
             <View style={[styles.gridCellLast, { width: '22%' }]}>
@@ -398,16 +468,26 @@ export const FaturaLocacaoDocument: React.FC<FaturaLocacaoDocumentProps> = ({
               const eqHeight = eq.equipment_size ? ` - ${eq.equipment_size}` : '';
               const eqAsset = eq.asset_number ? ` (Patrimônio: ${eq.asset_number})` : '';
               const eqVal = Number(eq.total_value ?? eq.cost_rental ?? 0);
+              const start = eq.billing_period_start || eq.period_start || form.period_start || snapshot.period_start;
+              const end = eq.billing_period_end || eq.period_end || form.period_end || snapshot.period_end;
+              const itemPeriod = start && end
+                ? `${formatDate(start)} a ${formatDate(end)}`
+                : start
+                  ? `A partir de ${formatDate(start)}`
+                  : periodString;
 
               return (
-                <View key={idx} style={[styles.tableRow, { borderBottomWidth: idx === equipmentsList.length - 1 ? 0 : 0.5 }]}>
+                <View key={idx} style={styles.tableRow}>
                   <Text style={[styles.tableCell, { width: '12%', textAlign: 'center' }]}>1</Text>
                   <Text style={[styles.tableCell, { width: '10%', textAlign: 'center' }]}>UN</Text>
                   <View style={[styles.tableCell, { width: '54%' }]}>
                     <Text style={{ fontWeight: 'normal' }}>Locação de Equipamento:</Text>
-                    <Text style={{ fontWeight: 'bold', marginTop: 2 }}>{eqDesc}{eqHeight}{eqAsset}</Text>
+                    <Text style={{ fontWeight: 'bold', marginTop: 1.5 }}>{eqDesc}{eqHeight}{eqAsset}</Text>
+                    <Text style={{ fontSize: 6.5, color: '#333', marginTop: 1.5 }}>
+                      Período de referência: <Text style={{ fontWeight: 'bold' }}>{itemPeriod}</Text>
+                    </Text>
                     {contract.contract_number && (
-                      <Text style={{ fontSize: 6.5, color: '#444', marginTop: 1 }}>Contrato Nº {contract.contract_number}</Text>
+                      <Text style={{ fontSize: 6.5, color: '#555', marginTop: 1 }}>Contrato Nº {contract.contract_number}</Text>
                     )}
                   </View>
                   <Text style={[styles.tableCell, { width: '12%', textAlign: 'right' }]}>{formatCurrency(eqVal)}</Text>
@@ -421,9 +501,12 @@ export const FaturaLocacaoDocument: React.FC<FaturaLocacaoDocumentProps> = ({
               <Text style={[styles.tableCell, { width: '10%', textAlign: 'center' }]}>UN</Text>
               <View style={[styles.tableCell, { width: '54%' }]}>
                 <Text style={{ fontWeight: 'normal' }}>Locação do equipamento abaixo conforme contrato:</Text>
-                <Text style={{ fontWeight: 'bold', marginTop: 2 }}>{equipmentDesc}</Text>
+                <Text style={{ fontWeight: 'bold', marginTop: 1.5 }}>{equipmentDesc}</Text>
+                <Text style={{ fontSize: 6.5, color: '#333', marginTop: 1.5 }}>
+                  Período de locação: <Text style={{ fontWeight: 'bold' }}>{periodString}</Text>
+                </Text>
                 {contract.contract_number && (
-                  <Text style={{ fontSize: 6.5, color: '#444', marginTop: 1 }}>Contrato Nº {contract.contract_number}</Text>
+                  <Text style={{ fontSize: 6.5, color: '#555', marginTop: 1 }}>Contrato Nº {contract.contract_number}</Text>
                 )}
               </View>
               <Text style={[styles.tableCell, { width: '12%', textAlign: 'right' }]}>{formatCurrency(rentalCost || totalCost)}</Text>
@@ -435,7 +518,7 @@ export const FaturaLocacaoDocument: React.FC<FaturaLocacaoDocumentProps> = ({
           <View style={styles.obsContainer}>
             <Text style={styles.obsTitle}>Observações:</Text>
             <Text style={styles.obsText}>
-              {form.observations || 'PROPOSTA ASSINADA'}
+              {form.notes || form.observations || contract.notes || contract.observations || snapshot.observations || snapshot.notes || deal.notes || 'PROPOSTA ASSINADA'}
             </Text>
           </View>
 

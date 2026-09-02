@@ -73,7 +73,38 @@ const ContractFormModal: React.FC<ContractFormModalProps> = ({ isOpen, onClose, 
           setFormData(form);
         }
 
+        const rentalId = deal?.rental_invoice_id || form?.rental_invoice_id;
+        let rentalEquipments: any[] = [];
+        if (rentalId) {
+          try {
+            const { data: rental } = await api.get(`/rentals/${rentalId}`);
+            if (rental?.equipments && Array.isArray(rental.equipments) && rental.equipments.length > 0) {
+              rentalEquipments = rental.equipments;
+            }
+          } catch (e) {
+            console.warn('Não foi possível buscar equipamentos da locação vinculada:', e);
+          }
+        }
+
         // Initialize equipments array
+        if (rentalEquipments.length > 0) {
+          setEquipmentItems(rentalEquipments.map((eq: any) => ({
+            tempId: eq.id || eq.tempId || Math.random().toString(36).substring(2, 9),
+            equipment_name: eq.equipment_name || '',
+            equipment_size: eq.equipment_size || '',
+            billing_period_start: eq.billing_period_start ? String(eq.billing_period_start).split('T')[0] : (form?.period_start || ''),
+            billing_period_end: eq.billing_period_end ? String(eq.billing_period_end).split('T')[0] : (form?.period_end || ''),
+            cost_rental: Number(eq.cost_rental) || 0,
+            cost_insurance: Number(eq.cost_insurance) || 0,
+            cost_freight: Number(eq.cost_freight) || 0,
+            cost_rcd: Number(eq.cost_rcd) || 0,
+            cost_third_party: Number(eq.cost_third_party) || 0,
+            cost_training: Number(eq.cost_training) || 0,
+            total_value: Number(eq.total_value) || 0
+          })));
+          return;
+        }
+
         if (form?.equipments && Array.isArray(form.equipments) && form.equipments.length > 0) {
           setEquipmentItems(form.equipments.map((eq: any) => ({
             tempId: eq.tempId || eq.id || Math.random().toString(36).substring(2, 9),
@@ -90,33 +121,6 @@ const ContractFormModal: React.FC<ContractFormModalProps> = ({ isOpen, onClose, 
             total_value: Number(eq.total_value) || 0
           })));
           return;
-        }
-
-        const rentalId = deal?.rental_invoice_id || form?.rental_invoice_id;
-        if (rentalId) {
-          // Fetch rental invoice to populate multi-equipments
-          try {
-            const { data: rental } = await api.get(`/rentals/${rentalId}`);
-            if (rental?.equipments && Array.isArray(rental.equipments) && rental.equipments.length > 0) {
-              setEquipmentItems(rental.equipments.map((eq: any) => ({
-                tempId: eq.id || Math.random().toString(36).substring(2, 9),
-                equipment_name: eq.equipment_name || '',
-                equipment_size: eq.equipment_size || '',
-                billing_period_start: eq.billing_period_start ? eq.billing_period_start.split('T')[0] : '',
-                billing_period_end: eq.billing_period_end ? eq.billing_period_end.split('T')[0] : '',
-                cost_rental: Number(eq.cost_rental) || 0,
-                cost_insurance: Number(eq.cost_insurance) || 0,
-                cost_freight: Number(eq.cost_freight) || 0,
-                cost_rcd: Number(eq.cost_rcd) || 0,
-                cost_third_party: Number(eq.cost_third_party) || 0,
-                cost_training: Number(eq.cost_training) || 0,
-                total_value: Number(eq.total_value) || 0
-              })));
-              return;
-            }
-          } catch (e) {
-            console.warn('Não foi possível buscar equipamentos da locação vinculada:', e);
-          }
         }
 
         if (form?.equipment_description) {

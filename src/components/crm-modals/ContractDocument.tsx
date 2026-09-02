@@ -154,8 +154,9 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
     marginBottom: 4,
   },
-  // Legal Clauses & Sections
+  // Legal Clauses & Sections (Pages 2 & 3)
   clauseTitle: {
+    fontFamily: 'Helvetica',
     fontSize: 8,
     fontWeight: 'bold',
     textTransform: 'uppercase',
@@ -163,6 +164,7 @@ const styles = StyleSheet.create({
     marginBottom: 2.5,
   },
   clauseParagraph: {
+    fontFamily: 'Helvetica',
     fontSize: 7.2,
     color: '#000',
     marginBottom: 3,
@@ -170,6 +172,7 @@ const styles = StyleSheet.create({
     lineHeight: 1.3,
   },
   clauseParagraphBold: {
+    fontFamily: 'Helvetica',
     fontSize: 7.2,
     color: '#000',
     fontWeight: 'bold',
@@ -178,6 +181,7 @@ const styles = StyleSheet.create({
     lineHeight: 1.3,
   },
   redNotice: {
+    fontFamily: 'Helvetica',
     fontSize: 7.2,
     fontWeight: 'bold',
     color: '#b91c1c',
@@ -190,29 +194,32 @@ const styles = StyleSheet.create({
     paddingLeft: 4,
   },
   listItem: {
+    fontFamily: 'Helvetica',
     fontSize: 7.2,
     color: '#000',
     marginBottom: 1,
+    lineHeight: 1.3,
   },
-  // Page 4 Notices & Signatures
+  // Page 3 Notices & Signatures
   dieselBox: {
     borderWidth: 1,
     borderColor: '#000',
     padding: 6,
-    marginVertical: 12,
+    marginVertical: 8,
   },
   dieselText: {
-    fontSize: 7.5,
+    fontFamily: 'Helvetica',
+    fontSize: 7.2,
     fontWeight: 'bold',
     textTransform: 'uppercase',
     textAlign: 'justify',
-    lineHeight: 1.35,
+    lineHeight: 1.3,
   },
   signatureBox: {
     borderWidth: 1,
     borderColor: '#000',
     flexDirection: 'row',
-    minHeight: 85,
+    minHeight: 80,
     padding: 8,
     marginTop: 6,
   },
@@ -229,12 +236,14 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
   },
   signaturePartyTitle: {
+    fontFamily: 'Helvetica',
     fontSize: 7.5,
     fontWeight: 'bold',
     textTransform: 'uppercase',
   },
   signatureLineText: {
-    fontSize: 7.5,
+    fontFamily: 'Helvetica',
+    fontSize: 7.2,
     marginTop: 5,
   },
   locadorImgSign: {

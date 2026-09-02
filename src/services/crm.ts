@@ -148,8 +148,8 @@ export const crmService = {
     return response.data;
   },
 
-  generateContractRecord: async (dealId: string) => {
-    const response = await api.post(`/crm/deals/${dealId}/contract/generate`);
+  generateContractRecord: async (dealId: string, payload?: any) => {
+    const response = await api.post(`/crm/deals/${dealId}/contract/generate`, payload || {});
     return response.data;
   },
 

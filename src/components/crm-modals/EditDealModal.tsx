@@ -43,6 +43,7 @@ export interface CRMContractForm {
   work_site?: string;
   site_contact_name?: string;
   site_contact_phone?: string;
+  equipments?: any[];
   form_status: 'Rascunho' | 'Pronto para Gerar' | 'PDF Gerado';
   created_at?: string;
   updated_at?: string;
@@ -411,7 +412,7 @@ const EditDealModal: React.FC<EditDealModalProps> = ({ isOpen, onClose, onSucces
                                   onClick={async () => {
                                     try {
                                       setContractLoading(true);
-                                      await crmService.generateContractRecord(deal.id);
+                                      await crmService.generateContractRecord(deal.id, { equipments: contractForm?.equipments });
                                       await loadContractData();
                                       /* STANDBY: Disparo de e-mail ao cliente desativado temporariamente
                                       try {

@@ -31,6 +31,7 @@ export interface ExtratoBancarioFilters {
   to?: string;
   page?: number;
   limit?: number;
+  group_nfe?: boolean;
 }
 
 export interface AsaasScoreInfo {

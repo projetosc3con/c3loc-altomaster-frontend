@@ -42,6 +42,44 @@ const buildParams = (page: number, f: Filters) => {
   return p;
 };
 
+const STORAGE_KEY = 'c3loc_rentals_filters';
+const PAGE_STORAGE_KEY = 'c3loc_rentals_page';
+
+const getInitialFilters = (): Filters => {
+  try {
+    const saved = localStorage.getItem(STORAGE_KEY);
+    if (saved) {
+      const parsed = JSON.parse(saved);
+      return { ...emptyFilters, ...parsed };
+    }
+  } catch (e) {
+    console.warn('Erro ao carregar filtros salvos de locações:', e);
+  }
+  return emptyFilters;
+};
+
+const getInitialPage = (): number => {
+  try {
+    const saved = localStorage.getItem(PAGE_STORAGE_KEY);
+    if (saved) {
+      const parsed = parseInt(saved, 10);
+      if (!isNaN(parsed) && parsed > 0) return parsed;
+    }
+  } catch (e) {
+    console.warn('Erro ao carregar página salva de locações:', e);
+  }
+  return 1;
+};
+
+const saveFiltersToStorage = (f: Filters, page: number = 1) => {
+  try {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(f));
+    localStorage.setItem(PAGE_STORAGE_KEY, String(page));
+  } catch (e) {
+    console.warn('Erro ao salvar filtros no localStorage:', e);
+  }
+};
+
 const Rentals: React.FC = () => {
   const { theme } = useTheme();
   const navigate = useNavigate();
@@ -50,13 +88,13 @@ const Rentals: React.FC = () => {
   const [selectedRental, setSelectedRental] = useState<RentalInvoice | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [currentPage, setCurrentPage] = useState(1);
+  const [currentPage, setCurrentPage] = useState<number>(getInitialPage);
   const [totalPages, setTotalPages] = useState(1);
   const [totalItems, setTotalItems] = useState(0);
   const [stats, setStats] = useState({ pendingReconciliationCount: 0, totalValue: 0, monthlyReceivedTotal: 0 });
-  const [filters, setFilters] = useState<Filters>(emptyFilters);
+  const [filters, setFilters] = useState<Filters>(getInitialFilters);
   const [showFilters, setShowFilters] = useState(false);
-  const [searchInput, setSearchInput] = useState('');
+  const [searchInput, setSearchInput] = useState<string>(() => getInitialFilters().search || '');
   const [exporting, setExporting] = useState(false);
   const [charging, setCharging] = useState(false);
   const [chargeResult, setChargeResult] = useState<AsaasChargeResult | null>(null);
@@ -162,7 +200,7 @@ const Rentals: React.FC = () => {
   }, []);
 
   useEffect(() => {
-    fetchRentals(1, filters);
+    fetchRentals(currentPage, filters);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -173,23 +211,33 @@ const Rentals: React.FC = () => {
     debounceRef.current = setTimeout(() => {
       const next = { ...filters, search: val };
       setFilters(next);
+      saveFiltersToStorage(next, 1);
       fetchRentals(1, next);
     }, 400);
   };
 
   const applyFilters = () => {
     setShowFilters(false);
+    saveFiltersToStorage(filters, 1);
     fetchRentals(1, filters);
   };
 
   const clearAllFilters = () => {
     setSearchInput('');
     setFilters(emptyFilters);
+    setCurrentPage(1);
+    try {
+      localStorage.removeItem(STORAGE_KEY);
+      localStorage.removeItem(PAGE_STORAGE_KEY);
+    } catch (e) {
+      console.warn('Erro ao limpar filtros salvos:', e);
+    }
     fetchRentals(1, emptyFilters);
   };
 
   const handlePageChange = (page: number) => {
     if (page < 1 || page > totalPages || page === currentPage) return;
+    saveFiltersToStorage(filters, page);
     fetchRentals(page, filters);
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
@@ -238,7 +286,7 @@ const Rentals: React.FC = () => {
             className="flex items-center gap-2 bg-mustard-500 text-white px-5 py-2.5 rounded-xl shadow-lg shadow-mustard-500/20 hover:bg-mustard-600 active:scale-95 transition-all font-bold text-xs uppercase tracking-widest"
           >
             <span className="material-symbols-outlined text-[18px]">add_circle</span>
-            Nova Fatura de Locação
+            Nova Locação
           </button>
         </div>
       </div>
