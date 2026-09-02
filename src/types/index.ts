@@ -147,6 +147,7 @@ export interface ServiceOrder {
   id: string;
   os_number: number;
   order_type: ServiceOrderType;
+  rental_invoice_id?: string;
   equipment_id?: string;
   equipment_asset_number?: string;
   equipment_name?: string;
@@ -329,6 +330,7 @@ export interface RentalInvoice {
   created_at: string;
   updated_at: string;
   equipments?: RentalInvoiceEquipment[];
+  service_orders?: ServiceOrder[];
 }
 
 export interface Client {

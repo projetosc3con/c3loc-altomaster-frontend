@@ -360,6 +360,7 @@ Abaixo estão listadas as 46 tabelas ativas no esquema `public` do banco de dado
 * [`crm_deal_contracts.rental_invoice_id`](#crm-deal-contracts)`(rental_invoice_id)` aponta para a coluna local `id` (Constraint: `crm_deal_contracts_rental_invoice_id_fkey`)
 * [`crm_deals.rental_invoice_id`](#crm-deals)`(rental_invoice_id)` aponta para a coluna local `id` (Constraint: `crm_deals_rental_invoice_id_fkey`)
 * [`rental_invoice_equipments.rental_invoice_id`](#rental-invoice-equipments)`(rental_invoice_id)` aponta para a coluna local `id` (Constraint: `rental_invoice_equipments_rental_invoice_id_fkey`)
+* [`service_orders.rental_invoice_id`](#service-orders)`(rental_invoice_id)` aponta para a coluna local `id` (Constraint: `service_orders_rental_invoice_id_fkey`)
 
 #### Gatilhos (Triggers)
 
@@ -651,6 +652,13 @@ Abaixo estão listadas as 46 tabelas ativas no esquema `public` do banco de dado
 | `has_pending` | `boolean` | Sim | `false` |  |
 | `nfe_invoices` | `jsonb` | Sim | `'[]'::jsonb` | Lista de NF-es vinculadas à OS (acesso, número, emitente, data, valor) |
 | `nfe_access_keys` | `text[]` | Sim | `'{}'::text[]` | Array de chaves de acesso das NF-es vinculadas |
+| `rental_invoice_id` | `uuid` | Sim | - | Chave estrangeira para `rental_invoices.id` (ON DELETE SET NULL) |
+
+#### Relacionamentos de Saída (Chaves Estrangeiras Referenciadas)
+
+* A coluna `rental_invoice_id` aponta para [`rental_invoices.id`](#rental-invoices)`(id)` (Constraint: `service_orders_rental_invoice_id_fkey`)
+* A coluna `equipment_id` aponta para [`equipments.id`](#equipments)`(id)` (Constraint: `service_orders_equipment_id_fkey`)
+* A coluna `executed_by` aponta para [`users_profiles.id`](#users-profiles)`(id)` (Constraint: `service_orders_executed_by_fkey`)
 
 #### Relacionamentos de Entrada (Tabelas que Referenciam esta)
 
@@ -662,6 +670,10 @@ Abaixo estão listadas as 46 tabelas ativas no esquema `public` do banco de dado
 * **`service_orders_os_number_key`**
   ```sql
   CREATE UNIQUE INDEX service_orders_os_number_key ON public.service_orders USING btree (os_number)
+  ```
+* **`idx_service_orders_rental_invoice_id`**
+  ```sql
+  CREATE INDEX idx_service_orders_rental_invoice_id ON public.service_orders USING btree (rental_invoice_id)
   ```
 
 #### Gatilhos (Triggers)

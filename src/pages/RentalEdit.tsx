@@ -17,6 +17,7 @@ import ContractFormModal from '../components/crm-modals/ContractFormModal';
 import { pdf } from '@react-pdf/renderer';
 import ContractDocument from '../components/crm-modals/ContractDocument';
 import { saveAs } from 'file-saver';
+import { formatDate } from '../utils/date';
 
 type NfseRecord = any;
 type DealContract = any;
@@ -213,12 +214,17 @@ const RentalEdit: React.FC = () => {
   const navigate = useNavigate();
   const { user, profile } = useAuth();
 
-  const [activeTab, setActiveTab] = useState<'equipments' | 'billing' | 'contract'>('equipments');
+  const [activeTab, setActiveTab] = useState<'equipments' | 'billing' | 'contract' | 'service_orders'>('equipments');
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [clients, setClients] = useState<Client[]>([]);
   const [allEquipments, setAllEquipments] = useState<Equipment[]>([]);
+
+  // Ordens de Serviço da Locação
+  const [serviceOrders, setServiceOrders] = useState<any[]>([]);
+  const [creatingOsEquipmentId, setCreatingOsEquipmentId] = useState<string | null>(null);
+  const [selectEquipModalOpen, setSelectEquipModalOpen] = useState(false);
 
   // Multi-equipments list
   const [equipmentItems, setEquipmentItems] = useState<FormEquipmentItem[]>([]);
@@ -283,6 +289,8 @@ const RentalEdit: React.FC = () => {
           reconciliation_status: rental.reconciliation_status || 'Pendente',
           notes: rental.notes || '',
         });
+
+        setServiceOrders(rental.service_orders || []);
 
         // Initialize equipments array
         if (Array.isArray(rental.equipments) && rental.equipments.length > 0) {
@@ -621,6 +629,37 @@ const RentalEdit: React.FC = () => {
     }
   };
 
+  const handleCreateServiceOrder = async (equipmentId?: string) => {
+    if (!id) return;
+    const validEquips = equipmentItems.filter(item => Boolean(item.equipment_id));
+    const targetEquipId = equipmentId || (validEquips.length === 1 ? validEquips[0].equipment_id : null);
+
+    if (!targetEquipId) {
+      if (validEquips.length === 0) {
+        alert('Selecione ao menos um equipamento válido nesta locação antes de abrir uma Ordem de Serviço.');
+        return;
+      }
+      setSelectEquipModalOpen(true);
+      return;
+    }
+
+    setCreatingOsEquipmentId(targetEquipId);
+    setError(null);
+    try {
+      const { data: createdOs } = await api.post(`/rentals/${id}/service-orders`, {
+        equipment_id: targetEquipId,
+      });
+
+      navigate(`/manutencoes/editar/${createdOs.id}`);
+    } catch (err: any) {
+      console.error('Erro ao gerar Ordem de Serviço da locação:', err);
+      setError(getApiErrorMessage(err));
+    } finally {
+      setCreatingOsEquipmentId(null);
+      setSelectEquipModalOpen(false);
+    }
+  };
+
   const handleGerarCobranca = async () => {
     if (!id) return;
     setCharging(true);
@@ -739,6 +778,24 @@ const RentalEdit: React.FC = () => {
           <span className="material-symbols-outlined text-lg">description</span>
           Contrato de Locação
         </button>
+
+        <button
+          type="button"
+          onClick={() => setActiveTab('service_orders')}
+          className={`pb-4 text-sm font-bold flex items-center gap-2 border-b-2 transition-all ${
+            activeTab === 'service_orders'
+              ? 'border-mustard-500 text-mustard-600 dark:text-mustard-400'
+              : 'border-transparent text-slate-400 hover:text-slate-600 dark:hover:text-slate-300'
+          }`}
+        >
+          <span className="material-symbols-outlined text-lg">construction</span>
+          Ordens de Serviço
+          {serviceOrders.length > 0 && (
+            <span className="px-2 py-0.5 text-[10px] font-bold rounded-full bg-mustard-100 dark:bg-mustard-500/20 text-mustard-700 dark:text-mustard-400 font-mono">
+              {serviceOrders.length}
+            </span>
+          )}
+        </button>
       </div>
 
       <form onSubmit={handleSubmit} className="grid grid-cols-1 lg:grid-cols-3 gap-6">
@@ -790,7 +847,23 @@ const RentalEdit: React.FC = () => {
                         </span>
                       </div>
 
-                      <div className="flex items-center gap-4">
+                      <div className="flex items-center gap-3">
+                        {item.equipment_id && (
+                          <button
+                            type="button"
+                            onClick={() => handleCreateServiceOrder(item.equipment_id)}
+                            disabled={creatingOsEquipmentId === item.equipment_id}
+                            className="px-3 py-1.5 bg-amber-50 dark:bg-amber-500/10 hover:bg-amber-100 dark:hover:bg-amber-500/20 text-amber-700 dark:text-amber-400 border border-amber-200 dark:border-amber-500/30 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 shadow-sm disabled:opacity-60"
+                            title="Abrir Ordem de Serviço Externa para este equipamento"
+                          >
+                            {creatingOsEquipmentId === item.equipment_id ? (
+                              <div className="w-3.5 h-3.5 border-2 border-amber-500 border-t-transparent rounded-full animate-spin" />
+                            ) : (
+                              <span className="material-symbols-outlined text-[16px]">construction</span>
+                            )}
+                            <span>Abrir OS</span>
+                          </button>
+                        )}
                         <span className="text-xs font-bold text-mustard-600 dark:text-mustard-400 font-mono">
                           Subtotal: {(Number(item.total_value) || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
                         </span>
@@ -1181,6 +1254,120 @@ const RentalEdit: React.FC = () => {
               )}
             </div>
           )}
+
+          {activeTab === 'service_orders' && (
+            <div className="space-y-6">
+              <div className="flex flex-wrap items-center justify-between gap-4 bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 p-6 shadow-sm">
+                <div>
+                  <h3 className="text-base font-bold text-slate-900 dark:text-white flex items-center gap-2">
+                    <span className="material-symbols-outlined text-mustard-500">construction</span>
+                    Ordens de Serviço da Locação
+                  </h3>
+                  <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
+                    Histórico de manutenções preventivas e corretivas vinculadas aos equipamentos desta locação.
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => handleCreateServiceOrder()}
+                  disabled={creatingOsEquipmentId !== null}
+                  className="px-4 py-2.5 bg-mustard-500 hover:bg-mustard-600 active:scale-95 text-white rounded-xl text-xs font-bold uppercase tracking-wider transition-all flex items-center gap-2 shadow-sm disabled:opacity-60"
+                >
+                  {creatingOsEquipmentId ? (
+                    <div className="w-4 h-4 border-2 border-white/40 border-t-white rounded-full animate-spin" />
+                  ) : (
+                    <span className="material-symbols-outlined text-[18px]">add_circle</span>
+                  )}
+                  <span>Nova Ordem de Serviço</span>
+                </button>
+              </div>
+
+              {serviceOrders.length === 0 ? (
+                <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 p-12 text-center space-y-3 shadow-sm">
+                  <div className="w-14 h-14 rounded-2xl bg-amber-50 dark:bg-amber-500/10 text-amber-600 dark:text-amber-400 flex items-center justify-center mx-auto">
+                    <span className="material-symbols-outlined text-3xl">construction</span>
+                  </div>
+                  <h4 className="text-base font-bold text-slate-800 dark:text-slate-200">
+                    Nenhuma Ordem de Serviço vinculada
+                  </h4>
+                  <p className="text-xs text-slate-400 dark:text-slate-500 max-w-md mx-auto">
+                    Você pode abrir uma Ordem de Serviço externa diretamente pelo botão acima ou clicando em &quot;Abrir OS&quot; no card do equipamento desejado na aba &quot;Equipamentos da Locação&quot;.
+                  </p>
+                  <div className="pt-2">
+                    <button
+                      type="button"
+                      onClick={() => handleCreateServiceOrder()}
+                      className="px-5 py-2.5 bg-mustard-500 hover:bg-mustard-600 active:scale-95 text-white rounded-xl text-xs font-bold uppercase tracking-wider transition-all inline-flex items-center gap-2 shadow-sm"
+                    >
+                      <span className="material-symbols-outlined text-[18px]">add</span>
+                      Abrir Primeira OS
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 overflow-hidden shadow-sm">
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-left text-xs">
+                      <thead>
+                        <tr className="bg-slate-50 dark:bg-slate-800/60 border-b border-slate-200 dark:border-slate-800">
+                          <th className="px-6 py-3.5 font-bold text-slate-400 dark:text-slate-500 uppercase tracking-widest text-[10px]">Nº OS</th>
+                          <th className="px-6 py-3.5 font-bold text-slate-400 dark:text-slate-500 uppercase tracking-widest text-[10px]">Equipamento</th>
+                          <th className="px-6 py-3.5 font-bold text-slate-400 dark:text-slate-500 uppercase tracking-widest text-[10px]">Tipo</th>
+                          <th className="px-6 py-3.5 font-bold text-slate-400 dark:text-slate-500 uppercase tracking-widest text-[10px]">Data Execução</th>
+                          <th className="px-6 py-3.5 font-bold text-slate-400 dark:text-slate-500 uppercase tracking-widest text-[10px]">Status</th>
+                          <th className="px-6 py-3.5 font-bold text-slate-400 dark:text-slate-500 uppercase tracking-widest text-[10px] text-center">Ações</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
+                        {serviceOrders.map((os) => (
+                          <tr key={os.id} className="hover:bg-slate-50/50 dark:hover:bg-slate-800/40 transition-colors">
+                            <td className="px-6 py-4 font-mono font-bold text-slate-900 dark:text-white">
+                              #{os.os_number}
+                            </td>
+                            <td className="px-6 py-4">
+                              <span className="font-bold text-slate-800 dark:text-slate-200 block">
+                                {os.equipment_asset_number ? `${os.equipment_asset_number} - ` : ''}{os.equipment_name || 'Equipamento'}
+                              </span>
+                              {os.equipment_model && (
+                                <span className="text-[10px] text-slate-400 dark:text-slate-500 font-mono">
+                                  Modelo: {os.equipment_model}
+                                </span>
+                              )}
+                            </td>
+                            <td className="px-6 py-4">
+                              <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold bg-indigo-50 dark:bg-indigo-500/10 text-indigo-700 dark:text-indigo-400 border border-indigo-200 dark:border-indigo-500/30">
+                                {os.order_type || 'Externa'}
+                              </span>
+                            </td>
+                            <td className="px-6 py-4 text-slate-600 dark:text-slate-400 font-medium">
+                              {os.execution_date ? formatDate(os.execution_date) : '-'}
+                            </td>
+                            <td className="px-6 py-4">
+                              <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-amber-50 dark:bg-amber-500/10 text-amber-700 dark:text-amber-400 border border-amber-200 dark:border-amber-500/20">
+                                <span className="material-symbols-outlined text-[12px]">schedule</span>
+                                {os.status || 'Aberta'}
+                              </span>
+                            </td>
+                            <td className="px-6 py-4 text-center">
+                              <button
+                                type="button"
+                                onClick={() => navigate(`/manutencoes/editar/${os.id}`)}
+                                className="px-3 py-1.5 bg-slate-100 dark:bg-slate-800 hover:bg-mustard-50 dark:hover:bg-mustard-500/10 text-slate-700 dark:text-slate-300 hover:text-mustard-600 dark:hover:text-mustard-400 rounded-xl text-xs font-bold transition-all inline-flex items-center gap-1 border border-slate-200 dark:border-slate-700"
+                                title="Editar / Ver Ordem de Serviço"
+                              >
+                                <span className="material-symbols-outlined text-[16px]">edit</span>
+                                <span>Ver / Editar</span>
+                              </button>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
         </div>
 
         {/* Right Column: Invoicing Summary */}
@@ -1477,6 +1664,79 @@ const RentalEdit: React.FC = () => {
           }}
         />
       )}
+
+      {/* Modal de Seleção de Equipamento para abertura de OS */}
+      <AnimatePresence>
+        {selectEquipModalOpen && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              onClick={() => !creatingOsEquipmentId && setSelectEquipModalOpen(false)}
+              className="absolute inset-0 bg-slate-900/60 backdrop-blur-sm"
+            />
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95, y: 10 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.95, y: 10 }}
+              className="relative w-full max-w-lg bg-white dark:bg-slate-900 rounded-3xl shadow-2xl border border-slate-200 dark:border-slate-800 overflow-hidden z-10 p-6 space-y-4"
+            >
+              <div className="flex items-center justify-between pb-2 border-b border-slate-100 dark:border-slate-800">
+                <div className="flex items-center gap-2.5">
+                  <div className="w-10 h-10 rounded-xl bg-mustard-50 dark:bg-mustard-500/10 text-mustard-600 dark:text-mustard-400 flex items-center justify-center">
+                    <span className="material-symbols-outlined">construction</span>
+                  </div>
+                  <div>
+                    <h3 className="text-base font-bold text-slate-900 dark:text-white">Selecione o Equipamento</h3>
+                    <p className="text-xs text-slate-400">Para qual equipamento desta locação deseja abrir a Ordem de Serviço?</p>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  disabled={creatingOsEquipmentId !== null}
+                  onClick={() => setSelectEquipModalOpen(false)}
+                  className="w-8 h-8 rounded-lg flex items-center justify-center text-slate-400 hover:text-slate-600 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
+                >
+                  <span className="material-symbols-outlined text-lg">close</span>
+                </button>
+              </div>
+
+              <div className="space-y-2 max-h-80 overflow-y-auto">
+                {equipmentItems
+                  .filter((item) => Boolean(item.equipment_id))
+                  .map((item, idx) => (
+                    <button
+                      key={item.equipment_id || idx}
+                      type="button"
+                      disabled={creatingOsEquipmentId === item.equipment_id}
+                      onClick={() => handleCreateServiceOrder(item.equipment_id)}
+                      className="w-full text-left p-4 rounded-2xl border border-slate-200 dark:border-slate-800 hover:border-mustard-500 hover:bg-mustard-50/50 dark:hover:bg-mustard-500/10 transition-all flex items-center justify-between group disabled:opacity-60"
+                    >
+                      <div>
+                        <span className="font-bold text-slate-900 dark:text-white text-sm block group-hover:text-mustard-600 dark:group-hover:text-mustard-400">
+                          {item.asset_number ? `${item.asset_number} - ` : ''}{item.equipment_name || 'Equipamento'}
+                        </span>
+                        <span className="text-xs text-slate-400 font-mono">
+                          {item.equipment_type || ''} {item.equipment_size ? `(${item.equipment_size})` : ''}
+                        </span>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        {creatingOsEquipmentId === item.equipment_id ? (
+                          <div className="w-4 h-4 border-2 border-mustard-500 border-t-transparent rounded-full animate-spin" />
+                        ) : (
+                          <span className="material-symbols-outlined text-slate-400 group-hover:text-mustard-600 dark:group-hover:text-mustard-400 group-hover:translate-x-1 transition-all">
+                            arrow_forward
+                          </span>
+                        )}
+                      </div>
+                    </button>
+                  ))}
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
     </motion.div>
   );
 };

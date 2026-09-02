@@ -199,6 +199,11 @@ const MaintenanceForm: React.FC = () => {
   }, [allParts, partSearch]);
 
   const handleSelectEquipment = (eq: Equipment) => {
+    if (!formData.rental_invoice_id && eq.status === 'Locado') {
+      alert(`O equipamento "${eq.asset_number} - ${eq.name}" está com status "Locado".\n\nOrdens de serviço para equipamentos locados só podem ser abertas diretamente a partir da respectiva locação (em Locações > Editar Locação > Abrir OS).`);
+      return;
+    }
+
     setFormData(prev => ({
       ...prev,
       equipment_id: eq.id,
@@ -579,8 +584,8 @@ const MaintenanceForm: React.FC = () => {
                       const eq = equipments.find(e => e.id === eqId);
                       if (eq) handleSelectEquipment(eq);
                     }}
-                    getDisplayValue={(eq) => `${eq.asset_number} - ${eq.name}`}
-                    getSearchValue={(eq) => `${eq.name} ${eq.asset_number}`}
+                    getDisplayValue={(eq) => `${eq.asset_number} - ${eq.name} ${eq.status === 'Locado' ? '🔒 (Locado - OS apenas via locação)' : ''}`}
+                    getSearchValue={(eq) => `${eq.name} ${eq.asset_number} ${eq.status}`}
                     required
                   />
 
