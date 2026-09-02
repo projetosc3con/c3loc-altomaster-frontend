@@ -263,6 +263,7 @@ const RentalEdit: React.FC = () => {
   const [contractError, setContractError] = useState<string | null>(null);
   const [isContractModalOpen, setIsContractModalOpen] = useState(false);
   const [showContractDeleteConfirm, setShowContractDeleteConfirm] = useState(false);
+  const [contractToDelete, setContractToDelete] = useState<any | null>(null);
 
   useEffect(() => {
     const fetchData = async () => {
@@ -381,13 +382,19 @@ const RentalEdit: React.FC = () => {
 
   const loadContractData = async (targetDealId?: string) => {
     const currentDealId = targetDealId || deal?.id;
-    if (!currentDealId) return;
     try {
       setContractLoading(true);
-      const form = await crmService.getContractForm(currentDealId);
-      setContractForm(form);
-      const generated = await crmService.getContracts(currentDealId);
-      setContracts(generated);
+      if (currentDealId) {
+        const form = await crmService.getContractForm(currentDealId);
+        setContractForm(form);
+      }
+      if (id) {
+        const { data: allContracts } = await api.get(`/rentals/${id}/contracts`);
+        setContracts(allContracts || []);
+      } else if (currentDealId) {
+        const generated = await crmService.getContracts(currentDealId);
+        setContracts(generated || []);
+      }
     } catch (err) {
       console.error('Erro ao carregar dados do contrato:', err);
     } finally {
@@ -403,9 +410,10 @@ const RentalEdit: React.FC = () => {
         setDeal(res.data.deal);
         const form = await crmService.getContractForm(res.data.deal.id);
         setContractForm(form);
-        const generated = await crmService.getContracts(res.data.deal.id);
-        setContracts(generated);
       }
+      // Carregar todos os contratos cadastrados para esta locação
+      const contractsRes = await api.get(`/rentals/${rentalId}/contracts`);
+      setContracts(contractsRes.data || res.data?.contracts || []);
     } catch (err) {
       console.error('Erro ao obter/criar deal de contrato para locação:', err);
     } finally {
@@ -430,24 +438,27 @@ const RentalEdit: React.FC = () => {
     setIsContractModalOpen(true);
   };
 
-  const handleDeleteContract = () => {
+  const handleDeleteContract = (contract?: any) => {
+    setContractToDelete(contract || (contracts.length > 0 ? contracts[0] : null));
     setShowContractDeleteConfirm(true);
     setContractError(null);
   };
 
   const executeDeleteContract = async () => {
-    if (!deal || contracts.length === 0) return;
+    const target = contractToDelete || contracts[0];
+    if (!deal || !target) return;
     try {
       setContractLoading(true);
       setContractError(null);
       setShowContractDeleteConfirm(false);
-      await crmService.deleteContract(deal.id, contracts[0].id);
+      await crmService.deleteContract(deal.id, target.id);
       await loadContractData(deal.id);
     } catch (err: any) {
       console.error(err);
       setContractError(err.response?.data?.error || 'Erro ao excluir contrato');
     } finally {
       setContractLoading(false);
+      setContractToDelete(null);
     }
   };
 
@@ -465,18 +476,41 @@ const RentalEdit: React.FC = () => {
     }
   };
 
-  const handleUploadSigned = () => {
+  const handleViewContractPdf = async (contract: any) => {
+    try {
+      const blob = await pdf(<ContractDocument data={contract.snapshot} generatedAt={contract.generated_at} />).toBlob();
+      const blobUrl = URL.createObjectURL(blob);
+      window.open(blobUrl, '_blank');
+    } catch (err) {
+      console.error('Erro ao abrir PDF', err);
+      alert('Erro ao abrir PDF.');
+    }
+  };
+
+  const handleDownloadContractPdf = async (contract: any) => {
+    try {
+      const blob = await pdf(<ContractDocument data={contract.snapshot} generatedAt={contract.generated_at} />).toBlob();
+      saveAs(blob, `CONTRATO DE LOCAÇÃO - ${contract.contract_number} - ${contract.snapshot?.locatario?.company_name || 'Contrato'}.pdf`);
+    } catch (err) {
+      console.error('Erro ao gerar PDF', err);
+      alert('Erro ao gerar arquivo PDF.');
+    }
+  };
+
+  const handleUploadSigned = (targetContract?: any) => {
+    const contract = targetContract || (contracts.length > 0 ? contracts[0] : null);
+    if (!contract || !deal) return;
     const input = document.createElement('input');
     input.type = 'file';
     input.accept = 'application/pdf';
     input.onchange = async (e: any) => {
       const file = e.target.files[0];
-      if (file && deal && contracts[0]) {
+      if (file && deal && contract) {
         try {
           setContractLoading(true);
-          await crmService.uploadSignedContract(deal.id, contracts[0].id, file);
+          await crmService.uploadSignedContract(deal.id, contract.id, file);
           await loadContractData(deal.id);
-          alert('Contrato assinado anexado com sucesso!');
+          alert(`Contrato Nº ${contract.contract_number} assinado anexado com sucesso!`);
         } catch (err) {
           alert('Erro ao enviar contrato');
         } finally {
@@ -1067,24 +1101,13 @@ const RentalEdit: React.FC = () => {
                     </h3>
                   </div>
                   <div className="p-6 relative">
-                    {contracts.length > 0 && deal && !showContractDeleteConfirm && (
-                      (deal.owner_id === user?.id || ['Administrador', 'Diretoria', 'Gerente'].includes(profile?.access_level || '')) && (
-                        <button
-                          type="button"
-                          onClick={handleDeleteContract}
-                          className="absolute top-4 right-4 text-slate-400 hover:text-red-500 hover:bg-slate-100 dark:hover:bg-slate-700 p-1.5 rounded-lg transition-colors"
-                          title="Excluir Contrato"
-                        >
-                          <span className="material-symbols-outlined text-[20px]">delete</span>
-                        </button>
-                      )
-                    )}
-
                     {showContractDeleteConfirm ? (
                       <div className="space-y-4">
                         <div className="flex items-center gap-2 text-red-600 dark:text-red-400">
                           <span className="material-symbols-outlined">warning</span>
-                          <p className="text-sm font-bold">Deseja realmente excluir este contrato?</p>
+                          <p className="text-sm font-bold">
+                            Deseja realmente excluir o Contrato Nº {contractToDelete?.contract_number || 'selecionado'}?
+                          </p>
                         </div>
                         <p className="text-sm text-slate-600 dark:text-slate-400">
                           Esta ação é irreversível e removerá o arquivo e o registro do contrato gerado.
@@ -1092,7 +1115,10 @@ const RentalEdit: React.FC = () => {
                         <div className="flex gap-3">
                           <button
                             type="button"
-                            onClick={() => setShowContractDeleteConfirm(false)}
+                            onClick={() => {
+                              setShowContractDeleteConfirm(false);
+                              setContractToDelete(null);
+                            }}
                             className="px-4 py-2 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 rounded-xl text-sm font-bold hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors"
                           >
                             Cancelar
@@ -1170,80 +1196,124 @@ const RentalEdit: React.FC = () => {
                             </div>
                           </div>
                         ) : contracts.length > 0 ? (
-                          <div>
-                            <div className="flex items-center gap-2 mb-4">
-                              <span className={`w-2 h-2 rounded-full ${contracts[0].status === 'Assinado' ? 'bg-green-500' : 'bg-blue-500'}`}></span>
-                              <p className="text-sm font-bold text-slate-900 dark:text-white">
-                                Contrato Nº {contracts[0].contract_number} • {contracts[0].status}
-                              </p>
-                            </div>
-                            <p className="text-xs text-slate-500 dark:text-slate-400 mb-4">
-                              Gerado em {new Date(contracts[0].generated_at).toLocaleDateString('pt-BR')}
-                            </p>
-                            <div className="flex flex-wrap gap-3">
+                          <div className="space-y-5">
+                            <div className="flex flex-wrap items-center justify-between gap-3 pb-3 border-b border-slate-100 dark:border-slate-800">
+                              <div>
+                                <h4 className="text-sm font-bold text-slate-900 dark:text-white flex items-center gap-2">
+                                  <span>Contratos Gerados para a Locação</span>
+                                  <span className="px-2 py-0.5 text-[10px] font-bold rounded-full bg-mustard-100 dark:bg-mustard-500/20 text-mustard-700 dark:text-mustard-400 font-mono">
+                                    {contracts.length}
+                                  </span>
+                                </h4>
+                                <p className="text-xs text-slate-500 dark:text-slate-400">
+                                  Todos os contratos e propostas de locação cadastrados para esta fatura.
+                                </p>
+                              </div>
                               <button
                                 type="button"
                                 onClick={openContractModal}
-                                className="px-4 py-2 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 rounded-xl text-sm font-bold hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors"
+                                className="px-3.5 py-1.5 bg-mustard-500 hover:bg-mustard-600 text-white rounded-xl text-xs font-bold transition-colors flex items-center gap-1.5 shadow-sm"
                               >
-                                Editar e Regerar
+                                <span className="material-symbols-outlined text-[16px]">edit_document</span>
+                                <span>Editar / Gerar Novo</span>
                               </button>
-                              {contracts[0].status !== 'Assinado' && (
-                                <button
-                                  type="button"
-                                  onClick={async () => {
-                                    try {
-                                      const blob = await pdf(<ContractDocument data={contracts[0].snapshot} generatedAt={contracts[0].generated_at} />).toBlob();
-                                      const blobUrl = URL.createObjectURL(blob);
-                                      window.open(blobUrl, '_blank');
-                                    } catch (err) {
-                                      console.error('Erro ao abrir PDF', err);
-                                      alert('Erro ao abrir PDF.');
-                                    }
-                                  }}
-                                  className="px-4 py-2 border border-mustard-500 text-mustard-600 dark:text-mustard-400 rounded-xl text-sm font-bold hover:bg-mustard-50 dark:hover:bg-mustard-500/10 transition-colors flex items-center gap-2"
+                            </div>
+
+                            <div className="space-y-3">
+                              {contracts.map((contract, cIdx) => (
+                                <div
+                                  key={contract.id || cIdx}
+                                  className="p-5 rounded-2xl border border-slate-200 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-800/40 space-y-3 hover:border-mustard-300 dark:hover:border-mustard-500/30 transition-all shadow-sm"
                                 >
-                                  <span className="material-symbols-outlined text-[18px]">visibility</span>
-                                  Visualizar PDF
-                                </button>
-                              )}
-                              {contracts[0].status !== 'Assinado' && (
-                                <button
-                                  type="button"
-                                  onClick={async () => {
-                                    try {
-                                      const blob = await pdf(<ContractDocument data={contracts[0].snapshot} generatedAt={contracts[0].generated_at} />).toBlob();
-                                      saveAs(blob, `PROPOSTA DE LOCAÇÃO - ${contracts[0].snapshot?.locatario?.company_name || 'Contrato'}.pdf`);
-                                    } catch (err) {
-                                      console.error('Erro ao gerar PDF', err);
-                                      alert('Erro ao gerar arquivo PDF.');
-                                    }
-                                  }}
-                                  className="px-4 py-2 border border-mustard-500 text-mustard-600 dark:text-mustard-400 rounded-xl text-sm font-bold hover:bg-mustard-50 dark:hover:bg-mustard-500/10 transition-colors flex items-center gap-2"
-                                >
-                                  <span className="material-symbols-outlined text-[18px]">download</span>
-                                </button>
-                              )}
-                              {contracts[0].status !== 'Assinado' && (
-                                <button
-                                  type="button"
-                                  onClick={handleUploadSigned}
-                                  className="px-4 py-2 bg-slate-900 dark:bg-white text-white dark:text-slate-900 rounded-xl text-sm font-bold hover:bg-slate-800 dark:hover:bg-slate-100 transition-colors"
-                                >
-                                  Anexar Assinado
-                                </button>
-                              )}
-                              {contracts[0].status === 'Assinado' && contracts[0].signed_file_url && (
-                                <a
-                                  href={contracts[0].signed_file_url}
-                                  target="_blank"
-                                  rel="noopener noreferrer"
-                                  className="px-4 py-2 bg-slate-900 dark:bg-white text-white dark:text-slate-900 rounded-xl text-sm font-bold hover:bg-slate-800 dark:hover:bg-slate-100 transition-colors flex items-center gap-2"
-                                >
-                                  <span className="material-symbols-outlined text-[18px]">download</span>
-                                  Ver Assinado
-                                </a>
-                              )}
+                                  <div className="flex flex-wrap items-center justify-between gap-3">
+                                    <div className="flex items-center gap-3">
+                                      <span
+                                        className={`w-3 h-3 rounded-full ${
+                                          contract.status === 'Assinado' ? 'bg-emerald-500' : 'bg-blue-500'
+                                        }`}
+                                      />
+                                      <div>
+                                        <p className="text-sm font-bold text-slate-900 dark:text-white flex items-center gap-2">
+                                          <span>Contrato Nº {contract.contract_number}</span>
+                                          {contract.version && (
+                                            <span className="text-[10px] text-slate-400 font-normal font-mono">
+                                              (v{contract.version})
+                                            </span>
+                                          )}
+                                        </p>
+                                        <p className="text-xs text-slate-500 dark:text-slate-400">
+                                          Gerado em {new Date(contract.generated_at).toLocaleDateString('pt-BR')} às {new Date(contract.generated_at).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}
+                                        </p>
+                                      </div>
+                                    </div>
+
+                                    <div className="flex items-center gap-2">
+                                      <span
+                                        className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-[10px] font-bold ${
+                                          contract.status === 'Assinado'
+                                            ? 'bg-emerald-100 dark:bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-500/20'
+                                            : 'bg-blue-100 dark:bg-blue-500/10 text-blue-700 dark:text-blue-400 border border-blue-200 dark:border-blue-500/20'
+                                        }`}
+                                      >
+                                        {contract.status}
+                                      </span>
+                                      {(deal?.owner_id === user?.id || ['Administrador', 'Diretoria', 'Gerente'].includes(profile?.access_level || '')) && (
+                                        <button
+                                          type="button"
+                                          onClick={() => handleDeleteContract(contract)}
+                                          className="p-1.5 text-slate-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-500/10 rounded-lg transition-colors"
+                                          title="Excluir este contrato"
+                                        >
+                                          <span className="material-symbols-outlined text-[18px]">delete</span>
+                                        </button>
+                                      )}
+                                    </div>
+                                  </div>
+
+                                  <div className="flex flex-wrap gap-2.5 pt-2 border-t border-slate-200/60 dark:border-slate-700/60">
+                                    <button
+                                      type="button"
+                                      onClick={() => handleViewContractPdf(contract)}
+                                      className="px-3.5 py-1.5 border border-mustard-500 text-mustard-600 dark:text-mustard-400 rounded-xl text-xs font-bold hover:bg-mustard-50 dark:hover:bg-mustard-500/10 transition-colors flex items-center gap-1.5"
+                                    >
+                                      <span className="material-symbols-outlined text-[16px]">visibility</span>
+                                      Visualizar PDF
+                                    </button>
+
+                                    <button
+                                      type="button"
+                                      onClick={() => handleDownloadContractPdf(contract)}
+                                      className="px-3.5 py-1.5 border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 rounded-xl text-xs font-bold hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors flex items-center gap-1.5"
+                                    >
+                                      <span className="material-symbols-outlined text-[16px]">download</span>
+                                      Baixar PDF
+                                    </button>
+
+                                    {contract.status !== 'Assinado' && (
+                                      <button
+                                        type="button"
+                                        onClick={() => handleUploadSigned(contract)}
+                                        className="px-3.5 py-1.5 bg-slate-900 dark:bg-white text-white dark:text-slate-900 rounded-xl text-xs font-bold hover:bg-slate-800 dark:hover:bg-slate-100 transition-colors flex items-center gap-1.5"
+                                      >
+                                        <span className="material-symbols-outlined text-[16px]">upload_file</span>
+                                        Anexar Assinado
+                                      </button>
+                                    )}
+
+                                    {contract.status === 'Assinado' && contract.signed_file_url && (
+                                      <a
+                                        href={contract.signed_file_url}
+                                        target="_blank"
+                                        rel="noopener noreferrer"
+                                        className="px-3.5 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold transition-colors flex items-center gap-1.5 shadow-sm"
+                                      >
+                                        <span className="material-symbols-outlined text-[16px]">check_circle</span>
+                                        Ver Assinado
+                                      </a>
+                                    )}
+                                  </div>
+                                </div>
+                              ))}
                             </div>
                           </div>
                         ) : null}
@@ -1399,8 +1469,16 @@ const RentalEdit: React.FC = () => {
                 <span className="font-semibold text-slate-900 dark:text-white">{totals.cost_freight.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}</span>
               </div>
               <div className="flex justify-between">
-                <span>RCD / Terceiros / Treinamento:</span>
-                <span className="font-semibold text-slate-900 dark:text-white">{(totals.cost_rcd + totals.cost_third_party + totals.cost_training).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}</span>
+                <span>RCD total:</span>
+                <span className="font-semibold text-slate-900 dark:text-white">{totals.cost_rcd.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}</span>
+              </div>
+              <div className="flex justify-between">
+                <span>Terceiros total:</span>
+                <span className="font-semibold text-slate-900 dark:text-white">{totals.cost_third_party.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}</span>
+              </div>
+              <div className="flex justify-between">
+                <span>Treinamento total:</span>
+                <span className="font-semibold text-slate-900 dark:text-white">{totals.cost_training.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}</span>
               </div>
             </div>
 
