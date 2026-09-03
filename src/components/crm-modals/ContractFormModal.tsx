@@ -33,6 +33,16 @@ const createDefaultEquipmentItem = (start = '', end = ''): ContractEquipmentItem
   total_value: 0
 });
 
+export const normalizeBillingInterval = (val: any): string => {
+  if (!val) return '28 dias';
+  const s = String(val).trim().toLowerCase();
+  if (s === '7' || s === '7 dias' || s === '7dias') return '7 dias';
+  if (s === '15' || s === '15 dias' || s === '15dias') return '15 dias';
+  if (s === '28' || s === '28 dias' || s === '28dias') return '28 dias';
+  if (s === 'a vista' || s === 'à vista' || s === 'avista') return 'A vista';
+  return String(val);
+};
+
 interface ContractFormModalProps {
   isOpen: boolean;
   onClose: () => void;
@@ -45,7 +55,10 @@ interface ContractFormModalProps {
 const ContractFormModal: React.FC<ContractFormModalProps> = ({ isOpen, onClose, onSuccess, dealId, deal, initialData }) => {
   const [activeTab, setActiveTab] = useState<'equipments' | 'general'>('equipments');
   const [loading, setLoading] = useState(false);
-  const [formData, setFormData] = useState<any>(initialData || {});
+  const [formData, setFormData] = useState<any>(initialData ? {
+    ...initialData,
+    billing_interval_days: normalizeBillingInterval(initialData.billing_interval_days)
+  } : {});
   const [addressFetched, setAddressFetched] = useState(false);
 
   // Multi-equipments list
@@ -70,7 +83,10 @@ const ContractFormModal: React.FC<ContractFormModalProps> = ({ isOpen, onClose, 
         }
 
         if (form) {
-          setFormData(form);
+          setFormData({
+            ...form,
+            billing_interval_days: normalizeBillingInterval(form.billing_interval_days)
+          });
         }
 
         const rentalId = deal?.rental_invoice_id || form?.rental_invoice_id;
@@ -280,6 +296,27 @@ const ContractFormModal: React.FC<ContractFormModalProps> = ({ isOpen, onClose, 
       current.total_value = r + i + f + rcd + tp + tr;
 
       updated[index] = current;
+
+      if (field === 'billing_period_start' || field === 'billing_period_end') {
+        const itemStart = current.billing_period_start;
+        const itemEnd = current.billing_period_end;
+        if (itemStart && itemEnd) {
+          const start = new Date(itemStart + 'T00:00:00').getTime();
+          const end = new Date(itemEnd + 'T00:00:00').getTime();
+          if (!isNaN(start) && !isNaN(end)) {
+            const diff = Math.round((end - start) / (1000 * 60 * 60 * 24));
+            if (diff >= 0) {
+              setFormData((prevForm: any) => ({
+                ...prevForm,
+                contract_duration_days: diff + 1,
+                period_start: itemStart,
+                period_end: itemEnd
+              }));
+            }
+          }
+        }
+      }
+
       return updated;
     });
   };
@@ -310,7 +347,7 @@ const ContractFormModal: React.FC<ContractFormModalProps> = ({ isOpen, onClose, 
         const start = new Date(earliestStart + 'T00:00:00').getTime();
         const end = new Date(latestEnd + 'T00:00:00').getTime();
         const diff = Math.round((end - start) / (1000 * 60 * 60 * 24));
-        if (diff > 0) durationDays = diff;
+        if (diff >= 0) durationDays = diff + 1;
       }
 
       const cleanData: any = {
@@ -327,7 +364,7 @@ const ContractFormModal: React.FC<ContractFormModalProps> = ({ isOpen, onClose, 
         cost_third_party: totals.cost_third_party,
         cost_training: totals.cost_training,
         cost_total: totals.total_value,
-        billing_interval_days: formData.billing_interval_days || '28 dias',
+        billing_interval_days: normalizeBillingInterval(formData.billing_interval_days),
         equipments: equipmentItems
       };
 
@@ -407,11 +444,10 @@ const ContractFormModal: React.FC<ContractFormModalProps> = ({ isOpen, onClose, 
           <button
             type="button"
             onClick={() => setActiveTab('equipments')}
-            className={`py-3.5 text-xs font-bold uppercase tracking-wider flex items-center gap-2 border-b-2 transition-all ${
-              activeTab === 'equipments'
+            className={`py-3.5 text-xs font-bold uppercase tracking-wider flex items-center gap-2 border-b-2 transition-all ${activeTab === 'equipments'
                 ? 'border-mustard-500 text-mustard-600 dark:text-mustard-400'
                 : 'border-transparent text-slate-400 hover:text-slate-600 dark:hover:text-slate-300'
-            }`}
+              }`}
           >
             <span className="material-symbols-outlined text-base">precision_manufacturing</span>
             Equipamentos & Valores
@@ -423,11 +459,10 @@ const ContractFormModal: React.FC<ContractFormModalProps> = ({ isOpen, onClose, 
           <button
             type="button"
             onClick={() => setActiveTab('general')}
-            className={`py-3.5 text-xs font-bold uppercase tracking-wider flex items-center gap-2 border-b-2 transition-all ${
-              activeTab === 'general'
+            className={`py-3.5 text-xs font-bold uppercase tracking-wider flex items-center gap-2 border-b-2 transition-all ${activeTab === 'general'
                 ? 'border-mustard-500 text-mustard-600 dark:text-mustard-400'
                 : 'border-transparent text-slate-400 hover:text-slate-600 dark:hover:text-slate-300'
-            }`}
+              }`}
           >
             <span className="material-symbols-outlined text-base">business</span>
             Dados Cadastrais & Obra
@@ -570,13 +605,13 @@ const ContractFormModal: React.FC<ContractFormModalProps> = ({ isOpen, onClose, 
               {/* Aggregated Totals and Commercial Conditions Card */}
               <div className="bg-white dark:bg-slate-800/80 rounded-2xl border border-slate-200 dark:border-slate-700 p-5 space-y-4">
                 <h4 className="text-xs font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wider">Condições Comerciais Consolidadas</h4>
-                
+
                 <div className="grid grid-cols-12 gap-4 items-center">
                   <div className="col-span-12 md:col-span-4">
                     <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1.5 uppercase">Condição de Pagamento</label>
                     <select
                       name="billing_interval_days"
-                      value={formData.billing_interval_days || '28 dias'}
+                      value={normalizeBillingInterval(formData.billing_interval_days)}
                       onChange={handleChange}
                       className="w-full px-4 py-2.5 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-sm appearance-none cursor-pointer outline-none focus:ring-2 focus:ring-mustard-500/20 dark:text-white"
                     >

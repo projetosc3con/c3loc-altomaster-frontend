@@ -312,12 +312,12 @@ const ContractDocument: React.FC<ContractDocumentProps> = ({ data, generatedAt }
       return `${data.contract_duration_days} dias`;
     }
     if (data.period_start && data.period_end) {
-      const start = new Date(data.period_start);
-      const end = new Date(data.period_end);
+      const start = new Date(data.period_start.split('T')[0] + 'T00:00:00');
+      const end = new Date(data.period_end.split('T')[0] + 'T00:00:00');
       const diffTime = Math.abs(end.getTime() - start.getTime());
-      const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
-      if (!isNaN(diffDays) && diffDays > 0) {
-        return `${diffDays} dias`;
+      const diffDays = Math.round(diffTime / (1000 * 60 * 60 * 24));
+      if (!isNaN(diffDays) && diffDays >= 0) {
+        return `${diffDays + 1} dias`;
       }
     }
     return '15 dias';
@@ -334,7 +334,7 @@ const ContractDocument: React.FC<ContractDocumentProps> = ({ data, generatedAt }
   const locatarioCnpj = data.locatario?.cnpj || 'N/A';
   const locatarioIe = data.locatario?.state_registration && data.locatario?.state_registration !== ''
     ? data.locatario.state_registration
-    : '13.308.407-8';
+    : '-';
 
   const equipmentsList = (data.equipments && data.equipments.length > 0)
     ? data.equipments
@@ -373,15 +373,15 @@ const ContractDocument: React.FC<ContractDocumentProps> = ({ data, generatedAt }
       const startDate = new Date(start.split('T')[0] + 'T00:00:00');
       const endDate = new Date(end.split('T')[0] + 'T00:00:00');
       const diffTime = Math.abs(endDate.getTime() - startDate.getTime());
-      const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
-      if (!isNaN(diffDays) && diffDays > 0) {
-        return `${diffDays} dias`;
+      const diffDays = Math.round(diffTime / (1000 * 60 * 60 * 24));
+      if (!isNaN(diffDays) && diffDays >= 0) {
+        return `${diffDays + 1} dias`;
       }
     }
     return getDurationDaysText();
   };
 
-  const equipmentDesc = data.equipment?.description || 'Plataforma Elevatória Articulada 20 metros';
+  const equipmentDesc = data.equipment?.description;
   const equipmentType = data.equipment?.type ? data.equipment.type.toUpperCase() : 'PLATAFORMA ELEVATÓRIA';
 
   const contractDateFormatted = formatDate(generatedAt?.split('T')[0] || data.contract_date || new Date().toISOString().split('T')[0]);
