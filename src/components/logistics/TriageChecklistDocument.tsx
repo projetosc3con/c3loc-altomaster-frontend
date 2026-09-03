@@ -112,24 +112,34 @@ const styles = StyleSheet.create({
   },
 });
 
+interface EquipmentChecklistData {
+  equipmentLabel: string;
+  assetNumber?: string;
+  model?: string;
+  period?: string;
+  photos: TriagePhoto[];
+}
+
 interface TriageChecklistDocumentProps {
   contract: LogisticsContract;
-  photos: TriagePhoto[];
+  photos?: TriagePhoto[];
   equipmentLabel?: string;
   clientName?: string;
   workSite?: string;
+  equipmentsWithPhotos?: EquipmentChecklistData[];
 }
 
 export const TriageChecklistDocument: React.FC<TriageChecklistDocumentProps> = ({
   contract,
-  photos,
+  photos = [],
   equipmentLabel,
   clientName,
   workSite,
+  equipmentsWithPhotos,
 }) => {
   const currentDate = new Date().toLocaleDateString('pt-BR');
 
-  // We want to list all 22 checklist items. For each item, we look up if there's an uploaded photo.
+  // 22 checklist items
   const checklistItems = [
     { position: 1, label: 'Dianteira' },
     { position: 2, label: 'Traseira' },
@@ -152,84 +162,102 @@ export const TriageChecklistDocument: React.FC<TriageChecklistDocumentProps> = (
     { position: 19, label: 'Horimetro' },
     { position: 20, label: 'Patrimonio' },
     { position: 21, label: 'Plugue tomada' },
-    { position: 22, label: 'Placa de indentificação' },
+    { position: 22, label: 'Placa de identificação' },
   ];
 
-  // Get all unique users who uploaded photos
-  const inspectors = Array.from(
-    new Set(
-      photos
-        .map((p) => p.uploaded_by_user?.full_name)
-        .filter((name): name is string => !!name)
-    )
-  );
+  // Se foram passados múltiplos equipamentos com fotos, renderiza cada um em sua respectiva seção
+  const sections: EquipmentChecklistData[] = equipmentsWithPhotos && equipmentsWithPhotos.length > 0
+    ? equipmentsWithPhotos
+    : [{
+        equipmentLabel: equipmentLabel || 'Não identificado',
+        photos: photos
+      }];
 
   return (
     <Document>
-      <Page size="A4" style={styles.page}>
-        {/* Header */}
-        <View style={styles.headerContainer}>
-          <View style={styles.headerInfo}>
-            <Text style={styles.title}>Checklist de Confirmação Fotográfica</Text>
-            <View style={styles.metaGrid}>
-              <View style={styles.metaItem}>
-                <Text style={styles.metaLabel}>Contrato</Text>
-                <Text style={styles.metaValue}>#{contract.contract_number}</Text>
-              </View>
-              <View style={styles.metaItem}>
-                <Text style={styles.metaLabel}>Data Triagem</Text>
-                <Text style={styles.metaValue}>{currentDate}</Text>
-              </View>
-              <View style={styles.metaItem}>
-                <Text style={styles.metaLabel}>Equipamento</Text>
-                <Text style={styles.metaValue}>{equipmentLabel || 'Não identificado'}</Text>
-              </View>
-              <View style={styles.metaItem}>
-                <Text style={styles.metaLabel}>Cliente</Text>
-                <Text style={styles.metaValue}>{clientName || 'Não informado'}</Text>
-              </View>
-              <View style={styles.metaItem}>
-                <Text style={styles.metaLabel}>Responsável(is)</Text>
-                <Text style={styles.metaValue}>{inspectors.length > 0 ? inspectors.join(', ') : 'Não informado'}</Text>
-              </View>
-              {workSite && (
-                <View style={styles.metaItem}>
-                  <Text style={styles.metaLabel}>Local / Obra</Text>
-                  <Text style={styles.metaValue}>{workSite}</Text>
-                </View>
-              )}
-            </View>
-          </View>
-          <Image style={styles.logo} src={logoC3Loc} />
-        </View>
+      {sections.map((section, sIdx) => {
+        // Obter inspetores deste equipamento
+        const inspectors = Array.from(
+          new Set(
+            section.photos
+              .map((p) => p.uploaded_by_user?.full_name)
+              .filter((name): name is string => !!name)
+          )
+        );
 
-        {/* Photos Grid */}
-        <View style={styles.grid}>
-          {checklistItems.map((item) => {
-            const photo = photos.find((p) => p.position === item.position);
-            return (
-              <View key={item.position} style={styles.photoCard} wrap={false}>
-                <View style={styles.photoContainer}>
-                  {photo?.file_url ? (
-                    <Image style={styles.photo} src={photo.file_url} />
-                  ) : (
-                    <Text style={styles.photoPlaceholderText}>Nenhuma foto registrada para este item.</Text>
+        return (
+          <Page key={sIdx} size="A4" style={styles.page}>
+            {/* Header */}
+            <View style={styles.headerContainer}>
+              <View style={styles.headerInfo}>
+                <Text style={styles.title}>Checklist de Confirmação Fotográfica</Text>
+                <View style={styles.metaGrid}>
+                  <View style={styles.metaItem}>
+                    <Text style={styles.metaLabel}>Contrato</Text>
+                    <Text style={styles.metaValue}>#{contract.contract_number}</Text>
+                  </View>
+                  <View style={styles.metaItem}>
+                    <Text style={styles.metaLabel}>Data Triagem</Text>
+                    <Text style={styles.metaValue}>{currentDate}</Text>
+                  </View>
+                  <View style={styles.metaItem}>
+                    <Text style={styles.metaLabel}>Equipamento</Text>
+                    <Text style={styles.metaValue}>{section.equipmentLabel}</Text>
+                  </View>
+                  <View style={styles.metaItem}>
+                    <Text style={styles.metaLabel}>Cliente</Text>
+                    <Text style={styles.metaValue}>{clientName || 'Não informado'}</Text>
+                  </View>
+                  <View style={styles.metaItem}>
+                    <Text style={styles.metaLabel}>Responsável(is)</Text>
+                    <Text style={styles.metaValue}>{inspectors.length > 0 ? inspectors.join(', ') : 'Não informado'}</Text>
+                  </View>
+                  {workSite && (
+                    <View style={styles.metaItem}>
+                      <Text style={styles.metaLabel}>Local / Obra</Text>
+                      <Text style={styles.metaValue}>{workSite}</Text>
+                    </View>
+                  )}
+                  {section.period && (
+                    <View style={styles.metaItem}>
+                      <Text style={styles.metaLabel}>Período</Text>
+                      <Text style={styles.metaValue}>{section.period}</Text>
+                    </View>
                   )}
                 </View>
-                <Text style={styles.photoLabel}>
-                  {item.position}. {item.label}
-                </Text>
               </View>
-            );
-          })}
-        </View>
+              <Image style={styles.logo} src={logoC3Loc} />
+            </View>
 
-        {/* Footer */}
-        <View style={styles.footer} fixed>
-          <Text>RentDesk Logística — Checklist de Conferência de Estado do Equipamento</Text>
-          <Text render={({ pageNumber, totalPages }) => `Página ${pageNumber} de ${totalPages}`} />
-        </View>
-      </Page>
+            {/* Photos Grid */}
+            <View style={styles.grid}>
+              {checklistItems.map((item) => {
+                const photo = section.photos.find((p) => p.position === item.position);
+                return (
+                  <View key={item.position} style={styles.photoCard} wrap={false}>
+                    <View style={styles.photoContainer}>
+                      {photo?.file_url ? (
+                        <Image style={styles.photo} src={photo.file_url} />
+                      ) : (
+                        <Text style={styles.photoPlaceholderText}>Nenhuma foto registrada para este item.</Text>
+                      )}
+                    </View>
+                    <Text style={styles.photoLabel}>
+                      {item.position}. {item.label}
+                    </Text>
+                  </View>
+                );
+              })}
+            </View>
+
+            {/* Footer */}
+            <View style={styles.footer} fixed>
+              <Text>RentDesk Logística — Checklist de Conferência de Estado do Equipamento</Text>
+              <Text render={({ pageNumber, totalPages }) => `Página ${pageNumber} de ${totalPages}`} />
+            </View>
+          </Page>
+        );
+      })}
     </Document>
   );
 };

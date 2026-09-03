@@ -15,6 +15,9 @@ const ITEMS_PER_PAGE = 15;
 const BILLING_STATUSES: BillingStatus[] = ['Pendente', 'Faturado', 'Emitida', 'Cancelada'];
 const RECONCILIATION_STATUSES: ReconciliationStatus[] = ['Pendente', 'Atrasado', 'Recebido', 'Divergente', 'No prazo'];
 
+export type SortField = 'billing_period_end' | 'client_name' | 'equipment_name' | 'total_value' | 'billing_status';
+export type SortOrder = 'asc' | 'desc';
+
 interface Filters {
   search: string;
   billing_status: BillingStatus | '';
@@ -23,15 +26,24 @@ interface Filters {
   date_to: string;
   value_min: number;
   value_max: number;
+  sort_by: SortField;
+  sort_order: SortOrder;
 }
 
 const emptyFilters: Filters = {
   search: '', billing_status: '', reconciliation_status: '',
   date_from: '', date_to: '', value_min: 0, value_max: 0,
+  sort_by: 'billing_period_end',
+  sort_order: 'desc'
 };
 
 const buildParams = (page: number, f: Filters) => {
-  const p: Record<string, string | number> = { page, limit: ITEMS_PER_PAGE };
+  const p: Record<string, string | number> = { 
+    page, 
+    limit: ITEMS_PER_PAGE,
+    sort_by: f.sort_by || 'billing_period_end',
+    sort_order: f.sort_order || 'desc'
+  };
   if (f.search) p.search = f.search;
   if (f.billing_status) p.billing_status = f.billing_status;
   if (f.reconciliation_status) p.reconciliation_status = f.reconciliation_status;
@@ -50,7 +62,12 @@ const getInitialFilters = (): Filters => {
     const saved = localStorage.getItem(STORAGE_KEY);
     if (saved) {
       const parsed = JSON.parse(saved);
-      return { ...emptyFilters, ...parsed };
+      return { 
+        ...emptyFilters, 
+        ...parsed,
+        sort_by: parsed.sort_by || 'billing_period_end',
+        sort_order: parsed.sort_order || 'desc'
+      };
     }
   } catch (e) {
     console.warn('Erro ao carregar filtros salvos de locações:', e);
@@ -216,6 +233,20 @@ const Rentals: React.FC = () => {
     }, 400);
   };
 
+  const handleSort = (field: SortField) => {
+    let newOrder: SortOrder = 'desc';
+    if (filters.sort_by === field) {
+      newOrder = filters.sort_order === 'asc' ? 'desc' : 'asc';
+    } else {
+      newOrder = (field === 'billing_period_end' || field === 'total_value') ? 'desc' : 'asc';
+    }
+
+    const next: Filters = { ...filters, sort_by: field, sort_order: newOrder };
+    setFilters(next);
+    saveFiltersToStorage(next, 1);
+    fetchRentals(1, next);
+  };
+
   const applyFilters = () => {
     setShowFilters(false);
     saveFiltersToStorage(filters, 1);
@@ -224,15 +255,11 @@ const Rentals: React.FC = () => {
 
   const clearAllFilters = () => {
     setSearchInput('');
-    setFilters(emptyFilters);
+    const reset: Filters = { ...emptyFilters, sort_by: 'billing_period_end', sort_order: 'desc' };
+    setFilters(reset);
     setCurrentPage(1);
-    try {
-      localStorage.removeItem(STORAGE_KEY);
-      localStorage.removeItem(PAGE_STORAGE_KEY);
-    } catch (e) {
-      console.warn('Erro ao limpar filtros salvos:', e);
-    }
-    fetchRentals(1, emptyFilters);
+    saveFiltersToStorage(reset, 1);
+    fetchRentals(1, reset);
   };
 
   const handlePageChange = (page: number) => {
@@ -270,6 +297,40 @@ const Rentals: React.FC = () => {
 
   const rangeStart = totalItems > 0 ? (currentPage - 1) * ITEMS_PER_PAGE + 1 : 0;
   const rangeEnd = Math.min(currentPage * ITEMS_PER_PAGE, totalItems);
+
+  const renderSortHeader = (label: string, field: SortField, align: 'left' | 'right' | 'center' = 'left', extraClass: string = '') => {
+    const isSorted = filters.sort_by === field;
+    const isAsc = filters.sort_order === 'asc';
+
+    return (
+      <th
+        onClick={() => handleSort(field)}
+        className={`px-6 py-4 cursor-pointer select-none group transition-colors ${
+          align === 'right' ? 'text-right' : align === 'center' ? 'text-center' : 'text-left'
+        } ${
+          isSorted 
+            ? 'text-mustard-600 dark:text-mustard-400 font-extrabold' 
+            : 'text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200'
+        } ${extraClass}`}
+        title={`Clique para ordenar por ${label} (${isSorted && isAsc ? 'decrescente' : 'crescente'})`}
+      >
+        <div className={`inline-flex items-center gap-1.5 ${align === 'right' ? 'justify-end w-full' : ''}`}>
+          <span>{label}</span>
+          <span
+            className={`material-symbols-outlined text-[18px] transition-all transform ${
+              isSorted
+                ? 'text-mustard-500 dark:text-mustard-400 opacity-100 scale-110'
+                : 'text-slate-300 dark:text-slate-600 opacity-0 group-hover:opacity-100'
+            }`}
+          >
+            {isSorted
+              ? (isAsc ? 'keyboard_arrow_up' : 'keyboard_arrow_down')
+              : 'unfold_more'}
+          </span>
+        </div>
+      </th>
+    );
+  };
 
   return (
     <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.4 }} className="space-y-8">
@@ -360,11 +421,11 @@ const Rentals: React.FC = () => {
           <table className="w-full text-left">
             <thead>
               <tr className="text-slate-500 dark:text-slate-400 text-[11px] uppercase font-bold tracking-widest border-b border-slate-100 dark:border-slate-800 bg-slate-50/30 dark:bg-slate-800/30">
-                <th className="px-6 py-4">Cliente / Obra</th>
-                <th className="px-6 py-4">Equipamento</th>
-                <th className="px-6 py-4 whitespace-nowrap">Período</th>
-                <th className="px-6 py-4 text-right">Valor Total</th>
-                <th className="px-6 py-4">Status</th>
+                {renderSortHeader('Cliente / Obra', 'client_name')}
+                {renderSortHeader('Equipamento', 'equipment_name')}
+                {renderSortHeader('Período', 'billing_period_end', 'left', 'whitespace-nowrap')}
+                {renderSortHeader('Valor Total', 'total_value', 'right')}
+                {renderSortHeader('Status', 'billing_status')}
                 <th className="px-6 py-4 text-center">Ações</th>
               </tr>
             </thead>
@@ -546,6 +607,51 @@ const Rentals: React.FC = () => {
                       <span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 dark:text-slate-500 text-xs font-bold">R$</span>
                       <input type="number" min={0} step={100} value={filters.value_max || ''} onChange={e => setFilters(f => ({ ...f, value_max: parseFloat(e.target.value) || 0 }))} placeholder="Máx"
                         className="w-full pl-9 pr-3 py-3 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-sm text-slate-900 dark:text-white outline-none focus:ring-2 focus:ring-mustard-500/10 focus:border-mustard-500 transition-all" />
+                    </div>
+                  </div>
+                </div>
+
+                {/* Ordenação da Tabela */}
+                <div className="space-y-3">
+                  <label className="text-[11px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-widest">Ordenação da Tabela</label>
+                  <div className="space-y-2">
+                    <select
+                      value={filters.sort_by}
+                      onChange={e => setFilters(f => ({ ...f, sort_by: e.target.value as SortField }))}
+                      className="w-full px-4 py-3 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-sm text-slate-900 dark:text-white outline-none focus:ring-2 focus:ring-mustard-500/10 focus:border-mustard-500 transition-all font-medium"
+                    >
+                      <option value="billing_period_end">Período (Data de Fim)</option>
+                      <option value="client_name">Cliente / Obra</option>
+                      <option value="equipment_name">Equipamento</option>
+                      <option value="total_value">Valor Total</option>
+                      <option value="billing_status">Status</option>
+                    </select>
+
+                    <div className="grid grid-cols-2 gap-2">
+                      <button
+                        type="button"
+                        onClick={() => setFilters(f => ({ ...f, sort_order: 'desc' }))}
+                        className={`px-3 py-2.5 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-1.5 ${
+                          filters.sort_order === 'desc'
+                            ? 'bg-mustard-500 text-white shadow-md'
+                            : 'bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-700'
+                        }`}
+                      >
+                        <span className="material-symbols-outlined text-[16px]">keyboard_arrow_down</span>
+                        Mais recente / Maior
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setFilters(f => ({ ...f, sort_order: 'asc' }))}
+                        className={`px-3 py-2.5 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-1.5 ${
+                          filters.sort_order === 'asc'
+                            ? 'bg-mustard-500 text-white shadow-md'
+                            : 'bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-700'
+                        }`}
+                      >
+                        <span className="material-symbols-outlined text-[16px]">keyboard_arrow_up</span>
+                        Mais antigo / Menor
+                      </button>
                     </div>
                   </div>
                 </div>

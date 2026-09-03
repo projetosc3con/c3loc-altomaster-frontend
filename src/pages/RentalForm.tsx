@@ -155,7 +155,8 @@ const RentalForm: React.FC = () => {
   const [error, setError] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<'equipments' | 'general'>('equipments');
   const [clients, setClients] = useState<Client[]>([]);
-  const [availableEquipments, setAvailableEquipments] = useState<Equipment[]>([]);
+  const [allEquipments, setAllEquipments] = useState<Equipment[]>([]);
+  const [filterStockMode, setFilterStockMode] = useState<'available' | 'all'>('available');
 
   // Multi-equipment list
   const [equipmentItems, setEquipmentItems] = useState<FormEquipmentItem[]>([createDefaultEquipmentItem()]);
@@ -183,7 +184,7 @@ const RentalForm: React.FC = () => {
         ]);
 
         setClients(clientsRes.data.filter((c: Client) => c.active !== false));
-        setAvailableEquipments(equipmentsRes.data.filter((eq: Equipment) => eq.status === 'Disponível'));
+        setAllEquipments(equipmentsRes.data || []);
       } catch (err: any) {
         console.error('Erro ao buscar dados para o formulário de locação:', err);
         setError('Erro ao carregar os clientes e equipamentos.');
@@ -270,7 +271,7 @@ const RentalForm: React.FC = () => {
 
   // Select Equipment Entity
   const handleEquipmentSelect = (index: number, equipmentId: string) => {
-    const selected = availableEquipments.find(e => e.id === equipmentId);
+    const selected = allEquipments.find(e => e.id === equipmentId);
     if (!selected) return;
 
     setEquipmentItems(prev => {
@@ -308,17 +309,37 @@ const RentalForm: React.FC = () => {
       return;
     }
 
+    const todayStr = new Date().toISOString().split('T')[0];
+
     for (let i = 0; i < equipmentItems.length; i++) {
       const item = equipmentItems[i];
       if (!item.equipment_id) {
         setError(`Por favor, selecione o equipamento no item #${i + 1}.`);
         setActiveTab('equipments');
+        window.scrollTo({ top: 0, behavior: 'smooth' });
         return;
       }
       if (!item.billing_period_start || !item.billing_period_end) {
         setError(`Por favor, defina o período de início e fim para o equipamento #${i + 1} (${item.equipment_name || 'Sem nome'}).`);
         setActiveTab('equipments');
+        window.scrollTo({ top: 0, behavior: 'smooth' });
         return;
+      }
+
+      // Validação: equipamentos não disponíveis só podem ser locados para períodos retroativos (no passado)
+      const eqData = allEquipments.find(e => e.id === item.equipment_id);
+      if (eqData && eqData.status !== 'Disponível') {
+        const effectiveEnd = (item.return_date || item.billing_period_end).split('T')[0];
+        if (!effectiveEnd || effectiveEnd >= todayStr) {
+          setError(
+            `O equipamento #${i + 1} (${eqData.name} - ${eqData.asset_number}) está com status "${eqData.status}". ` +
+            `Equipamentos não disponíveis só podem ser cadastrados para períodos retroativos (já finalizados no passado). ` +
+            `A data final ou de devolução deve ser anterior a hoje (${new Date().toLocaleDateString('pt-BR')}).`
+          );
+          setActiveTab('equipments');
+          window.scrollTo({ top: 0, behavior: 'smooth' });
+          return;
+        }
       }
     }
 
@@ -434,26 +455,65 @@ const RentalForm: React.FC = () => {
         <div className="lg:col-span-2 space-y-6">
           {activeTab === 'equipments' && (
             <div className="space-y-6">
-              <div className="flex items-center justify-between">
+              <div className="flex flex-wrap items-center justify-between gap-4">
                 <div>
                   <h3 className="text-base font-bold text-slate-900 dark:text-white">Equipamentos Selecionados</h3>
                   <p className="text-xs text-slate-500 dark:text-slate-400">Adicione e configure cada equipamento com seus respectivos períodos e valores.</p>
                 </div>
-                <button
-                  type="button"
-                  onClick={handleAddEquipment}
-                  className="px-4 py-2 bg-mustard-500 hover:bg-mustard-600 active:scale-95 text-white rounded-xl text-xs font-bold transition-all flex items-center gap-2 shadow-sm"
-                >
-                  <span className="material-symbols-outlined text-[18px]">add</span>
-                  Adicionar Equipamento
-                </button>
+
+                <div className="flex flex-wrap items-center gap-3">
+                  <div className="flex items-center bg-slate-100 dark:bg-slate-800 p-1 rounded-xl border border-slate-200 dark:border-slate-700 text-xs font-bold">
+                    <button
+                      type="button"
+                      onClick={() => setFilterStockMode('available')}
+                      className={`px-3 py-1.5 rounded-lg transition-all flex items-center gap-1.5 ${
+                        filterStockMode === 'available'
+                          ? 'bg-white dark:bg-slate-700 text-mustard-600 dark:text-mustard-400 shadow-sm'
+                          : 'text-slate-500 hover:text-slate-700 dark:hover:text-slate-300'
+                      }`}
+                    >
+                      <span className="w-2 h-2 rounded-full bg-emerald-500" />
+                      Apenas Disponíveis
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setFilterStockMode('all')}
+                      className={`px-3 py-1.5 rounded-lg transition-all flex items-center gap-1.5 ${
+                        filterStockMode === 'all'
+                          ? 'bg-white dark:bg-slate-700 text-mustard-600 dark:text-mustard-400 shadow-sm'
+                          : 'text-slate-500 hover:text-slate-700 dark:hover:text-slate-300'
+                      }`}
+                    >
+                      <span className="material-symbols-outlined text-[15px]">inventory_2</span>
+                      Todos do Estoque
+                    </button>
+                  </div>
+
+                  <button
+                    type="button"
+                    onClick={handleAddEquipment}
+                    className="px-4 py-2 bg-mustard-500 hover:bg-mustard-600 active:scale-95 text-white rounded-xl text-xs font-bold transition-all flex items-center gap-2 shadow-sm"
+                  >
+                    <span className="material-symbols-outlined text-[18px]">add</span>
+                    Adicionar Equipamento
+                  </button>
+                </div>
               </div>
 
               {equipmentItems.map((item, index) => {
                 const selectedInOtherTabs = equipmentItems
                   .filter((_, i) => i !== index)
                   .map(e => e.equipment_id);
-                const selectableEquips = availableEquipments.filter(e => !selectedInOtherTabs.includes(e.id) || e.id === item.equipment_id);
+                const selectableEquips = allEquipments.filter(e => {
+                  if (selectedInOtherTabs.includes(e.id) && e.id !== item.equipment_id) {
+                    return false;
+                  }
+                  if (filterStockMode === 'available') {
+                    return e.status === 'Disponível' || e.id === item.equipment_id;
+                  }
+                  return true;
+                });
+                const selectedEquip = allEquipments.find(e => e.id === item.equipment_id);
 
                 return (
                   <motion.div
@@ -498,9 +558,19 @@ const RentalForm: React.FC = () => {
                         selectedId={item.equipment_id}
                         onSelect={(id) => handleEquipmentSelect(index, id)}
                         getDisplayValue={(eq) => `${eq.asset_number} - ${eq.name} (${eq.status})`}
-                        getSearchValue={(eq) => `${eq.name} ${eq.asset_number} ${eq.type}`}
+                        getSearchValue={(eq) => `${eq.name} ${eq.asset_number} ${eq.type} ${eq.status}`}
                         required
                       />
+
+                      {/* Aviso contextual para equipamentos não disponíveis */}
+                      {selectedEquip && selectedEquip.status !== 'Disponível' && (
+                        <div className="p-3 bg-amber-50 dark:bg-amber-500/10 border border-amber-200 dark:border-amber-500/20 rounded-xl text-xs text-amber-800 dark:text-amber-300 flex items-center gap-2.5">
+                          <span className="material-symbols-outlined text-amber-600 dark:text-amber-400 text-base">warning</span>
+                          <span>
+                            Equipamento atualmente com status <strong>{selectedEquip.status}</strong>. Para cadastrar esta locação, o período deve ser <strong>retroativo (já encerrado no passado)</strong>.
+                          </span>
+                        </div>
+                      )}
 
                       {/* Dates */}
                       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">

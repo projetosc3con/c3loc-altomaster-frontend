@@ -45,6 +45,29 @@ const CHECKLIST_ITEMS = [
   { position: 22, label: 'Placa de identificação' },
 ];
 
+export interface TriagedEquipmentItem {
+  tempId: string;
+  intended_index?: number;
+  intended_name?: string;
+  equipment_id: string;
+  equipment_name?: string;
+  equipment_type?: string;
+  equipment_size?: string;
+  asset_number?: string;
+  model?: string;
+  serial_number?: string;
+  hour_meter?: number;
+  billing_period_start: string;
+  billing_period_end: string;
+  cost_rental: number;
+  cost_insurance: number;
+  cost_freight: number;
+  cost_rcd: number;
+  cost_third_party: number;
+  cost_training: number;
+  total_value: number;
+}
+
 const LogisticsTriagem: React.FC = () => {
   const navigate = useNavigate();
   const { id } = useParams<{ id: string }>();
@@ -57,10 +80,9 @@ const LogisticsTriagem: React.FC = () => {
 
   // Triage form data
   const [equipments, setEquipments] = useState<Equipment[]>([]);
-  const [selectedEquipmentId, setSelectedEquipmentId] = useState('');
+  const [triagedEquipments, setTriagedEquipments] = useState<TriagedEquipmentItem[]>([]);
+  const [activeEquipmentTab, setActiveEquipmentTab] = useState<string>('');
   const [workSite, setWorkSite] = useState('');
-  const [equipmentDescription, setEquipmentDescription] = useState('');
-  const [equipmentModel, setEquipmentModel] = useState('');
   const [clientName, setClientName] = useState('');
   const [clientCnpj, setClientCnpj] = useState('');
 
@@ -93,11 +115,11 @@ const LogisticsTriagem: React.FC = () => {
   useEffect(() => {
     if (!id || loading) return;
     const draft = {
-      selectedEquipmentId,
+      triagedEquipments,
       workSite
     };
     localStorage.setItem(`triage_draft_${id}`, JSON.stringify(draft));
-  }, [id, selectedEquipmentId, workSite, loading]);
+  }, [id, triagedEquipments, workSite, loading]);
 
   const loadData = async () => {
     try {
@@ -109,8 +131,9 @@ const LogisticsTriagem: React.FC = () => {
       ]);
 
       setContract(contractData);
-      setEquipments(equipmentsRes.data);
-      setTriagePhotos(photosRes);
+      const allEquipments: Equipment[] = equipmentsRes.data || [];
+      setEquipments(allEquipments);
+      setTriagePhotos(photosRes || []);
 
       // Initialize manual due date from contract period end
       const initialDueDate = contractData.contract_form?.period_end || contractData.snapshot?.period_end || new Date().toISOString().split('T')[0];
@@ -130,13 +153,15 @@ const LogisticsTriagem: React.FC = () => {
 
       // Check localStorage for saved draft first
       const draftStr = localStorage.getItem(`triage_draft_${id}`);
-      let savedEquipmentId = '';
       let savedWorkSite = '';
+      let savedTriagedEquipments: TriagedEquipmentItem[] | null = null;
       if (draftStr) {
         try {
           const draft = JSON.parse(draftStr);
-          savedEquipmentId = draft.selectedEquipmentId || '';
           savedWorkSite = draft.workSite || '';
+          if (Array.isArray(draft.triagedEquipments) && draft.triagedEquipments.length > 0) {
+            savedTriagedEquipments = draft.triagedEquipments;
+          }
         } catch (e) {
           console.error('Erro ao fazer parse do localStorage draft:', e);
         }
@@ -151,19 +176,14 @@ const LogisticsTriagem: React.FC = () => {
         else if (contractData.snapshot) initialWorkSite = contractData.snapshot.work_site || '';
       }
       setWorkSite(initialWorkSite);
-      setSelectedEquipmentId(savedEquipmentId);
 
       let initialClientName = '';
       let initialClientCnpj = '';
 
       if (form) {
-        setEquipmentDescription(form.equipment_description || '');
-        setEquipmentModel(form.equipment_model || '');
         initialClientName = form.locatario_company_name || '';
         initialClientCnpj = form.locatario_cnpj || '';
       } else if (contractData.snapshot) {
-        setEquipmentDescription(contractData.snapshot.equipment?.description || '');
-        setEquipmentModel(contractData.snapshot.equipment?.model || '');
         initialClientName = contractData.snapshot.locatario?.company_name || '';
         initialClientCnpj = contractData.snapshot.locatario?.cnpj || '';
       }
@@ -177,6 +197,74 @@ const LogisticsTriagem: React.FC = () => {
       setClientName(initialClientName);
       setClientCnpj(initialClientCnpj);
 
+      // Initialize Triaged Equipments list
+      if (savedTriagedEquipments && savedTriagedEquipments.length > 0) {
+        // Enriquecer com os dados atuais do estoque
+        const enriched = savedTriagedEquipments.map(item => {
+          const matched = allEquipments.find(e => e.id === item.equipment_id);
+          return {
+            ...item,
+            equipment_name: matched?.name || item.equipment_name,
+            equipment_type: matched?.type || item.equipment_type,
+            asset_number: matched?.asset_number || item.asset_number,
+            model: matched?.model || item.model,
+            serial_number: matched?.serial_number || item.serial_number,
+            hour_meter: (matched as any)?.hour_meter ?? item.hour_meter
+          };
+        });
+        setTriagedEquipments(enriched);
+        setActiveEquipmentTab(enriched[0].equipment_id || enriched[0].tempId);
+      } else if (contractData.intended_equipments && contractData.intended_equipments.length > 0) {
+        const initialList: TriagedEquipmentItem[] = contractData.intended_equipments.map((item, idx) => {
+          const matched = item.equipment_id ? allEquipments.find(e => e.id === item.equipment_id) : undefined;
+          return {
+            tempId: item.tempId || `triaged-${idx}-${Math.random().toString(36).substring(2, 7)}`,
+            intended_index: idx + 1,
+            intended_name: item.equipment_name
+              ? `${item.equipment_name}${item.equipment_size ? ' (' + item.equipment_size + ')' : ''}`
+              : `Equipamento Pretendido #${idx + 1}`,
+            equipment_id: item.equipment_id || '',
+            equipment_name: matched?.name || item.equipment_name || '',
+            equipment_type: matched?.type || item.equipment_type || '',
+            equipment_size: item.equipment_size || '',
+            asset_number: matched?.asset_number || item.asset_number || '',
+            model: matched?.model || '',
+            serial_number: matched?.serial_number || '',
+            hour_meter: (matched as any)?.hour_meter,
+            billing_period_start: item.billing_period_start || form?.period_start || contractData.snapshot?.period_start || '',
+            billing_period_end: item.billing_period_end || form?.period_end || contractData.snapshot?.period_end || '',
+            cost_rental: Number(item.cost_rental) || 0,
+            cost_insurance: Number(item.cost_insurance) || 0,
+            cost_freight: Number(item.cost_freight) || 0,
+            cost_rcd: Number(item.cost_rcd) || 0,
+            cost_third_party: Number(item.cost_third_party) || 0,
+            cost_training: Number(item.cost_training) || 0,
+            total_value: Number(item.total_value) || 0
+          };
+        });
+        setTriagedEquipments(initialList);
+        setActiveEquipmentTab(initialList[0].equipment_id || initialList[0].tempId);
+      } else {
+        // Fallback para único equipamento
+        const defaultItem: TriagedEquipmentItem = {
+          tempId: `triaged-0-${Math.random().toString(36).substring(2, 7)}`,
+          intended_index: 1,
+          intended_name: form?.equipment_description || 'Equipamento Principal',
+          equipment_id: '',
+          billing_period_start: form?.period_start || contractData.snapshot?.period_start || '',
+          billing_period_end: form?.period_end || contractData.snapshot?.period_end || '',
+          cost_rental: Number(form?.cost_rental) || 0,
+          cost_insurance: Number(form?.cost_insurance) || 0,
+          cost_freight: Number(form?.cost_freight) || 0,
+          cost_rcd: Number(form?.cost_rcd) || 0,
+          cost_third_party: Number(form?.cost_third_party) || 0,
+          cost_training: Number(form?.cost_training) || 0,
+          total_value: Number(form?.cost_total) || 0
+        };
+        setTriagedEquipments([defaultItem]);
+        setActiveEquipmentTab(defaultItem.tempId);
+      }
+
       // Se o contrato já foi processado, abre diretamente na última etapa (Emissão)
       if (contractData.status === 'Processado') {
         setCurrentStep(2);
@@ -189,18 +277,97 @@ const LogisticsTriagem: React.FC = () => {
     }
   };
 
+  const handleSelectStockEquipment = (tempId: string, eqId: string) => {
+    const selectedEq = equipments.find(e => e.id === eqId);
+    setTriagedEquipments(prev => prev.map(item => {
+      if (item.tempId !== tempId) return item;
+      return {
+        ...item,
+        equipment_id: eqId,
+        equipment_name: selectedEq?.name || item.equipment_name,
+        equipment_type: selectedEq?.type || item.equipment_type,
+        asset_number: selectedEq?.asset_number || item.asset_number,
+        model: selectedEq?.model || item.model,
+        serial_number: selectedEq?.serial_number || item.serial_number,
+        hour_meter: (selectedEq as any)?.hour_meter ?? item.hour_meter
+      };
+    }));
+
+    if (!activeEquipmentTab || activeEquipmentTab === tempId) {
+      setActiveEquipmentTab(eqId || tempId);
+    }
+  };
+
+  const handleEquipmentFieldChange = (tempId: string, field: keyof TriagedEquipmentItem, value: any) => {
+    setTriagedEquipments(prev => prev.map(item => {
+      if (item.tempId !== tempId) return item;
+      const updated = { ...item, [field]: value };
+      if (['cost_rental', 'cost_insurance', 'cost_freight', 'cost_rcd', 'cost_third_party', 'cost_training'].includes(field)) {
+        updated.total_value = (
+          (Number(updated.cost_rental) || 0) +
+          (Number(updated.cost_insurance) || 0) +
+          (Number(updated.cost_freight) || 0) +
+          (Number(updated.cost_rcd) || 0) +
+          (Number(updated.cost_third_party) || 0) +
+          (Number(updated.cost_training) || 0)
+        );
+      }
+      return updated;
+    }));
+  };
+
+  const handleAddEquipmentRow = () => {
+    const defaultStart = contract?.contract_form?.period_start || contract?.snapshot?.period_start || '';
+    const defaultEnd = contract?.contract_form?.period_end || contract?.snapshot?.period_end || '';
+    const newTempId = `extra-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`;
+    const newItem: TriagedEquipmentItem = {
+      tempId: newTempId,
+      intended_name: `Equipamento Adicional #${triagedEquipments.length + 1}`,
+      equipment_id: '',
+      billing_period_start: defaultStart,
+      billing_period_end: defaultEnd,
+      cost_rental: 0,
+      cost_insurance: 0,
+      cost_freight: 0,
+      cost_rcd: 0,
+      cost_third_party: 0,
+      cost_training: 0,
+      total_value: 0
+    };
+    setTriagedEquipments(prev => [...prev, newItem]);
+  };
+
+  const handleRemoveEquipmentRow = (tempId: string) => {
+    if (triagedEquipments.length <= 1) {
+      alert('A triagem deve conter pelo menos um equipamento.');
+      return;
+    }
+    setTriagedEquipments(prev => prev.filter(item => item.tempId !== tempId));
+  };
+
+  // Identificar o equipamento ativo para checklist
+  const currentActiveEquipment = triagedEquipments.find(e => e.equipment_id === activeEquipmentTab || e.tempId === activeEquipmentTab) || triagedEquipments[0];
+
   const handlePhotoUpload = async (e: React.ChangeEvent<HTMLInputElement>, position: number, label: string) => {
     const file = e.target.files?.[0];
     if (!file) return;
+    if (!currentActiveEquipment?.equipment_id) {
+      alert('Por favor, selecione uma máquina física do estoque para este item antes de tirar fotos do checklist.');
+      return;
+    }
 
     try {
       setUploadingPosition(position);
       setError(null);
 
-      const newPhoto = await logisticsService.uploadTriagePhoto(id!, position, label, file);
+      const targetEquipmentId = currentActiveEquipment.equipment_id;
+      const newPhoto = await logisticsService.uploadTriagePhoto(id!, position, label, file, targetEquipmentId);
 
       setTriagePhotos(prev => {
-        const filtered = prev.filter(p => p.position !== position);
+        const filtered = prev.filter(p => !(
+          p.position === position &&
+          (p.equipment_id === targetEquipmentId || (!p.equipment_id && currentActiveEquipment === triagedEquipments[0]))
+        ));
         return [...filtered, newPhoto].sort((a, b) => a.position - b.position);
       });
     } catch (err: any) {
@@ -245,11 +412,13 @@ const LogisticsTriagem: React.FC = () => {
       setChargeError(null);
 
       const updatedContract = await logisticsService.finishProcessing(contract.id, {
-        equipment_id: selectedEquipmentId || undefined,
+        equipments: triagedEquipments,
+        equipment_id: triagedEquipments[0]?.equipment_id || undefined,
         billing_method: billingMethod,
         manual_due_date: billingMethod === 'MANUAL' ? manualDueDate : undefined,
         document_type: documentType,
       });
+
       // Clear localStorage draft upon successful completion
       localStorage.removeItem(`triage_draft_${id}`);
       setContract(updatedContract);
@@ -269,7 +438,14 @@ const LogisticsTriagem: React.FC = () => {
 
   const isStepValid = (stepIndex: number): boolean => {
     if (stepIndex === 0) {
-      return !!selectedEquipmentId && !!workSite.trim();
+      if (!workSite.trim()) return false;
+      if (triagedEquipments.length === 0) return false;
+      for (const item of triagedEquipments) {
+        if (!item.equipment_id) return false;
+        if (!item.billing_period_start || !item.billing_period_end) return false;
+        if (item.billing_period_end < item.billing_period_start) return false;
+      }
+      return true;
     }
     if (stepIndex === 1) {
       return true;
@@ -279,7 +455,11 @@ const LogisticsTriagem: React.FC = () => {
 
   const nextStep = () => {
     if (!isStepValid(currentStep)) {
-      setError(`Por favor, preencha todos os dados obrigatórios da Etapa ${currentStep + 1} antes de avançar.`);
+      if (currentStep === 0) {
+        setError('Por favor, associe uma máquina física do estoque para cada equipamento e preencha as datas de locação e o local de uso antes de avançar.');
+      } else {
+        setError(`Por favor, preencha todos os dados obrigatórios da Etapa ${currentStep + 1} antes de avançar.`);
+      }
       return;
     }
     setError(null);
@@ -319,16 +499,34 @@ const LogisticsTriagem: React.FC = () => {
   const isTriage = contract.status === 'Triagem';
 
   const getContractValue = (): number => {
-    if (contract.contract_form?.cost_total) return contract.contract_form.cost_total;
-    if (contract.snapshot?.costs?.total) return contract.snapshot.costs.total;
+    const sumTriaged = triagedEquipments.reduce((acc, e) => acc + (Number(e.total_value) || 0), 0);
+    if (sumTriaged > 0) return sumTriaged;
+    if (contract.contract_form?.cost_total) return Number(contract.contract_form.cost_total);
+    if (contract.snapshot?.costs?.total) return Number(contract.snapshot.costs.total);
     return contract.deal?.value || 0;
   };
 
-  // "Data de Fim" is used by the backend as the boleto's due date (dueDate).
-  // Without it, finishProcessing succeeds but the charge (Asaas) call fails.
-  const periodEnd: string | null = contract.contract_form?.period_end || contract.snapshot?.period_end || null;
+  // Obter datas extremas
+  const ends = triagedEquipments.map(e => e.billing_period_end).filter(Boolean).sort();
+  const periodEnd: string | null = ends.length > 0 ? ends[ends.length - 1] : (contract.contract_form?.period_end || contract.snapshot?.period_end || null);
+
   const missingDueDate = !isProcessed && isTriage && billingMethod === 'ASAAS' && !periodEnd;
   const missingManualDate = !isProcessed && isTriage && billingMethod === 'MANUAL' && !manualDueDate;
+
+  // Filtrar fotos do equipamento ativo na etapa 2
+  const activeEqPhotos = triagePhotos.filter(p => {
+    if (p.equipment_id) return p.equipment_id === currentActiveEquipment?.equipment_id;
+    return currentActiveEquipment === triagedEquipments[0];
+  });
+
+  // Estrutura de dados para o documento PDF de checklist consolidado
+  const equipmentsChecklistDataForPdf = triagedEquipments.map((item, idx) => ({
+    equipmentLabel: item.asset_number ? `#${item.asset_number} - ${item.equipment_name || 'Equipamento'}` : (item.equipment_name || `Máquina #${idx + 1}`),
+    assetNumber: item.asset_number,
+    model: item.model,
+    period: item.billing_period_start && item.billing_period_end ? `${formatDate(item.billing_period_start)} a ${formatDate(item.billing_period_end)}` : undefined,
+    photos: triagePhotos.filter(p => p.equipment_id === item.equipment_id || (!p.equipment_id && idx === 0))
+  }));
 
   return (
     <motion.div
@@ -347,7 +545,7 @@ const LogisticsTriagem: React.FC = () => {
         <div className="flex-1">
           <div className="flex items-center gap-3">
             <h1 className="text-2xl font-bold text-slate-900 dark:text-white tracking-tight">
-              {isProcessed ? 'Detalhes do Contrato' : 'Triagem de Contrato'}
+              {isProcessed ? 'Detalhes da Triagem e Contrato' : 'Triagem de Contrato e Equipamentos'}
             </h1>
             <span className={`text-[10px] font-black uppercase tracking-widest px-3 py-1 rounded-lg ${contract.status === 'Assinado' ? 'bg-amber-100 dark:bg-amber-500/20 text-amber-700 dark:text-amber-300' :
               contract.status === 'Triagem' ? 'bg-blue-100 dark:bg-blue-500/20 text-blue-700 dark:text-blue-300' :
@@ -372,7 +570,7 @@ const LogisticsTriagem: React.FC = () => {
             className="bg-emerald-50 dark:bg-emerald-500/10 border border-emerald-200 dark:border-emerald-500/20 text-emerald-700 dark:text-emerald-300 px-5 py-4 rounded-2xl text-sm flex items-center gap-3 font-medium"
           >
             <span className="material-symbols-outlined text-emerald-500 text-xl">check_circle</span>
-            Contrato processado com sucesso!
+            Contrato processado com sucesso! Equipamentos atualizados para Locado.
           </motion.div>
         )}
       </AnimatePresence>
@@ -456,25 +654,21 @@ const LogisticsTriagem: React.FC = () => {
             transition={{ duration: 0.2 }}
             className="space-y-6"
           >
-            {/* Client & Equipment Info */}
-            <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm">
-              <div className="p-6 border-b border-slate-100 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-800/20 rounded-t-2xl">
-                <h3 className="font-bold text-slate-900 dark:text-white flex items-center gap-2">
-                  <span className="material-symbols-outlined text-mustard-500 text-xl">person_pin_circle</span>
-                  Dados do Contrato
-                </h3>
-                <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">Confira as informações do contrato pré-preenchidas do formulário.</p>
+            {/* 1. Dados do Contrato e Obra */}
+            <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm p-6 space-y-6">
+              <div className="flex items-center gap-2 pb-4 border-b border-slate-100 dark:border-slate-800">
+                <span className="material-symbols-outlined text-mustard-500 text-xl">person_pin_circle</span>
+                <h3 className="font-bold text-slate-900 dark:text-white">Dados do Cliente & Local de Entrega</h3>
               </div>
-              <div className="p-6 grid grid-cols-1 md:grid-cols-2 gap-6">
-                {/* Client Name - read only */}
+
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                 <div className="space-y-1.5">
                   <label className="text-xs font-bold text-slate-500 uppercase tracking-widest ml-1">Cliente</label>
-                  <div className="w-full px-4 py-2.5 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-sm text-slate-900 dark:text-white font-medium">
+                  <div className="w-full px-4 py-2.5 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-sm text-slate-900 dark:text-white font-medium truncate">
                     {clientName || 'Não informado'}
                   </div>
                 </div>
 
-                {/* Client CNPJ - read only */}
                 <div className="space-y-1.5">
                   <label className="text-xs font-bold text-slate-500 uppercase tracking-widest ml-1">CNPJ</label>
                   <div className="w-full px-4 py-2.5 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-sm text-slate-900 dark:text-white font-medium font-mono">
@@ -482,31 +676,8 @@ const LogisticsTriagem: React.FC = () => {
                   </div>
                 </div>
 
-                {/* Equipment Description - read only */}
-                <div className="md:col-span-2 space-y-1.5">
-                  <label className="text-xs font-bold text-slate-500 uppercase tracking-widest ml-1">Descrição do Equipamento (do contrato)</label>
-                  <div className="w-full px-4 py-2.5 bg-amber-50/50 dark:bg-amber-500/5 border border-amber-200/50 dark:border-amber-500/20 rounded-xl text-sm text-slate-900 dark:text-white">
-                    {equipmentDescription || 'Não informado'}{equipmentModel ? ` | ${equipmentModel}` : ''}
-                  </div>
-                </div>
-
-                {/* Equipment Select */}
-                <div className="md:col-span-2">
-                  <SearchableSelect
-                    label="Equipamento do Estoque"
-                    placeholder="Selecione o equipamento correspondente"
-                    items={equipments}
-                    selectedId={selectedEquipmentId}
-                    onSelect={(id) => setSelectedEquipmentId(id)}
-                    getDisplayValue={(eq) => `${eq.asset_number} - ${eq.name}`}
-                    getSearchValue={(eq) => `${eq.name} ${eq.asset_number}`}
-                    disabled={isProcessed}
-                  />
-                </div>
-
-                {/* Work Site */}
-                <div className="md:col-span-2 space-y-1.5">
-                  <label className="text-xs font-bold text-slate-500 dark:text-slate-500 uppercase tracking-widest ml-1">Obra / Local de Uso</label>
+                <div className="space-y-1.5">
+                  <label className="text-xs font-bold text-slate-500 uppercase tracking-widest ml-1">Obra / Local de Uso *</label>
                   <input
                     type="text"
                     value={workSite}
@@ -516,6 +687,186 @@ const LogisticsTriagem: React.FC = () => {
                     className="w-full px-4 py-2.5 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-slate-900 dark:text-white focus:bg-white dark:focus:bg-slate-900 focus:ring-2 focus:ring-mustard-500/10 focus:border-mustard-500 transition-all outline-none text-sm placeholder:text-slate-400 dark:placeholder:text-slate-600 disabled:opacity-60"
                   />
                 </div>
+              </div>
+            </div>
+
+            {/* 2. Equipamentos Pretendidos no Contrato (Informativo do CRM) */}
+            {contract.intended_equipments && contract.intended_equipments.length > 0 && (
+              <div className="bg-amber-50/40 dark:bg-amber-500/5 border border-amber-200/60 dark:border-amber-500/20 rounded-2xl p-5 space-y-3">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <span className="material-symbols-outlined text-amber-600 text-lg">contract</span>
+                    <h4 className="text-xs font-black uppercase tracking-wider text-amber-900 dark:text-amber-200">
+                      Equipamentos Pretendidos no Contrato ({contract.intended_equipments.length})
+                    </h4>
+                  </div>
+                  <span className="text-xs font-bold text-amber-800 dark:text-amber-300">
+                    Definidos na Negociação Comercial
+                  </span>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                  {contract.intended_equipments.map((item, idx) => (
+                    <div key={idx} className="bg-white dark:bg-slate-800/80 border border-amber-200/40 dark:border-amber-500/20 rounded-xl p-3.5 space-y-2 shadow-sm">
+                      <div className="flex justify-between items-start">
+                        <span className="text-[10px] font-black uppercase px-2 py-0.5 rounded bg-amber-100 dark:bg-amber-500/20 text-amber-700 dark:text-amber-300">
+                          Item #{idx + 1}
+                        </span>
+                        <span className="text-xs font-bold text-slate-800 dark:text-slate-200">
+                          {(Number(item.total_value) || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
+                        </span>
+                      </div>
+                      <p className="text-sm font-bold text-slate-900 dark:text-white">
+                        {item.equipment_name || 'Equipamento'} {item.equipment_size ? `(${item.equipment_size})` : ''}
+                      </p>
+                      <div className="flex items-center gap-1.5 text-xs text-slate-500 dark:text-slate-400">
+                        <span className="material-symbols-outlined text-sm text-slate-400">event</span>
+                        <span>
+                          {item.billing_period_start ? formatDate(item.billing_period_start) : 'Início'} até {item.billing_period_end ? formatDate(item.billing_period_end) : 'Fim'}
+                        </span>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* 3. Seleção de Máquinas Físicas do Estoque */}
+            <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm overflow-hidden">
+              <div className="p-6 border-b border-slate-100 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-800/20 flex flex-wrap items-center justify-between gap-3">
+                <div>
+                  <h3 className="font-bold text-slate-900 dark:text-white flex items-center gap-2">
+                    <span className="material-symbols-outlined text-mustard-500 text-xl">precision_manufacturing</span>
+                    Equipamentos do Estoque para Entrega ({triagedEquipments.length})
+                  </h3>
+                  <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
+                    Selecione a máquina física específica do estoque para cada item e confirme seu período de locação.
+                  </p>
+                </div>
+                {!isProcessed && (
+                  <button
+                    type="button"
+                    onClick={handleAddEquipmentRow}
+                    className="px-3.5 py-2 bg-mustard-50 dark:bg-mustard-500/10 hover:bg-mustard-100 dark:hover:bg-mustard-500/20 text-mustard-700 dark:text-mustard-300 border border-mustard-200 dark:border-mustard-500/30 rounded-xl text-xs font-bold transition-colors flex items-center gap-1.5"
+                  >
+                    <span className="material-symbols-outlined text-base">add</span>
+                    Adicionar Equipamento
+                  </button>
+                )}
+              </div>
+
+              <div className="p-6 space-y-6">
+                {triagedEquipments.map((item, index) => {
+                  const selectedEq = equipments.find(e => e.id === item.equipment_id);
+                  // Filtra máquinas que já foram selecionadas em outro item desta triagem
+                  const availableOptions = equipments.filter(eq =>
+                    eq.id === item.equipment_id || !triagedEquipments.some(other => other.tempId !== item.tempId && other.equipment_id === eq.id)
+                  );
+
+                  return (
+                    <div
+                      key={item.tempId}
+                      className="border border-slate-200 dark:border-slate-800 rounded-2xl p-5 bg-slate-50/40 dark:bg-slate-800/20 space-y-4"
+                    >
+                      {/* Top Bar of item card */}
+                      <div className="flex items-center justify-between pb-3 border-b border-slate-200/60 dark:border-slate-800">
+                        <div className="flex items-center gap-2">
+                          <span className="w-6 h-6 rounded-lg bg-mustard-500 text-white text-xs font-black flex items-center justify-center">
+                            {index + 1}
+                          </span>
+                          <span className="text-xs font-bold text-slate-700 dark:text-slate-200">
+                            {item.intended_name || `Equipamento #${index + 1}`}
+                          </span>
+                          {selectedEq && (
+                            <span className={`text-[10px] font-black uppercase px-2 py-0.5 rounded-md ${
+                              selectedEq.status === 'Disponível' ? 'bg-emerald-100 dark:bg-emerald-500/20 text-emerald-700 dark:text-emerald-400' :
+                              selectedEq.status === 'Locado' ? 'bg-blue-100 dark:bg-blue-500/20 text-blue-700 dark:text-blue-400' :
+                              'bg-amber-100 dark:bg-amber-500/20 text-amber-700 dark:text-amber-400'
+                            }`}>
+                              {selectedEq.status}
+                            </span>
+                          )}
+                        </div>
+                        {!isProcessed && triagedEquipments.length > 1 && (
+                          <button
+                            type="button"
+                            onClick={() => handleRemoveEquipmentRow(item.tempId)}
+                            className="text-xs font-bold text-red-500 hover:text-red-700 flex items-center gap-1 p-1 rounded-lg hover:bg-red-50 dark:hover:bg-red-500/10 transition-colors"
+                          >
+                            <span className="material-symbols-outlined text-base">delete</span>
+                            Remover
+                          </button>
+                        )}
+                      </div>
+
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        {/* SearchableSelect for Stock Equipment */}
+                        <div className="md:col-span-2">
+                          <SearchableSelect
+                            label="Máquina Física do Estoque"
+                            placeholder="Selecione o equipamento correspondente pelo patrimônio ou nome"
+                            items={availableOptions}
+                            selectedId={item.equipment_id}
+                            onSelect={(eqId) => handleSelectStockEquipment(item.tempId, eqId)}
+                            getDisplayValue={(eq) => `${eq.asset_number ? '#' + eq.asset_number + ' - ' : ''}${eq.name} (${eq.status})`}
+                            getSearchValue={(eq) => `${eq.name} ${eq.asset_number || ''} ${eq.type || ''} ${eq.status} ${eq.model || ''}`}
+                            disabled={isProcessed}
+                          />
+                        </div>
+
+                        {/* Equipment details badge if selected */}
+                        {selectedEq && (
+                          <div className="md:col-span-2 grid grid-cols-2 sm:grid-cols-4 gap-2.5 p-3 bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800 text-xs">
+                            <div>
+                              <span className="text-slate-400 block text-[10px] font-bold uppercase">Patrimônio</span>
+                              <span className="font-bold text-slate-800 dark:text-slate-200">{selectedEq.asset_number || 'S/N'}</span>
+                            </div>
+                            <div>
+                              <span className="text-slate-400 block text-[10px] font-bold uppercase">Modelo</span>
+                              <span className="font-bold text-slate-800 dark:text-slate-200">{selectedEq.model || '—'}</span>
+                            </div>
+                            <div>
+                              <span className="text-slate-400 block text-[10px] font-bold uppercase">Nº de Série</span>
+                              <span className="font-bold text-slate-800 dark:text-slate-200">{selectedEq.serial_number || '—'}</span>
+                            </div>
+                            <div>
+                              <span className="text-slate-400 block text-[10px] font-bold uppercase">Horímetro Atual</span>
+                              <span className="font-bold text-slate-800 dark:text-slate-200">{(selectedEq as any)?.hour_meter ?? item.hour_meter ?? '0'}h</span>
+                            </div>
+                          </div>
+                        )}
+
+                        {/* Individual Billing Period Start */}
+                        <div className="space-y-1.5">
+                          <label className="text-xs font-bold text-slate-500 uppercase tracking-widest ml-1">
+                            Data Início da Locação *
+                          </label>
+                          <input
+                            type="date"
+                            value={item.billing_period_start || ''}
+                            onChange={(e) => handleEquipmentFieldChange(item.tempId, 'billing_period_start', e.target.value)}
+                            disabled={isProcessed}
+                            className="w-full px-4 py-2.5 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl text-slate-900 dark:text-white text-sm outline-none focus:ring-2 focus:ring-mustard-500"
+                          />
+                        </div>
+
+                        {/* Individual Billing Period End */}
+                        <div className="space-y-1.5">
+                          <label className="text-xs font-bold text-slate-500 uppercase tracking-widest ml-1">
+                            Data Término da Locação *
+                          </label>
+                          <input
+                            type="date"
+                            value={item.billing_period_end || ''}
+                            onChange={(e) => handleEquipmentFieldChange(item.tempId, 'billing_period_end', e.target.value)}
+                            disabled={isProcessed}
+                            className="w-full px-4 py-2.5 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl text-slate-900 dark:text-white text-sm outline-none focus:ring-2 focus:ring-mustard-500"
+                          />
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
               </div>
             </div>
           </motion.div>
@@ -530,16 +881,65 @@ const LogisticsTriagem: React.FC = () => {
             transition={{ duration: 0.2 }}
             className="space-y-6"
           >
-            {/* Photo Upload Section */}
+            {/* Selector de Abas dos Equipamentos */}
+            <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm p-5 space-y-4">
+              <div className="flex flex-wrap items-center justify-between gap-2 pb-3 border-b border-slate-100 dark:border-slate-800">
+                <div className="flex items-center gap-2">
+                  <span className="material-symbols-outlined text-mustard-500">checklist</span>
+                  <h4 className="text-xs font-black uppercase tracking-wider text-slate-800 dark:text-slate-200">
+                    Selecione o Equipamento para Realizar o Checklist Fotográfico
+                  </h4>
+                </div>
+                <span className="text-xs font-bold text-slate-500">
+                  Total de Fotos: {triagePhotos.length} fotos salvas
+                </span>
+              </div>
+
+              {/* Abas horizontais dos equipamentos */}
+              <div className="flex items-center gap-2.5 overflow-x-auto pb-1">
+                {triagedEquipments.map((item, idx) => {
+                  const eqPhotos = triagePhotos.filter(p => p.equipment_id === item.equipment_id || (!p.equipment_id && idx === 0));
+                  const isComplete = eqPhotos.length === CHECKLIST_ITEMS.length;
+                  const isTabActive = (activeEquipmentTab === item.equipment_id) || (!activeEquipmentTab && idx === 0);
+
+                  return (
+                    <button
+                      key={item.tempId}
+                      type="button"
+                      onClick={() => setActiveEquipmentTab(item.equipment_id || item.tempId)}
+                      className={`px-4 py-2.5 rounded-xl text-xs font-bold transition-all flex items-center gap-2.5 whitespace-nowrap border ${
+                        isTabActive
+                          ? 'bg-mustard-500 text-white border-mustard-500 shadow-md shadow-mustard-500/20'
+                          : 'bg-slate-50 dark:bg-slate-800/80 text-slate-700 dark:text-slate-300 border-slate-200 dark:border-slate-700 hover:border-slate-300'
+                      }`}
+                    >
+                      <span className="material-symbols-outlined text-base">precision_manufacturing</span>
+                      <span>{item.asset_number ? `Patrimônio #${item.asset_number}` : `Máquina #${idx + 1}`}</span>
+                      <span className={`px-2 py-0.5 rounded-md text-[10px] font-black ${
+                        isTabActive
+                          ? 'bg-black/20 text-white'
+                          : isComplete
+                            ? 'bg-emerald-100 dark:bg-emerald-500/20 text-emerald-700 dark:text-emerald-300'
+                            : 'bg-slate-200 dark:bg-slate-700 text-slate-600 dark:text-slate-400'
+                      }`}>
+                        {eqPhotos.length}/{CHECKLIST_ITEMS.length} fotos {isComplete && '✓'}
+                      </span>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+
+            {/* Photo Upload Section for Active Equipment */}
             <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm">
               <div className="p-6 border-b border-slate-100 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-800/20 rounded-t-2xl flex flex-wrap justify-between items-center gap-4">
                 <div>
                   <h3 className="font-bold text-slate-900 dark:text-white flex items-center gap-2">
                     <span className="material-symbols-outlined text-mustard-500 text-xl">photo_camera</span>
-                    Documentação Fotográfica
+                    Checklist de Saída: {currentActiveEquipment?.asset_number ? `Patrimônio #${currentActiveEquipment.asset_number} — ` : ''}{currentActiveEquipment?.equipment_name || 'Equipamento'}
                   </h3>
                   <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
-                    Checklist de fotos de conferência do estado do equipamento antes da entrega.
+                    Confira e registre as 22 fotos de inspeção obrigatórias antes da expedição desta máquina.
                   </p>
                 </div>
                 <div className="flex items-center gap-3">
@@ -569,7 +969,7 @@ const LogisticsTriagem: React.FC = () => {
                     </button>
                   </div>
                   <div className="bg-slate-100 dark:bg-slate-800 px-4 py-2 rounded-xl border border-slate-200 dark:border-slate-700 font-bold text-sm text-slate-700 dark:text-slate-300">
-                    Progresso: {triagePhotos.length} / {CHECKLIST_ITEMS.length}
+                    Progresso: {activeEqPhotos.length} / {CHECKLIST_ITEMS.length}
                   </div>
                 </div>
               </div>
@@ -578,7 +978,7 @@ const LogisticsTriagem: React.FC = () => {
                   /* Photo Checklist Grid */
                   <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
                     {CHECKLIST_ITEMS.map((item) => {
-                      const photo = triagePhotos.find(p => p.position === item.position);
+                      const photo = activeEqPhotos.find(p => p.position === item.position);
                       const isUploading = uploadingPosition === item.position;
 
                       return (
@@ -678,7 +1078,7 @@ const LogisticsTriagem: React.FC = () => {
                   /* Photo Checklist List */
                   <div className="space-y-3">
                     {CHECKLIST_ITEMS.map((item) => {
-                      const photo = triagePhotos.find(p => p.position === item.position);
+                      const photo = activeEqPhotos.find(p => p.position === item.position);
                       const isUploading = uploadingPosition === item.position;
 
                       return (
@@ -686,7 +1086,6 @@ const LogisticsTriagem: React.FC = () => {
                           key={item.position}
                           className="flex items-center justify-between p-4 bg-slate-50 dark:bg-slate-800/40 border border-slate-200 dark:border-slate-800 rounded-2xl hover:border-slate-300 dark:hover:border-slate-700 transition-colors"
                         >
-                          {/* Left side: Check status + Item position and Label */}
                           <div className="flex items-center gap-4 min-w-0">
                             {photo ? (
                               <span className="material-symbols-outlined text-emerald-500 text-xl font-bold shrink-0">check_box</span>
@@ -703,9 +1102,7 @@ const LogisticsTriagem: React.FC = () => {
                             </div>
                           </div>
 
-                          {/* Right side: Photo icon/thumbnail + Actions */}
                           <div className="flex items-center gap-4 shrink-0">
-                            {/* Image icon/thumbnail when uploaded */}
                             {isUploading ? (
                               <div className="w-10 h-10 flex items-center justify-center">
                                 <div className="w-6 h-6 border-2 border-mustard-500/30 border-t-mustard-500 rounded-full animate-spin" />
@@ -730,7 +1127,6 @@ const LogisticsTriagem: React.FC = () => {
                               </div>
                             )}
 
-                            {/* Actions on opposite right side */}
                             <div className="flex items-center gap-2">
                               {isUploading ? null : photo ? (
                                 !isProcessed && (
@@ -746,7 +1142,6 @@ const LogisticsTriagem: React.FC = () => {
                               ) : (
                                 !isProcessed && (
                                   <div className="flex items-center gap-2">
-                                    {/* Mobile Camera capture */}
                                     <label className="py-2 px-3 bg-mustard-500 hover:bg-mustard-600 text-white rounded-xl text-[10px] font-black uppercase tracking-wider cursor-pointer transition-all flex items-center gap-1 shadow-md shadow-mustard-500/10 active:scale-[0.97]">
                                       <span className="material-symbols-outlined text-[14px]">photo_camera</span>
                                       Câmera
@@ -759,7 +1154,6 @@ const LogisticsTriagem: React.FC = () => {
                                       />
                                     </label>
 
-                                    {/* Desktop Gallery Picker */}
                                     <label className="py-2 px-2.5 bg-slate-200 hover:bg-slate-300 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 rounded-xl text-[10px] font-black uppercase tracking-wider cursor-pointer transition-all flex items-center active:scale-[0.97]">
                                       <span className="material-symbols-outlined text-[14px]">file_upload</span>
                                       <input
@@ -794,43 +1188,92 @@ const LogisticsTriagem: React.FC = () => {
             className="space-y-6"
           >
             {/* Summary Card */}
-            <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm">
-              <div className="p-6 border-b border-slate-100 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-800/20 rounded-t-2xl">
+            <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm overflow-hidden">
+              <div className="p-6 border-b border-slate-100 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-800/20">
                 <h3 className="font-bold text-slate-900 dark:text-white flex items-center gap-2">
                   <span className="material-symbols-outlined text-mustard-500 text-xl">receipt_long</span>
-                  Resumo do Contrato
+                  Resumo Geral da Locação
                 </h3>
-                <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">Confira os dados consolidados do contrato e do equipamento antes de finalizar.</p>
+                <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
+                  Confira todos os equipamentos triados, seus checklists fotográficos e os valores finais.
+                </p>
               </div>
-              <div className="p-6">
+
+              {/* Tabela de Equipamentos Triados */}
+              <div className="p-6 space-y-4">
+                <h4 className="text-xs font-black uppercase tracking-wider text-slate-400">
+                  Equipamentos Triados ({triagedEquipments.length})
+                </h4>
+
+                <div className="overflow-x-auto border border-slate-200 dark:border-slate-800 rounded-xl">
+                  <table className="w-full text-left text-xs">
+                    <thead className="bg-slate-50 dark:bg-slate-800/60 text-slate-500 uppercase font-black tracking-wider border-b border-slate-200 dark:border-slate-800">
+                      <tr>
+                        <th className="py-3 px-4">Patrimônio / Nome</th>
+                        <th className="py-3 px-4">Modelo</th>
+                        <th className="py-3 px-4">Período</th>
+                        <th className="py-3 px-4">Checklist de Saída</th>
+                        <th className="py-3 px-4 text-right">Valor Total</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
+                      {triagedEquipments.map((item, idx) => {
+                        const photosCount = triagePhotos.filter(p => p.equipment_id === item.equipment_id || (!p.equipment_id && idx === 0)).length;
+                        const isComplete = photosCount === CHECKLIST_ITEMS.length;
+
+                        return (
+                          <tr key={item.tempId} className="hover:bg-slate-50/50 dark:hover:bg-slate-800/30">
+                            <td className="py-3.5 px-4 font-bold text-slate-900 dark:text-white">
+                              {item.asset_number ? `#${item.asset_number} — ` : ''}{item.equipment_name || 'Equipamento'}
+                            </td>
+                            <td className="py-3.5 px-4 text-slate-600 dark:text-slate-300">
+                              {item.model || '—'}
+                            </td>
+                            <td className="py-3.5 px-4 text-slate-600 dark:text-slate-300">
+                              {item.billing_period_start && item.billing_period_end ? (
+                                `${formatDate(item.billing_period_start)} a ${formatDate(item.billing_period_end)}`
+                              ) : 'Não informado'}
+                            </td>
+                            <td className="py-3.5 px-4">
+                              <span className={`inline-flex items-center gap-1 text-[10px] font-black px-2 py-0.5 rounded-md ${
+                                isComplete
+                                  ? 'bg-emerald-100 dark:bg-emerald-500/20 text-emerald-700 dark:text-emerald-300'
+                                  : 'bg-amber-100 dark:bg-amber-500/20 text-amber-700 dark:text-amber-300'
+                              }`}>
+                                <span className="material-symbols-outlined text-xs">{isComplete ? 'check_circle' : 'pending'}</span>
+                                {photosCount} / {CHECKLIST_ITEMS.length} fotos
+                              </span>
+                            </td>
+                            <td className="py-3.5 px-4 text-right font-bold text-slate-900 dark:text-white">
+                              {(Number(item.total_value) || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+
                 {/* Summary Grid */}
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  {[
-                    { label: 'Contrato', value: `#${contract.contract_number}`, icon: 'description' },
-                    { label: 'Versão', value: `v${contract.version}`, icon: 'history' },
-                    { label: 'Cliente', value: clientName || 'N/A', icon: 'business' },
-                    { label: 'CNPJ', value: clientCnpj || 'N/A', icon: 'badge' },
-                    { label: 'Equipamento', value: equipmentDescription || 'N/A', icon: 'precision_manufacturing' },
-                    { label: 'Local de Uso', value: workSite || 'N/A', icon: 'location_on' },
-                    { label: 'Valor Total', value: getContractValue().toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' }), icon: 'payments' },
-                    { label: 'Fotos Anexadas', value: `${triagePhotos.length} / ${CHECKLIST_ITEMS.length} foto(s)`, icon: 'photo_camera' },
-                    {
-                      label: 'Período Contratado',
-                      value: periodEnd ? `${formatDate(contract.contract_form?.period_start || '')} a ${formatDate(periodEnd)}` : 'Não informado',
-                      icon: 'event',
-                      alert: !periodEnd,
-                    },
-                  ].map((item) => (
-                    <div key={item.label} className={`rounded-xl border p-4 flex items-start gap-3 ${item.alert ? 'bg-red-50 dark:bg-red-500/10 border-red-100 dark:border-red-500/20' : 'bg-slate-50/50 dark:bg-slate-800/30 border-slate-100 dark:border-slate-800'}`}>
-                      <div className="w-9 h-9 bg-white dark:bg-slate-900 rounded-lg flex items-center justify-center shrink-0 border border-slate-100 dark:border-slate-800">
-                        <span className={`material-symbols-outlined text-lg ${item.alert ? 'text-red-500' : 'text-mustard-500'}`}>{item.icon}</span>
-                      </div>
-                      <div className="min-w-0">
-                        <p className="text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest">{item.label}</p>
-                        <p className={`text-sm font-bold mt-0.5 truncate ${item.alert ? 'text-red-700 dark:text-red-300' : 'text-slate-900 dark:text-white'}`}>{item.value}</p>
-                      </div>
-                    </div>
-                  ))}
+                <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-3 pt-2">
+                  <div className="p-3.5 bg-slate-50 dark:bg-slate-800/40 rounded-xl border border-slate-200 dark:border-slate-800">
+                    <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest block">Contrato</span>
+                    <span className="text-sm font-bold text-slate-900 dark:text-white">#{contract.contract_number} (v{contract.version})</span>
+                  </div>
+                  <div className="p-3.5 bg-slate-50 dark:bg-slate-800/40 rounded-xl border border-slate-200 dark:border-slate-800">
+                    <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest block">Cliente</span>
+                    <span className="text-sm font-bold text-slate-900 dark:text-white truncate block">{clientName || 'N/A'}</span>
+                  </div>
+                  <div className="p-3.5 bg-slate-50 dark:bg-slate-800/40 rounded-xl border border-slate-200 dark:border-slate-800">
+                    <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest block">Local de Uso</span>
+                    <span className="text-sm font-bold text-slate-900 dark:text-white truncate block">{workSite || 'N/A'}</span>
+                  </div>
+                  <div className="p-3.5 bg-mustard-50/50 dark:bg-mustard-500/10 rounded-xl border border-mustard-200/60 dark:border-mustard-500/20">
+                    <span className="text-[10px] font-black text-mustard-600 dark:text-mustard-400 uppercase tracking-widest block">Valor Total Geral</span>
+                    <span className="text-base font-black text-mustard-700 dark:text-mustard-300">
+                      {getContractValue().toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
+                    </span>
+                  </div>
                 </div>
               </div>
             </div>
@@ -875,10 +1318,10 @@ const LogisticsTriagem: React.FC = () => {
                         />
                         <div>
                           <p className="font-bold text-sm text-slate-900 dark:text-white">
-                            Fluxo Completo pelo gateway
+                            Fluxo Completo pelo Gateway
                           </p>
                           <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5 leading-relaxed">
-                            Gera boleto bancário e PIX automaticamente pela API. Cobrança gerada e pagamento validado pelo sistema.
+                            Gera cobrança bancária e boleto/PIX automaticamente pela API do Asaas.
                           </p>
                         </div>
                       </div>
@@ -904,7 +1347,7 @@ const LogisticsTriagem: React.FC = () => {
                             Lançamento Manual
                           </p>
                           <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5 leading-relaxed">
-                            Registra no contas a receber (extrato) sem gerar cobrança no gateway. Utilizar se não quiser cobrar o cliente pelo sistema
+                            Registra diretamente no Contas a Receber (Bills) sem gerar cobrança no gateway.
                           </p>
                         </div>
                       </div>
@@ -923,7 +1366,7 @@ const LogisticsTriagem: React.FC = () => {
                           Data de Vencimento do Lançamento
                         </label>
                         <p className="text-[11px] text-slate-500 dark:text-slate-400">
-                          Preenchida automaticamente com a data de término/fechamento do contrato.
+                          Preenchida automaticamente com a data de término do contrato.
                         </p>
                       </div>
                       <input
@@ -936,10 +1379,10 @@ const LogisticsTriagem: React.FC = () => {
                   )}
                 </div>
 
-                {/* 2. Tipo de Documento Fiscal Obrigatório */}
+                {/* 2. Tipo de Documento Fiscal */}
                 <div className="space-y-3 pt-4 border-t border-slate-100 dark:border-slate-800">
                   <label className="block text-xs font-black text-slate-700 dark:text-slate-300 uppercase tracking-wider">
-                    2. Documento Fiscal / Comprovante (Obrigatório)
+                    2. Documento Fiscal / Comprovante
                   </label>
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                     <div
@@ -967,7 +1410,7 @@ const LogisticsTriagem: React.FC = () => {
                             </span>
                           </div>
                           <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5 leading-relaxed">
-                            Gera e envia o PDF de Fatura de Locação ao cliente (não emite NFS-e municipal).
+                            Gera e envia o PDF de Fatura de Locação da Alto Master ao cliente.
                           </p>
                         </div>
                       </div>
@@ -1011,13 +1454,13 @@ const LogisticsTriagem: React.FC = () => {
               </h4>
 
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-2">
-                {/* 1. Checklist de Triagem */}
+                {/* 1. Checklist de Triagem Consolidado */}
                 <div className="p-4 rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-800/30 space-y-3">
                   <div className="flex items-center gap-2.5">
                     <span className="material-symbols-outlined text-mustard-500 text-xl">photo_camera</span>
                     <div>
-                      <h5 className="font-bold text-xs text-slate-900 dark:text-white">Relatório de Conferência de Estado</h5>
-                      <p className="text-[11px] text-slate-400">Checklist fotográfico completo da triagem</p>
+                      <h5 className="font-bold text-xs text-slate-900 dark:text-white">Relatório de Checklist Fotográfico</h5>
+                      <p className="text-[11px] text-slate-400">Documento com as 22 fotos de cada equipamento</p>
                     </div>
                   </div>
                   <div className="flex flex-wrap gap-2 pt-1">
@@ -1028,8 +1471,7 @@ const LogisticsTriagem: React.FC = () => {
                           const blob = await pdf(
                             <TriageChecklistDocument
                               contract={contract}
-                              photos={triagePhotos}
-                              equipmentLabel={equipmentDescription}
+                              equipmentsWithPhotos={equipmentsChecklistDataForPdf}
                               clientName={clientName}
                               workSite={workSite}
                             />
@@ -1053,8 +1495,7 @@ const LogisticsTriagem: React.FC = () => {
                           const blob = await pdf(
                             <TriageChecklistDocument
                               contract={contract}
-                              photos={triagePhotos}
-                              equipmentLabel={equipmentDescription}
+                              equipmentsWithPhotos={equipmentsChecklistDataForPdf}
                               clientName={clientName}
                               workSite={workSite}
                             />
@@ -1179,7 +1620,7 @@ const LogisticsTriagem: React.FC = () => {
                   <div>
                     <h3 className="text-lg font-bold">Pronto para Emitir e Finalizar?</h3>
                     <p className="text-sm opacity-70">
-                      O contrato será processado com o método: <b>{billingMethod === 'MANUAL' ? 'Lançamento Manual (Bills)' : 'Cobrança Asaas'}</b> e documento: <b>{documentType === 'FATURA_LOCACAO' ? 'Fatura de Locação' : 'NFS-e'}</b>.
+                      O contrato será processado com {triagedEquipments.length} equipamento(s), método: <b>{billingMethod === 'MANUAL' ? 'Lançamento Manual (Bills)' : 'Cobrança Asaas'}</b> e documento: <b>{documentType === 'FATURA_LOCACAO' ? 'Fatura de Locação' : 'NFS-e'}</b>.
                     </p>
                   </div>
                 </div>
@@ -1194,7 +1635,7 @@ const LogisticsTriagem: React.FC = () => {
                   ) : (
                     <>
                       <span className="material-symbols-outlined text-xl">check_circle</span>
-                      Emitir e Finalizar Processamento
+                      Emitir e Finalizar Processamento ({triagedEquipments.length} Equipamento{triagedEquipments.length > 1 ? 's' : ''})
                     </>
                   )}
                 </button>
@@ -1287,11 +1728,17 @@ const LogisticsTriagem: React.FC = () => {
               <div>
                 <h3 className="text-lg font-black text-slate-900 dark:text-white">Confirmar Finalização</h3>
                 <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
-                  Revise as definições de faturamento para esta locação:
+                  Revise as definições de faturamento para esta locação ({triagedEquipments.length} equipamento(s)):
                 </p>
               </div>
 
               <div className="bg-slate-50 dark:bg-slate-800/50 rounded-2xl p-4 text-xs text-left space-y-2 border border-slate-100 dark:border-slate-800">
+                <div className="flex justify-between">
+                  <span className="text-slate-400">Total de Equipamentos:</span>
+                  <span className="font-bold text-slate-800 dark:text-slate-200">
+                    {triagedEquipments.length} máquina(s)
+                  </span>
+                </div>
                 <div className="flex justify-between">
                   <span className="text-slate-400">Cobrança:</span>
                   <span className="font-bold text-slate-800 dark:text-slate-200">

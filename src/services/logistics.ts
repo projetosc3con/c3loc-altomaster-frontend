@@ -61,11 +61,29 @@ export interface LogisticsContract {
     contract_date?: string;
     form_status?: string;
   };
+  intended_equipments?: Array<{
+    tempId?: string;
+    equipment_id?: string;
+    equipment_name?: string;
+    equipment_type?: string;
+    equipment_size?: string;
+    asset_number?: string;
+    billing_period_start?: string;
+    billing_period_end?: string;
+    cost_rental?: number;
+    cost_insurance?: number;
+    cost_freight?: number;
+    cost_rcd?: number;
+    cost_third_party?: number;
+    cost_training?: number;
+    total_value?: number;
+  }>;
 }
 
 export interface TriagePhoto {
   id: string;
   contract_id: string;
+  equipment_id?: string;
   position: number;
   label: string;
   file_path: string;
@@ -99,6 +117,7 @@ export const logisticsService = {
     id: string,
     data: {
       equipment_id?: string;
+      equipments?: any[];
       billing_method?: 'ASAAS' | 'MANUAL';
       manual_due_date?: string;
       document_type?: 'NFSE' | 'FATURA_LOCACAO';
@@ -111,10 +130,18 @@ export const logisticsService = {
 
   // --- Triage Photo Checklist ---
 
-  uploadTriagePhoto: async (contractId: string, position: number, label: string, file: File): Promise<TriagePhoto> => {
+  uploadTriagePhoto: async (
+    contractId: string,
+    position: number,
+    label: string,
+    file: File,
+    equipmentId?: string
+  ): Promise<TriagePhoto> => {
     const { supabase } = await import('../lib/supabase');
     const ext = file.name.split('.').pop() || 'jpg';
-    const filePath = `${contractId}/${position}.${ext}`;
+    const filePath = equipmentId
+      ? `${contractId}/${equipmentId}/${position}.${ext}`
+      : `${contractId}/${position}.${ext}`;
 
     const { error: uploadError } = await supabase.storage
       .from('logistics-triage')
@@ -125,13 +152,15 @@ export const logisticsService = {
     const response = await api.post(`/logistics/contracts/${contractId}/triage-photos`, {
       position,
       label,
-      file_path: filePath
+      file_path: filePath,
+      equipment_id: equipmentId || undefined
     });
     return response.data;
   },
 
-  getTriagePhotos: async (contractId: string): Promise<TriagePhoto[]> => {
-    const response = await api.get(`/logistics/contracts/${contractId}/triage-photos`);
+  getTriagePhotos: async (contractId: string, equipmentId?: string): Promise<TriagePhoto[]> => {
+    const params = equipmentId ? { equipment_id: equipmentId } : undefined;
+    const response = await api.get(`/logistics/contracts/${contractId}/triage-photos`, { params });
     return response.data;
   },
 
