@@ -227,7 +227,7 @@ export const RentalExtensionModal: React.FC<RentalExtensionModalProps> = ({
                   )}
                 </h3>
                 <p className="text-xs text-slate-500 dark:text-slate-400">
-                  Altere a data de término e os valores dos equipamentos para gerar uma nova versão do contrato.
+                  Altere a data de término e os valores dos equipamentos para prorrogar a vigência da locação.
                 </p>
               </div>
             </div>
