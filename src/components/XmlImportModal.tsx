@@ -40,6 +40,8 @@ const DESTINATION_OPTIONS: { value: NfeItemDestination; label: string; icon: str
 export const XmlImportModal: React.FC<XmlImportModalProps> = ({ isOpen, onClose, onSuccess }) => {
   const [step, setStep] = useState<'upload' | 'items' | 'payment' | 'success'>('upload');
   const [xmlContent, setXmlContent] = useState<string>('');
+  const [pdfBase64, setPdfBase64] = useState<string>('');
+  const [fileType, setFileType] = useState<'xml' | 'pdf' | null>(null);
   const [fileName, setFileName] = useState<string>('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -57,41 +59,66 @@ export const XmlImportModal: React.FC<XmlImportModalProps> = ({ isOpen, onClose,
 
   if (!isOpen) return null;
 
-  // Handle File Upload
+  // Handle File Upload (XML or PDF)
   const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
 
-    if (!file.name.endsWith('.xml')) {
-      setError('Por favor, selecione um arquivo com extensão .xml válido.');
+    const lowerName = file.name.toLowerCase();
+    const isXml = lowerName.endsWith('.xml');
+    const isPdf = lowerName.endsWith('.pdf') || file.type === 'application/pdf';
+
+    if (!isXml && !isPdf) {
+      setError('Por favor, selecione um arquivo válido com extensão .xml ou .pdf.');
       return;
     }
 
     setFileName(file.name);
     setError(null);
 
-    const reader = new FileReader();
-    reader.onload = (evt) => {
-      const content = evt.target?.result as string;
-      setXmlContent(content);
-    };
-    reader.onerror = () => {
-      setError('Erro ao ler o arquivo XML selecionado.');
-    };
-    reader.readAsText(file);
+    if (isXml) {
+      setFileType('xml');
+      setPdfBase64('');
+      const reader = new FileReader();
+      reader.onload = (evt) => {
+        const content = evt.target?.result as string;
+        setXmlContent(content);
+      };
+      reader.onerror = () => {
+        setError('Erro ao ler o arquivo XML selecionado.');
+      };
+      reader.readAsText(file);
+    } else {
+      setFileType('pdf');
+      setXmlContent('');
+      const reader = new FileReader();
+      reader.onload = (evt) => {
+        const dataUrl = evt.target?.result as string;
+        const base64 = dataUrl.split(',')[1] || dataUrl;
+        setPdfBase64(base64);
+      };
+      reader.onerror = () => {
+        setError('Erro ao ler o arquivo PDF selecionado.');
+      };
+      reader.readAsDataURL(file);
+    }
   };
 
-  // Step 1 -> Parse XML
+  // Step 1 -> Parse Document (XML or PDF)
   const handleParseXml = async () => {
-    if (!xmlContent.trim()) {
-      setError('Cole ou selecione um arquivo XML antes de prosseguir.');
+    if (!xmlContent.trim() && !pdfBase64) {
+      setError('Selecione um arquivo XML ou PDF (ou cole o XML) antes de prosseguir.');
       return;
     }
 
     try {
       setLoading(true);
       setError(null);
-      const { data } = await api.post('/fiscal/nfe/parse', { xml: xmlContent });
+      const payload = pdfBase64
+        ? { pdf_base64: pdfBase64, file_name: fileName }
+        : { xml: xmlContent };
+
+      const { data } = await api.post('/fiscal/nfe/parse', payload);
       setParsedData(data);
 
       // Initialize items config
@@ -232,6 +259,8 @@ export const XmlImportModal: React.FC<XmlImportModalProps> = ({ isOpen, onClose,
   const handleReset = () => {
     setStep('upload');
     setXmlContent('');
+    setPdfBase64('');
+    setFileType(null);
     setFileName('');
     setParsedData(null);
     setItemsConfig({});
@@ -271,7 +300,7 @@ export const XmlImportModal: React.FC<XmlImportModalProps> = ({ isOpen, onClose,
             </div>
             <div>
               <h2 className="text-xl font-black text-slate-900 dark:text-white">
-                Importar Nota Fiscal Eletrônica (NF-e XML)
+                Importar Nota Fiscal Eletrônica (NF-e - XML ou PDF)
               </h2>
               <p className="text-xs text-slate-500 dark:text-slate-400 font-medium">
                 Entrada de equipamentos, peças, consumo, EPIs e geração de contas a pagar.
@@ -293,7 +322,7 @@ export const XmlImportModal: React.FC<XmlImportModalProps> = ({ isOpen, onClose,
               <span className={`w-6 h-6 rounded-full flex items-center justify-center text-[11px] ${step === 'upload' ? 'bg-mustard-500 text-white' : 'bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-300'}`}>
                 1
               </span>
-              <span className={step === 'upload' ? 'text-slate-900 dark:text-white' : 'text-slate-500'}>Upload do XML</span>
+              <span className={step === 'upload' ? 'text-slate-900 dark:text-white' : 'text-slate-500'}>Upload (XML ou PDF)</span>
             </div>
             <span className="material-symbols-outlined text-slate-300 dark:text-slate-700 text-[16px]">chevron_right</span>
             <div className="flex items-center gap-2">
@@ -329,24 +358,24 @@ export const XmlImportModal: React.FC<XmlImportModalProps> = ({ isOpen, onClose,
                   <span className="material-symbols-outlined text-3xl">upload_file</span>
                 </div>
                 <h3 className="text-lg font-bold text-slate-900 dark:text-white">
-                  Selecione ou Arraste o arquivo XML da NF-e
+                  Selecione ou Arraste o arquivo XML ou PDF (DANFE) da NF-e
                 </h3>
                 <p className="text-sm text-slate-500 dark:text-slate-400 mt-1 max-w-md mx-auto font-medium">
-                  Aceita arquivos de NF-e no padrão SEFAZ (versão 4.00), contendo dados de emitente, produtos, impostos e duplicatas.
+                  Aceita arquivos no padrão SEFAZ em formato .xml ou .pdf (DANFE gerada digitalmente), contendo dados de fornecedor, produtos e duplicatas.
                 </p>
 
                 <div className="mt-6 flex items-center justify-center gap-4">
                   <label className="cursor-pointer bg-mustard-500 hover:bg-mustard-600 active:scale-[0.98] text-white px-6 py-3 rounded-xl font-bold text-sm transition-all shadow-lg shadow-mustard-500/20 flex items-center gap-2">
                     <span className="material-symbols-outlined text-[20px]">folder_open</span>
-                    <span>Escolher Arquivo .xml</span>
-                    <input type="file" accept=".xml" onChange={handleFileUpload} className="hidden" />
+                    <span>Escolher Arquivo (XML ou PDF)</span>
+                    <input type="file" accept=".xml,.pdf,application/pdf,text/xml" onChange={handleFileUpload} className="hidden" />
                   </label>
                 </div>
 
                 {fileName && (
                   <div className="mt-4 inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-slate-200 dark:bg-slate-700 text-xs font-mono font-bold text-slate-800 dark:text-slate-200">
                     <span className="material-symbols-outlined text-[16px] text-emerald-500">check_circle</span>
-                    <span>{fileName}</span>
+                    <span>{fileName} ({fileType?.toUpperCase()})</span>
                   </div>
                 )}
               </div>
@@ -774,13 +803,13 @@ export const XmlImportModal: React.FC<XmlImportModalProps> = ({ isOpen, onClose,
               <button
                 type="button"
                 onClick={handleParseXml}
-                disabled={loading || !xmlContent.trim()}
+                disabled={loading || (!xmlContent.trim() && !pdfBase64)}
                 className="px-8 py-2.5 rounded-xl font-bold text-sm text-white bg-mustard-500 hover:bg-mustard-600 active:scale-[0.98] transition-all flex items-center gap-2 shadow-lg shadow-mustard-500/20 disabled:opacity-50"
               >
                 {loading ? (
                   <>
                     <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-                    <span>Analisando XML...</span>
+                    <span>Analisando {fileType === 'pdf' ? 'PDF (DANFE)' : 'XML'}...</span>
                   </>
                 ) : (
                   <>
@@ -851,7 +880,7 @@ export const XmlImportModal: React.FC<XmlImportModalProps> = ({ isOpen, onClose,
                 onClick={handleReset}
                 className="px-6 py-2.5 rounded-xl font-bold text-sm text-slate-600 dark:text-slate-400 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 hover:bg-slate-50"
               >
-                Importar Outro XML
+                Importar Outra NF-e
               </button>
               <button
                 type="button"

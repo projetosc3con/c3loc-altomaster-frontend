@@ -29,6 +29,9 @@ const OsXmlImportModal: React.FC<OsXmlImportModalProps> = ({ isOpen, onClose, on
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [xmlString, setXmlString] = useState<string>('');
+  const [pdfBase64, setPdfBase64] = useState<string | null>(null);
+  const [fileType, setFileType] = useState<'xml' | 'pdf' | null>(null);
+  const [fileName, setFileName] = useState<string>('');
   const [parsedData, setParsedData] = useState<ParsedNfeData | null>(null);
   const [itemConfigs, setItemConfigs] = useState<Record<number, ItemOsConfig>>({});
 
@@ -45,19 +48,52 @@ const OsXmlImportModal: React.FC<OsXmlImportModalProps> = ({ isOpen, onClose, on
     const file = e.target.files?.[0];
     if (!file) return;
 
-    if (!file.name.toLowerCase().endsWith('.xml')) {
-      setError('Por favor, selecione um arquivo XML de NF-e válido.');
+    const lowerName = file.name.toLowerCase();
+    const isXml = lowerName.endsWith('.xml');
+    const isPdf = lowerName.endsWith('.pdf') || file.type === 'application/pdf';
+
+    if (!isXml && !isPdf) {
+      setError('Por favor, selecione um arquivo XML ou PDF (DANFE) de NF-e válido.');
       return;
     }
 
     try {
       setLoading(true);
       setError(null);
-      const text = await file.text();
-      setXmlString(text);
+      setFileName(file.name);
 
-      const response = await api.post('/fiscal/nfe/parse', { xml: text });
-      const parsed: ParsedNfeData = response.data;
+      let parsed: ParsedNfeData;
+
+      if (isPdf) {
+        setFileType('pdf');
+        setXmlString('');
+        const base64Data = await new Promise<string>((resolve, reject) => {
+          const reader = new FileReader();
+          reader.onload = () => {
+            const res = reader.result as string;
+            const b64 = res.split(',')[1] || res;
+            resolve(b64);
+          };
+          reader.onerror = (err) => reject(err);
+          reader.readAsDataURL(file);
+        });
+        setPdfBase64(base64Data);
+
+        const response = await api.post('/fiscal/nfe/parse', {
+          pdf_base64: base64Data,
+          file_name: file.name,
+        });
+        parsed = response.data;
+      } else {
+        setFileType('xml');
+        setPdfBase64(null);
+        const text = await file.text();
+        setXmlString(text);
+
+        const response = await api.post('/fiscal/nfe/parse', { xml: text });
+        parsed = response.data;
+      }
+
       setParsedData(parsed);
 
       // Pre-populate items configuration
@@ -103,8 +139,8 @@ const OsXmlImportModal: React.FC<OsXmlImportModalProps> = ({ isOpen, onClose, on
 
       setStep('review');
     } catch (err: any) {
-      console.error('Erro ao processar XML da NF-e:', err);
-      setError(err.response?.data?.error || 'Falha ao interpretar o arquivo XML da NF-e.');
+      console.error('Erro ao processar NF-e:', err);
+      setError(err.response?.data?.error || 'Falha ao interpretar o arquivo da NF-e.');
     } finally {
       setLoading(false);
     }
@@ -212,7 +248,7 @@ const OsXmlImportModal: React.FC<OsXmlImportModalProps> = ({ isOpen, onClose, on
   };
 
   const handleConfirmImport = async () => {
-    if (!parsedData || !xmlString) return;
+    if (!parsedData || (!xmlString && !pdfBase64)) return;
 
     try {
       setLoading(true);
@@ -220,6 +256,7 @@ const OsXmlImportModal: React.FC<OsXmlImportModalProps> = ({ isOpen, onClose, on
 
       // 1. Build destination payload for /fiscal/nfe/process
       const destinations: Record<number, any> = {};
+      const itemsPayload: any[] = [];
       parsedData.items.forEach(item => {
         const cfg = itemConfigs[item.item_index];
         const cat = cfg?.category || 'Peça';
@@ -228,10 +265,15 @@ const OsXmlImportModal: React.FC<OsXmlImportModalProps> = ({ isOpen, onClose, on
         else if (cat === 'EPI') dest = 'part_epi';
         else if (cat === 'Outros') dest = 'part_outros';
 
-        destinations[item.item_index] = {
+        const itemDest = {
           destination: dest,
           custom_name: cfg?.custom_name || item.description,
         };
+        destinations[item.item_index] = itemDest;
+        itemsPayload.push({
+          item_index: item.item_index,
+          ...itemDest,
+        });
       });
 
       // 2. Call process endpoint to ingest into DB (parts & bills)
@@ -243,8 +285,10 @@ const OsXmlImportModal: React.FC<OsXmlImportModalProps> = ({ isOpen, onClose, on
       }));
 
       const payload = {
-        xml: xmlString,
+        xml: xmlString || '',
+        pdf_base64: pdfBase64 || null,
         parsed_data: parsedData,
+        items_config: itemsPayload,
         destinations,
         payment_config: {
           type: paymentType,
@@ -328,7 +372,7 @@ const OsXmlImportModal: React.FC<OsXmlImportModalProps> = ({ isOpen, onClose, on
               <h2 className="text-lg font-black text-slate-900 dark:text-white flex items-center gap-2">
                 Importar NF-e para Ordem de Serviço
                 <span className="text-[10px] uppercase font-bold tracking-widest px-2 py-0.5 rounded-full bg-mustard-100 dark:bg-mustard-500/20 text-mustard-700 dark:text-mustard-400">
-                  XML Fiscal
+                  XML ou PDF
                 </span>
               </h2>
               <p className="text-xs text-slate-500 dark:text-slate-400">
@@ -367,21 +411,21 @@ const OsXmlImportModal: React.FC<OsXmlImportModalProps> = ({ isOpen, onClose, on
                   type="file"
                   ref={fileInputRef}
                   onChange={handleFileChange}
-                  accept=".xml"
+                  accept=".xml,.pdf,application/pdf"
                   className="hidden"
                 />
                 <div className="w-16 h-16 mx-auto rounded-3xl bg-mustard-500/10 text-mustard-600 dark:text-mustard-500 flex items-center justify-center mb-4 group-hover:scale-110 transition-transform">
                   <span className="material-symbols-outlined text-3xl">upload_file</span>
                 </div>
                 <h3 className="text-base font-bold text-slate-800 dark:text-white">
-                  Selecione o arquivo XML da NF-e
+                  Selecione o arquivo XML ou PDF (DANFE) da NF-e
                 </h3>
                 <p className="text-xs text-slate-400 mt-1 max-w-sm mx-auto">
-                  Clique ou arraste o arquivo XML da nota fiscal emitida pelo fornecedor
+                  Clique ou arraste o arquivo XML ou PDF da nota fiscal emitida pelo fornecedor
                 </p>
                 <div className="mt-4 inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-xs font-bold text-slate-700 dark:text-slate-300 shadow-sm">
                   <span className="material-symbols-outlined text-sm text-mustard-500">description</span>
-                  Formato aceito: .xml (Layout NF-e 4.00)
+                  Formatos aceitos: .xml ou .pdf (DANFE da NF-e)
                 </div>
               </div>
             </div>
@@ -398,6 +442,11 @@ const OsXmlImportModal: React.FC<OsXmlImportModalProps> = ({ isOpen, onClose, on
                       {parsedData.invoice_number}
                     </span>
                     <span className="text-xs font-bold text-slate-500">Série {parsedData.series || '1'}</span>
+                    {fileName && (
+                      <span className="text-[11px] px-2 py-0.5 rounded-md bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-300 font-medium">
+                        {fileType?.toUpperCase()}: {fileName}
+                      </span>
+                    )}
                   </div>
                   <div className="text-right">
                     <span className="text-xs font-black text-slate-400 uppercase tracking-wider mr-2">Valor Total</span>

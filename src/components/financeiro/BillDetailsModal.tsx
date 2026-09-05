@@ -5,6 +5,7 @@ import { saveAs } from 'file-saver';
 import api from '../../services/api';
 import { formatDate, formatDateTime } from '../../utils/date';
 import { useAuth } from '../../contexts/AuthContext';
+import { supabase } from '../../lib/supabase';
 import { financeiroService } from '../../services/financeiro';
 import { getApiErrorMessage } from '../../utils/apiError';
 import { FaturaLocacaoDocument } from '../logistics/FaturaLocacaoDocument';
@@ -36,6 +37,12 @@ const BillDetailsModal: React.FC<BillDetailsModalProps> = ({ isOpen, item, onClo
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  // Boleto PDF attachment state
+  const [uploadingBoleto, setUploadingBoleto] = useState(false);
+  const [deletingBoleto, setDeletingBoleto] = useState(false);
+  const [confirmDeleteBoleto, setConfirmDeleteBoleto] = useState(false);
+  const [boletoSuccessMessage, setBoletoSuccessMessage] = useState<string | null>(null);
+
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const [updatingInstallmentId, setUpdatingInstallmentId] = useState<string | null>(null);
@@ -50,8 +57,10 @@ const BillDetailsModal: React.FC<BillDetailsModalProps> = ({ isOpen, item, onClo
       setIsReconciledValue(Boolean(item.is_reconciled || item.settled_date || item.raw?.reconciled_at));
       setIsEditing(false);
       setConfirmDelete(false);
+      setConfirmDeleteBoleto(false);
       setError(null);
       setFaturaSuccessMessage(null);
+      setBoletoSuccessMessage(null);
     }
   }, [item]);
 
@@ -241,6 +250,79 @@ const BillDetailsModal: React.FC<BillDetailsModalProps> = ({ isOpen, item, onClo
     setIsReconciledValue(isReconciled);
     setIsEditing(false);
     setError(null);
+  };
+
+  const handleUploadBoleto = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file || !currentItem) return;
+
+    if (file.type !== 'application/pdf' && !file.name.toLowerCase().endsWith('.pdf')) {
+      setError('Por favor, selecione um arquivo em formato PDF.');
+      return;
+    }
+    if (file.size > 20 * 1024 * 1024) {
+      setError('O arquivo PDF deve ter no máximo 20 MB.');
+      return;
+    }
+
+    setUploadingBoleto(true);
+    setError(null);
+    setBoletoSuccessMessage(null);
+
+    try {
+      const cleanName = file.name.replace(/[^a-zA-Z0-9.-]/g, '_');
+      const filePath = `contas-pagar/boleto_${Date.now()}_${cleanName}`;
+
+      const { error: uploadError } = await supabase.storage
+        .from('boletos')
+        .upload(filePath, file, { cacheControl: '3600', upsert: true });
+
+      if (uploadError) {
+        throw new Error(`Erro ao enviar boleto: ${uploadError.message}`);
+      }
+
+      const { data: urlData } = supabase.storage.from('boletos').getPublicUrl(filePath);
+      const newBoletoUrl = urlData.publicUrl;
+
+      const updated = await financeiroService.atualizarLancamento(currentItem.id, {
+        bank_slip_url: newBoletoUrl,
+      });
+
+      setCurrentItem((prev) => (prev ? { ...prev, bank_slip_url: newBoletoUrl } : updated));
+      onUpdated?.({ ...currentItem, bank_slip_url: newBoletoUrl });
+      setBoletoSuccessMessage('Boleto bancário anexado com sucesso!');
+      setTimeout(() => setBoletoSuccessMessage(null), 4000);
+    } catch (err: any) {
+      console.error('Erro ao fazer upload do boleto:', err);
+      setError(getApiErrorMessage(err));
+    } finally {
+      setUploadingBoleto(false);
+      e.target.value = '';
+    }
+  };
+
+  const handleRemoveBoleto = async () => {
+    if (!currentItem) return;
+    setDeletingBoleto(true);
+    setError(null);
+    setBoletoSuccessMessage(null);
+
+    try {
+      const updated = await financeiroService.atualizarLancamento(currentItem.id, {
+        bank_slip_url: null,
+      });
+
+      setCurrentItem((prev) => (prev ? { ...prev, bank_slip_url: null } : updated));
+      onUpdated?.({ ...currentItem, bank_slip_url: null });
+      setConfirmDeleteBoleto(false);
+      setBoletoSuccessMessage('Boleto bancário removido com sucesso.');
+      setTimeout(() => setBoletoSuccessMessage(null), 4000);
+    } catch (err: any) {
+      console.error('Erro ao remover boleto:', err);
+      setError(getApiErrorMessage(err));
+    } finally {
+      setDeletingBoleto(false);
+    }
   };
 
   const handleUpdateInstallmentStatus = async (instId: string, nextStatus: string, nextReconciled?: boolean) => {
@@ -575,7 +657,7 @@ const BillDetailsModal: React.FC<BillDetailsModalProps> = ({ isOpen, item, onClo
                     </div>
                     <div>
                       <h4 className="text-xs font-bold uppercase tracking-wider text-slate-900 dark:text-white">
-                        Ocorrências Mensais da NF-e
+                        {currentItem.origin === 'NFE' ? 'Ocorrências Mensais da NF-e' : 'Parcelas do Lançamento'}
                       </h4>
                       <p className="text-[11px] text-slate-400 dark:text-slate-500">
                         {currentItem.installments.length} parcelas registradas para este documento
@@ -830,31 +912,163 @@ const BillDetailsModal: React.FC<BillDetailsModalProps> = ({ isOpen, item, onClo
               </div>
             )}
 
+            {/* Boleto de Pagamento (PDF) */}
+            {(!isReceivable || currentItem.bank_slip_url) && (
+              <div className="bg-slate-50/70 dark:bg-slate-800/30 border border-slate-200/80 dark:border-slate-800 rounded-3xl p-5 space-y-3 shadow-sm">
+                <div className="flex items-center justify-between">
+                  <span className="text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 flex items-center gap-2">
+                    <span className="material-symbols-outlined text-[18px] text-rose-500">picture_as_pdf</span>
+                    Boleto de Pagamento (PDF)
+                  </span>
+                  {currentItem.bank_slip_url ? (
+                    <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-emerald-50 dark:bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-500/20">
+                      <span className="material-symbols-outlined text-[13px]">check_circle</span>
+                      Arquivo Anexado
+                    </span>
+                  ) : (
+                    <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-amber-50 dark:bg-amber-500/10 text-amber-700 dark:text-amber-400 border border-amber-200 dark:border-amber-500/20">
+                      <span className="material-symbols-outlined text-[13px]">warning</span>
+                      Sem Boleto
+                    </span>
+                  )}
+                </div>
+
+                {currentItem.bank_slip_url ? (
+                  <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 p-4 bg-white dark:bg-slate-900 border border-slate-200/70 dark:border-slate-800 rounded-2xl">
+                    <div className="flex items-center gap-3 min-w-0">
+                      <div className="w-10 h-10 rounded-2xl bg-rose-50 dark:bg-rose-500/10 text-rose-600 dark:text-rose-400 flex items-center justify-center shrink-0">
+                        <span className="material-symbols-outlined text-[24px]">description</span>
+                      </div>
+                      <div className="min-w-0">
+                        <p className="text-xs font-bold text-slate-900 dark:text-white truncate">
+                          Boleto Bancário da Conta
+                        </p>
+                        <p className="text-[11px] text-slate-400 dark:text-slate-500">
+                          Disponível para download e liquidação pelo financeiro
+                        </p>
+                      </div>
+                    </div>
+
+                    <div className="flex items-center gap-2 w-full sm:w-auto shrink-0">
+                      <a
+                        href={currentItem.bank_slip_url}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="flex-1 sm:flex-initial px-4 py-2 bg-rose-500 hover:bg-rose-600 text-white rounded-xl text-xs font-bold uppercase tracking-wider transition-colors inline-flex items-center justify-center gap-1.5 shadow-sm shadow-rose-500/20"
+                      >
+                        <span className="material-symbols-outlined text-[16px]">visibility</span>
+                        Visualizar / Baixar
+                      </a>
+
+                      {canEdit && (
+                        <>
+                          <label className="px-3 py-2 bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 rounded-xl text-xs font-bold uppercase tracking-wider transition-colors cursor-pointer inline-flex items-center justify-center gap-1 shadow-sm">
+                            <input
+                              type="file"
+                              accept=".pdf,application/pdf"
+                              className="hidden"
+                              disabled={uploadingBoleto || deletingBoleto}
+                              onChange={handleUploadBoleto}
+                            />
+                            {uploadingBoleto ? (
+                              <div className="w-3.5 h-3.5 border-2 border-slate-400 border-t-transparent rounded-full animate-spin" />
+                            ) : (
+                              <span className="material-symbols-outlined text-[16px]">swap_horiz</span>
+                            )}
+                            Substituir
+                          </label>
+
+                          {confirmDeleteBoleto ? (
+                            <div className="flex items-center gap-1">
+                              <button
+                                type="button"
+                                disabled={deletingBoleto}
+                                onClick={handleRemoveBoleto}
+                                className="px-2.5 py-2 bg-rose-600 hover:bg-rose-700 text-white rounded-xl text-xs font-bold transition-colors disabled:opacity-50"
+                                title="Confirmar remoção"
+                              >
+                                {deletingBoleto ? '...' : 'Confirmar'}
+                              </button>
+                              <button
+                                type="button"
+                                disabled={deletingBoleto}
+                                onClick={() => setConfirmDeleteBoleto(false)}
+                                className="px-2 py-2 text-slate-500 hover:text-slate-700 dark:hover:text-slate-300 text-xs transition-colors"
+                              >
+                                Não
+                              </button>
+                            </div>
+                          ) : (
+                            <button
+                              type="button"
+                              onClick={() => setConfirmDeleteBoleto(true)}
+                              className="p-2 text-slate-400 hover:text-rose-600 dark:hover:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-500/10 rounded-xl transition-colors"
+                              title="Remover boleto"
+                            >
+                              <span className="material-symbols-outlined text-[18px]">delete</span>
+                            </button>
+                          )}
+                        </>
+                      )}
+                    </div>
+                  </div>
+                ) : canEdit ? (
+                  <label className="border-2 border-dashed border-slate-200 dark:border-slate-700 hover:border-mustard-500/60 dark:hover:border-mustard-500/60 rounded-2xl p-4 flex flex-col sm:flex-row items-center justify-between gap-3 cursor-pointer bg-white dark:bg-slate-900 hover:bg-slate-50 dark:hover:bg-slate-800/60 transition-all group">
+                    <input
+                      type="file"
+                      accept=".pdf,application/pdf"
+                      className="hidden"
+                      disabled={uploadingBoleto}
+                      onChange={handleUploadBoleto}
+                    />
+                    <div className="flex items-center gap-3">
+                      <div className="w-10 h-10 rounded-2xl bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400 group-hover:bg-mustard-500/10 group-hover:text-mustard-600 dark:group-hover:text-mustard-400 flex items-center justify-center transition-colors">
+                        {uploadingBoleto ? (
+                          <div className="w-4 h-4 border-2 border-slate-400 border-t-mustard-500 rounded-full animate-spin" />
+                        ) : (
+                          <span className="material-symbols-outlined text-[22px]">upload_file</span>
+                        )}
+                      </div>
+                      <div>
+                        <span className="text-xs font-bold text-slate-700 dark:text-slate-200 group-hover:text-mustard-600 dark:group-hover:text-mustard-400 transition-colors block">
+                          {uploadingBoleto ? 'Enviando arquivo do boleto...' : 'Anexar Boleto de Pagamento (PDF)'}
+                        </span>
+                        <span className="text-[11px] text-slate-400 dark:text-slate-500">
+                          Permite que o setor financeiro obtenha o PDF para pagamento diretamente do registro
+                        </span>
+                      </div>
+                    </div>
+                    <span className="shrink-0 px-4 py-2 rounded-xl bg-mustard-500 text-white text-xs font-bold uppercase tracking-wider shadow-sm shadow-mustard-500/20 group-hover:bg-mustard-600 transition-colors">
+                      Selecionar PDF
+                    </span>
+                  </label>
+                ) : (
+                  <p className="text-xs text-slate-400 dark:text-slate-500 italic p-2">
+                    Nenhum boleto em PDF anexado a esta conta.
+                  </p>
+                )}
+
+                {boletoSuccessMessage && (
+                  <div className="p-3 bg-emerald-50 dark:bg-emerald-500/10 border border-emerald-200 dark:border-emerald-500/20 rounded-xl text-xs font-semibold text-emerald-700 dark:text-emerald-400 flex items-center gap-2">
+                    <span className="material-symbols-outlined text-[18px]">check_circle</span>
+                    {boletoSuccessMessage}
+                  </div>
+                )}
+              </div>
+            )}
+
             {/* External Links / Asaas */}
-            {(currentItem.invoice_url || currentItem.bank_slip_url) && (
-              <div className="flex flex-wrap items-center gap-3 pt-2">
-                {currentItem.invoice_url && (
-                  <a
-                    href={currentItem.invoice_url}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="px-4 py-2.5 bg-mustard-500 text-white rounded-xl text-xs font-bold uppercase tracking-wider hover:bg-mustard-600 transition-colors inline-flex items-center gap-2 shadow-sm shadow-mustard-500/20"
-                  >
-                    <span className="material-symbols-outlined text-[18px]">open_in_new</span>
-                    Visualizar Fatura Asaas
-                  </a>
-                )}
-                {currentItem.bank_slip_url && (
-                  <a
-                    href={currentItem.bank_slip_url}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="px-4 py-2.5 bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-200 rounded-xl text-xs font-bold uppercase tracking-wider hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors inline-flex items-center gap-2"
-                  >
-                    <span className="material-symbols-outlined text-[18px]">receipt</span>
-                    Visualizar Boleto Bancário
-                  </a>
-                )}
+            {currentItem.invoice_url && (
+              <div className="flex flex-wrap items-center gap-3 pt-1">
+                <a
+                  href={currentItem.invoice_url}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="px-4 py-2.5 bg-mustard-500 text-white rounded-xl text-xs font-bold uppercase tracking-wider hover:bg-mustard-600 transition-colors inline-flex items-center gap-2 shadow-sm shadow-mustard-500/20"
+                >
+                  <span className="material-symbols-outlined text-[18px]">open_in_new</span>
+                  Visualizar Fatura Asaas
+                </a>
               </div>
             )}
           </div>

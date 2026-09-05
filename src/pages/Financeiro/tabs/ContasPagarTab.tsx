@@ -42,7 +42,9 @@ const sourceBadge = (item: StatementItem) => {
   if (item.origin === 'ASAAS') {
     return { label: 'ASAAS', className: 'bg-mustard-100 dark:bg-mustard-500/10 text-mustard-700 dark:text-mustard-400 border border-mustard-200 dark:border-mustard-500/20' };
   }
-  return { label: 'MANUAL', className: 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 border border-slate-200 dark:border-slate-700' };
+  const count = item.installments_count || item.installments?.length;
+  const label = count && count > 1 ? `MANUAL (${count}x)` : 'MANUAL';
+  return { label, className: 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 border border-slate-200 dark:border-slate-700' };
 };
 
 const ContasPagarTab: React.FC = () => {
@@ -146,7 +148,7 @@ const ContasPagarTab: React.FC = () => {
               className="px-4 py-2.5 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-200 rounded-xl text-xs font-bold uppercase tracking-widest hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors flex items-center gap-2 shadow-sm"
             >
               <span className="material-symbols-outlined text-[18px] text-mustard-600">receipt_long</span>
-              Importar NF-e (XML)
+              Importar NF-e
             </button>
             <button
               type="button"
@@ -231,7 +233,7 @@ const ContasPagarTab: React.FC = () => {
                 <span className="material-symbols-outlined text-[18px]">
                   {groupNfe ? 'layers' : 'layers_clear'}
                 </span>
-                <span>{groupNfe ? 'Agrupado por NF-e' : 'Parcelas Individuais'}</span>
+                <span>{groupNfe ? 'Agrupar Parcelas' : 'Parcelas Individuais'}</span>
               </button>
             </div>
 
@@ -323,6 +325,19 @@ const ContasPagarTab: React.FC = () => {
                                 {item.paid_installments_count || 0}/{item.installments_count} pagas
                               </span>
                             ) : null}
+                            {item.bank_slip_url ? (
+                              <a
+                                href={item.bank_slip_url}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                onClick={(e) => e.stopPropagation()}
+                                className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-bold bg-rose-50 dark:bg-rose-500/10 text-rose-700 dark:text-rose-400 border border-rose-200/60 dark:border-rose-500/20 hover:bg-rose-100 dark:hover:bg-rose-500/20 transition-colors"
+                                title="Abrir PDF do Boleto"
+                              >
+                                <span className="material-symbols-outlined text-[11px]">picture_as_pdf</span>
+                                Boleto
+                              </a>
+                            ) : null}
                           </div>
                         </td>
                         <td className="px-6 py-4">
@@ -340,14 +355,28 @@ const ContasPagarTab: React.FC = () => {
                           </span>
                         </td>
                         <td className="px-6 py-4 text-center">
-                          <button
-                            type="button"
-                            onClick={() => setSelectedBill(item)}
-                            className="p-2 text-slate-400 hover:text-rose-600 dark:hover:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-500/10 rounded-xl transition-all inline-flex items-center justify-center"
-                            title="Ver detalhes da conta a pagar"
-                          >
-                            <span className="material-symbols-outlined text-[20px]">visibility</span>
-                          </button>
+                          <div className="inline-flex items-center justify-center gap-1">
+                            {item.bank_slip_url && (
+                              <a
+                                href={item.bank_slip_url}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                onClick={(e) => e.stopPropagation()}
+                                className="p-2 text-rose-500 hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-500/10 rounded-xl transition-all inline-flex items-center justify-center"
+                                title="Abrir Boleto Bancário (PDF)"
+                              >
+                                <span className="material-symbols-outlined text-[20px]">picture_as_pdf</span>
+                              </a>
+                            )}
+                            <button
+                              type="button"
+                              onClick={() => setSelectedBill(item)}
+                              className="p-2 text-slate-400 hover:text-rose-600 dark:hover:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-500/10 rounded-xl transition-all inline-flex items-center justify-center"
+                              title="Ver detalhes da conta a pagar"
+                            >
+                              <span className="material-symbols-outlined text-[20px]">visibility</span>
+                            </button>
+                          </div>
                         </td>
                       </tr>
                     );

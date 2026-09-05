@@ -581,6 +581,12 @@ export interface Bill {
   client?: { company_name: string; cnpj: string };
 }
 
+export interface ManualInstallmentInput {
+  installment_number: number;
+  due_date: string;
+  gross_value: number;
+}
+
 export interface CreateBillPayload {
   type: BillType;
   counterparty_name?: string;
@@ -595,6 +601,9 @@ export interface CreateBillPayload {
   bank_transaction_date?: string;
   bank_raw_snapshot?: Record<string, unknown>;
   created_by?: string;
+  payment_type?: 'a_vista' | 'parcelado';
+  installments?: ManualInstallmentInput[];
+  bank_slip_url?: string | null;
 }
 
 // Item normalizado do extrato bancário: mescla `bills` (já conciliado,

@@ -100,7 +100,7 @@ export const financeiroService = {
     return data;
   },
 
-  atualizarLancamento: async (billId: string, payload: { status?: string; is_reconciled?: boolean }): Promise<StatementItem> => {
+  atualizarLancamento: async (billId: string, payload: { status?: string; is_reconciled?: boolean; bank_slip_url?: string | null }): Promise<StatementItem> => {
     const { data } = await api.patch<StatementItem>(`/bills/${billId}`, payload);
     return data;
   },

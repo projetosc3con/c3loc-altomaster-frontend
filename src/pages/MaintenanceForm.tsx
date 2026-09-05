@@ -342,14 +342,14 @@ const MaintenanceForm: React.FC = () => {
   const handlePhoneChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     let value = e.target.value.replace(/\D/g, '');
     if (value.length > 11) value = value.slice(0, 11);
-    
+
     if (value.length > 2) {
       value = `(${value.slice(0, 2)}) ${value.slice(2)}`;
     }
     if (value.length > 10) {
       value = `${value.slice(0, 10)}-${value.slice(10)}`;
     }
-    
+
     updateField('client_phone', value);
   };
 
@@ -659,12 +659,12 @@ const MaintenanceForm: React.FC = () => {
           {/* TAB 3: Peças */}
           {activeTab === 'pecas' && (
             <motion.div key="pecas" initial={{ opacity: 0, x: -20 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: 20 }} className="space-y-6">
-              {/* Notas Fiscais Vinculadas (NF-e XML) */}
-              <SectionCard title="Notas Fiscais de Entrada Vinculadas (NF-e XML)" icon="receipt_long">
+              {/* Notas Fiscais Vinculadas (NF-e) */}
+              <SectionCard title="Notas Fiscais de Entrada Vinculadas (NF-e)" icon="receipt_long">
                 <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
                   <div>
                     <p className="text-sm text-slate-600 dark:text-slate-400 font-medium">
-                      Importe XMLs de NF-e para alimentar o estoque e vincular à Ordem de Serviço.
+                      Importe NF-e (XML ou PDF) para alimentar o estoque e vincular à Ordem de Serviço.
                     </p>
                     <p className="text-xs text-slate-400 dark:text-slate-500 mt-0.5">
                       Você pode vincular múltiplas notas e escolher exatamente quais itens aplicar.
@@ -676,7 +676,7 @@ const MaintenanceForm: React.FC = () => {
                     className="inline-flex items-center gap-2 px-5 py-2.5 bg-mustard-500 hover:bg-mustard-600 text-white rounded-2xl font-bold text-xs shadow-lg shadow-mustard-500/20 transition-all hover:scale-[1.02] active:scale-[0.98] whitespace-nowrap self-start sm:self-auto"
                   >
                     <span className="material-symbols-outlined text-[18px]">upload_file</span>
-                    Importar NF-e (XML)
+                    Importar NF-e
                   </button>
                 </div>
 
@@ -957,7 +957,7 @@ const MaintenanceForm: React.FC = () => {
               <SectionCard title="Análise Crítica (Gestor)" icon="assessment">
                 <TextareaField label="Análise Crítica" rows={3} placeholder="Observações do gestor..." value={formData.critical_analysis || ''} onChange={(e) => updateField('critical_analysis', e.target.value)} />
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                  <InputField label={isExterna ? 'Custo CLM (Empresa)' : 'Custo M (Manutenção)'} type="number" placeholder="0.00" value={formData.cost_company || ''} onChange={(e) => updateField('cost_company', e.target.value ? Number(e.target.value) : 0)} />
+                  <InputField label={isExterna ? 'Custo Altomaster' : 'Custo M (Manutenção)'} type="number" placeholder="0.00" value={formData.cost_company || ''} onChange={(e) => updateField('cost_company', e.target.value ? Number(e.target.value) : 0)} />
                   <InputField label={isExterna ? 'Custo CLIENTE' : 'Custo C (Compras)'} type="number" placeholder="0.00" value={formData.cost_client || ''} onChange={(e) => updateField('cost_client', e.target.value ? Number(e.target.value) : 0)} />
                 </div>
                 <BooleanToggle label="Há Pendência?" value={formData.has_pending} onChange={(v) => updateField('has_pending', v)} />
