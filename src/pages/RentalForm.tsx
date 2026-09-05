@@ -135,6 +135,7 @@ const createDefaultEquipmentItem = (): FormEquipmentItem => ({
   equipment_type: '',
   equipment_size: '',
   asset_number: '',
+  serial_number: '',
   billing_period_start: new Date().toISOString().split('T')[0],
   billing_period_end: '',
   return_date: '',
@@ -282,7 +283,8 @@ const RentalForm: React.FC = () => {
         equipment_name: selected.name,
         equipment_type: selected.type,
         equipment_size: selected.height ? `${selected.height}m` : '',
-        asset_number: selected.asset_number
+        asset_number: selected.asset_number,
+        serial_number: selected.serial_number || ''
       };
       return updated;
     });
@@ -523,13 +525,19 @@ const RentalForm: React.FC = () => {
                     className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm overflow-hidden"
                   >
                     <div className="p-4 border-b border-slate-100 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-800/20 flex items-center justify-between">
-                      <div className="flex items-center gap-2">
+                      <div className="flex items-center gap-2 flex-wrap">
                         <span className="w-6 h-6 rounded-full bg-mustard-500 text-white text-xs font-bold flex items-center justify-center font-mono">
                           {index + 1}
                         </span>
                         <span className="font-bold text-sm text-slate-900 dark:text-white">
                           {item.equipment_name ? `${item.equipment_name} (${item.asset_number || 'S/N'})` : 'Novo Equipamento'}
                         </span>
+                        {item.serial_number && (
+                          <span className="px-2 py-0.5 rounded-md bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 font-mono text-xs font-semibold border border-slate-200 dark:border-slate-700 flex items-center gap-1">
+                            <span className="text-[10px] text-slate-400 uppercase tracking-wider">Série:</span>
+                            <span>{item.serial_number}</span>
+                          </span>
+                        )}
                       </div>
 
                       <div className="flex items-center gap-4">
@@ -553,14 +561,42 @@ const RentalForm: React.FC = () => {
                       {/* Equipment Selection */}
                       <SearchableSelect
                         label="Equipamento no Estoque"
-                        placeholder="Pesquise por nome, patrimônio ou modelo..."
+                        placeholder="Pesquise por nome, patrimônio, número de série ou modelo..."
                         items={selectableEquips}
                         selectedId={item.equipment_id}
                         onSelect={(id) => handleEquipmentSelect(index, id)}
-                        getDisplayValue={(eq) => `${eq.asset_number} - ${eq.name} (${eq.status})`}
-                        getSearchValue={(eq) => `${eq.name} ${eq.asset_number} ${eq.type} ${eq.status}`}
+                        getDisplayValue={(eq) => `${eq.asset_number} - ${eq.name}${eq.serial_number ? ` (Série: ${eq.serial_number})` : ''} (${eq.status})`}
+                        getSearchValue={(eq) => `${eq.name} ${eq.asset_number} ${eq.serial_number || ''} ${eq.type} ${eq.status}`}
                         required
                       />
+
+                      {/* Informações detalhadas do equipamento selecionado */}
+                      {item.equipment_id && (
+                        <div className="flex flex-wrap items-center gap-4 p-3.5 bg-slate-50 dark:bg-slate-800/40 rounded-xl border border-slate-200/70 dark:border-slate-700/60 text-xs">
+                          {item.asset_number && (
+                            <div>
+                              <span className="text-slate-400 dark:text-slate-500 text-[10px] uppercase font-bold tracking-wider block">Patrimônio</span>
+                              <span className="font-mono font-bold text-slate-700 dark:text-slate-200">{item.asset_number}</span>
+                            </div>
+                          )}
+                          <div className="pl-4 border-l border-slate-200 dark:border-slate-700">
+                            <span className="text-slate-400 dark:text-slate-500 text-[10px] uppercase font-bold tracking-wider block">Nº de Série</span>
+                            <span className="font-mono font-bold text-slate-700 dark:text-slate-200">{item.serial_number || '-'}</span>
+                          </div>
+                          {item.equipment_type && (
+                            <div className="pl-4 border-l border-slate-200 dark:border-slate-700">
+                              <span className="text-slate-400 dark:text-slate-500 text-[10px] uppercase font-bold tracking-wider block">Tipo</span>
+                              <span className="font-semibold text-slate-700 dark:text-slate-200">{item.equipment_type}</span>
+                            </div>
+                          )}
+                          {item.equipment_size && (
+                            <div className="pl-4 border-l border-slate-200 dark:border-slate-700">
+                              <span className="text-slate-400 dark:text-slate-500 text-[10px] uppercase font-bold tracking-wider block">Altura</span>
+                              <span className="font-semibold text-slate-700 dark:text-slate-200">{item.equipment_size}</span>
+                            </div>
+                          )}
+                        </div>
+                      )}
 
                       {/* Aviso contextual para equipamentos não disponíveis */}
                       {selectedEquip && selectedEquip.status !== 'Disponível' && (

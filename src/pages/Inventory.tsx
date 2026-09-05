@@ -388,10 +388,16 @@ const Inventory: React.FC = () => {
                         <p className="text-sm font-medium text-slate-500 dark:text-slate-400">{equipment.model || 'Modelo não informado'}</p>
                       </div>
 
-                      <div className="grid grid-cols-3 gap-y-3 gap-x-2 mb-6 mt-auto border-t border-slate-50 dark:border-slate-800 pt-4">
+                      <div className="grid grid-cols-2 gap-y-3 gap-x-3 mb-6 mt-auto border-t border-slate-50 dark:border-slate-800 pt-4">
                         <div>
                           <span className="block text-[10px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-widest">Patrimônio</span>
-                          <span className="text-sm font-bold text-slate-800 dark:text-slate-200">{equipment.asset_number}</span>
+                          <span className="text-sm font-bold text-slate-800 dark:text-slate-200 font-mono">{equipment.asset_number}</span>
+                        </div>
+                        <div>
+                          <span className="block text-[10px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-widest">Nº de Série</span>
+                          <span className="text-sm font-bold text-slate-800 dark:text-slate-200 font-mono truncate block" title={equipment.serial_number || '-'}>
+                            {equipment.serial_number || '-'}
+                          </span>
                         </div>
                         <div>
                           <span className="block text-[10px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-widest">Altura</span>
@@ -460,6 +466,7 @@ const Inventory: React.FC = () => {
                             </span>
                           </div>
                         </th>
+                        <th className="px-6 py-4 text-[10px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-widest">Nº de Série</th>
                         <th className="px-6 py-4 text-[10px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-widest">Modelo</th>
                         <th className="px-6 py-4 text-[10px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-widest">Altura</th>
                         <th className="px-6 py-4 text-[10px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-widest">Status</th>
@@ -485,6 +492,11 @@ const Inventory: React.FC = () => {
                           </td>
                           <td className="px-6 py-4">
                             <span className="text-sm font-medium text-slate-600 dark:text-slate-300 bg-slate-100 dark:bg-slate-800 px-2 py-1 rounded text-[11px] font-mono">{equipment.asset_number}</span>
+                          </td>
+                          <td className="px-6 py-4">
+                            <span className="text-sm font-medium text-slate-600 dark:text-slate-300 bg-slate-100 dark:bg-slate-800 px-2 py-1 rounded text-[11px] font-mono">
+                              {equipment.serial_number || '-'}
+                            </span>
                           </td>
                           <td className="px-6 py-4 text-sm text-slate-600 dark:text-slate-400">{equipment.model || '-'}</td>
                           <td className="px-6 py-4 text-sm font-medium text-slate-700 dark:text-slate-300">
@@ -773,7 +785,7 @@ const Inventory: React.FC = () => {
                   <div>
                     <h3 className="text-lg font-bold text-slate-900 dark:text-white">Histórico de Locações</h3>
                     <p className="text-xs text-slate-500 dark:text-slate-400">
-                      {historyEquipment.asset_number} — {historyEquipment.name} {historyEquipment.model ? `(${historyEquipment.model})` : ''}
+                      {historyEquipment.asset_number} — {historyEquipment.name} {historyEquipment.model ? `(${historyEquipment.model})` : ''} {historyEquipment.serial_number ? ` • Série: ${historyEquipment.serial_number}` : ''}
                     </p>
                   </div>
                 </div>

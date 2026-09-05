@@ -281,6 +281,7 @@ export interface RentalInvoiceEquipment {
   equipment_type?: string;
   equipment_size?: string;
   asset_number?: string;
+  serial_number?: string;
   billing_period_start: string;
   billing_period_end: string;
   return_date?: string | null;
@@ -307,6 +308,7 @@ export interface RentalInvoice {
   equipment_type?: string;
   equipment_size?: string;
   asset_number?: string;
+  serial_number?: string;
   work_site: string;
   billing_period_start: string;
   billing_period_end: string;

@@ -122,11 +122,10 @@ function SearchableSelect<T extends { id: string }>({
       <label className="text-xs font-bold text-slate-500 dark:text-slate-500 uppercase tracking-widest ml-1">{label} {required && '*'}</label>
       <div
         onClick={() => setIsOpen(!isOpen)}
-        className={`w-full px-4 py-2.5 bg-slate-50 dark:bg-slate-800 border rounded-xl flex items-center justify-between cursor-pointer transition-all ${
-          isOpen 
-            ? 'border-mustard-500 ring-2 ring-mustard-500/10 dark:bg-slate-900' 
+        className={`w-full px-4 py-2.5 bg-slate-50 dark:bg-slate-800 border rounded-xl flex items-center justify-between cursor-pointer transition-all ${isOpen
+            ? 'border-mustard-500 ring-2 ring-mustard-500/10 dark:bg-slate-900'
             : 'border-slate-200 dark:border-slate-700 hover:border-slate-300 dark:hover:border-slate-600'
-        }`}
+          }`}
       >
         <span className={`text-sm truncate ${selectedItem ? 'text-slate-900 dark:text-white font-medium' : 'text-slate-400 dark:text-slate-500'}`}>
           {selectedItem ? getDisplayValue(selectedItem) : placeholder}
@@ -165,11 +164,10 @@ function SearchableSelect<T extends { id: string }>({
                       setIsOpen(false);
                       setSearchTerm('');
                     }}
-                    className={`px-4 py-2.5 text-xs cursor-pointer hover:bg-mustard-50 dark:hover:bg-mustard-500/10 transition-colors flex flex-col gap-0.5 ${
-                      selectedId === item.id 
-                        ? 'bg-mustard-50/50 dark:bg-mustard-500/20 border-l-4 border-mustard-500' 
+                    className={`px-4 py-2.5 text-xs cursor-pointer hover:bg-mustard-50 dark:hover:bg-mustard-500/10 transition-colors flex flex-col gap-0.5 ${selectedId === item.id
+                        ? 'bg-mustard-50/50 dark:bg-mustard-500/20 border-l-4 border-mustard-500'
                         : 'border-l-4 border-transparent'
-                    }`}
+                      }`}
                   >
                     <span className="font-bold text-slate-900 dark:text-white">{getDisplayValue(item)}</span>
                     <span className="text-[10px] text-slate-400 dark:text-slate-500 font-mono">{getSearchValue(item)}</span>
@@ -197,6 +195,7 @@ const createDefaultEquipmentItem = (): FormEquipmentItem => ({
   equipment_type: '',
   equipment_size: '',
   asset_number: '',
+  serial_number: '',
   billing_period_start: new Date().toISOString().split('T')[0],
   billing_period_end: '',
   return_date: '',
@@ -270,6 +269,15 @@ const RentalEdit: React.FC = () => {
   const [rental, setRental] = useState<any | null>(null);
   const [isExtensionModalOpen, setIsExtensionModalOpen] = useState(false);
   const [extensionSuccessMsg, setExtensionSuccessMsg] = useState<string | null>(null);
+  const [showRetornoNotice, setShowRetornoNotice] = useState(false);
+
+  // Rental Deletion state (Exclusivo Administrador e Diretoria)
+  const [showDeleteModal, setShowDeleteModal] = useState(false);
+  const [deletingRental, setDeletingRental] = useState(false);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
+
+  const userRole = profile?.access_level || (user as any)?.role;
+  const canDeleteRental = userRole === 'Administrador' || userRole === 'Diretoria';
 
   useEffect(() => {
     const fetchData = async () => {
@@ -303,22 +311,27 @@ const RentalEdit: React.FC = () => {
         // Initialize equipments array
         if (Array.isArray(rental.equipments) && rental.equipments.length > 0) {
           setEquipmentItems(
-            rental.equipments.map((eq: RentalInvoiceEquipment) => ({
-              ...eq,
-              tempId: eq.id || Math.random().toString(36).substring(2, 9),
-              billing_period_start: eq.billing_period_start ? eq.billing_period_start.split('T')[0] : '',
-              billing_period_end: eq.billing_period_end ? eq.billing_period_end.split('T')[0] : '',
-              return_date: eq.return_date ? eq.return_date.split('T')[0] : '',
-              cost_rental: Number(eq.cost_rental) || 0,
-              cost_insurance: Number(eq.cost_insurance) || 0,
-              cost_freight: Number(eq.cost_freight) || 0,
-              cost_rcd: Number(eq.cost_rcd) || 0,
-              cost_third_party: Number(eq.cost_third_party) || 0,
-              cost_training: Number(eq.cost_training) || 0,
-              total_value: Number(eq.total_value) || 0
-            }))
+            rental.equipments.map((eq: RentalInvoiceEquipment) => {
+              const match = equipmentsRes.data?.find((e: Equipment) => e.id === eq.equipment_id);
+              return {
+                ...eq,
+                serial_number: eq.serial_number || match?.serial_number || '',
+                tempId: eq.id || Math.random().toString(36).substring(2, 9),
+                billing_period_start: eq.billing_period_start ? eq.billing_period_start.split('T')[0] : '',
+                billing_period_end: eq.billing_period_end ? eq.billing_period_end.split('T')[0] : '',
+                return_date: eq.return_date ? eq.return_date.split('T')[0] : '',
+                cost_rental: Number(eq.cost_rental) || 0,
+                cost_insurance: Number(eq.cost_insurance) || 0,
+                cost_freight: Number(eq.cost_freight) || 0,
+                cost_rcd: Number(eq.cost_rcd) || 0,
+                cost_third_party: Number(eq.cost_third_party) || 0,
+                cost_training: Number(eq.cost_training) || 0,
+                total_value: Number(eq.total_value) || 0
+              };
+            })
           );
         } else if (rental.equipment_id) {
+          const match = equipmentsRes.data?.find((e: Equipment) => e.id === rental.equipment_id);
           setEquipmentItems([
             {
               tempId: Math.random().toString(36).substring(2, 9),
@@ -327,6 +340,7 @@ const RentalEdit: React.FC = () => {
               equipment_type: rental.equipment_type || '',
               equipment_size: rental.equipment_size || '',
               asset_number: rental.asset_number || '',
+              serial_number: rental.serial_number || match?.serial_number || '',
               billing_period_start: rental.billing_period_start ? rental.billing_period_start.split('T')[0] : '',
               billing_period_end: rental.billing_period_end ? rental.billing_period_end.split('T')[0] : '',
               return_date: rental.return_date ? rental.return_date.split('T')[0] : '',
@@ -417,21 +431,49 @@ const RentalEdit: React.FC = () => {
 
       if (Array.isArray(updated.equipments) && updated.equipments.length > 0) {
         setEquipmentItems(
-          updated.equipments.map((eq: RentalInvoiceEquipment) => ({
-            ...eq,
-            tempId: eq.id || Math.random().toString(36).substring(2, 9),
-            billing_period_start: eq.billing_period_start ? eq.billing_period_start.split('T')[0] : '',
-            billing_period_end: eq.billing_period_end ? eq.billing_period_end.split('T')[0] : '',
-            return_date: eq.return_date ? eq.return_date.split('T')[0] : '',
-            cost_rental: Number(eq.cost_rental) || 0,
-            cost_insurance: Number(eq.cost_insurance) || 0,
-            cost_freight: Number(eq.cost_freight) || 0,
-            cost_rcd: Number(eq.cost_rcd) || 0,
-            cost_third_party: Number(eq.cost_third_party) || 0,
-            cost_training: Number(eq.cost_training) || 0,
-            total_value: Number(eq.total_value) || 0
-          }))
+          updated.equipments.map((eq: RentalInvoiceEquipment) => {
+            const match = allEquipments.find((e: Equipment) => e.id === eq.equipment_id);
+            return {
+              ...eq,
+              serial_number: eq.serial_number || match?.serial_number || '',
+              tempId: eq.id || Math.random().toString(36).substring(2, 9),
+              billing_period_start: eq.billing_period_start ? eq.billing_period_start.split('T')[0] : '',
+              billing_period_end: eq.billing_period_end ? eq.billing_period_end.split('T')[0] : '',
+              return_date: eq.return_date ? eq.return_date.split('T')[0] : '',
+              cost_rental: Number(eq.cost_rental) || 0,
+              cost_insurance: Number(eq.cost_insurance) || 0,
+              cost_freight: Number(eq.cost_freight) || 0,
+              cost_rcd: Number(eq.cost_rcd) || 0,
+              cost_third_party: Number(eq.cost_third_party) || 0,
+              cost_training: Number(eq.cost_training) || 0,
+              total_value: Number(eq.total_value) || 0
+            };
+          })
         );
+      } else if (updated.equipment_id) {
+        const match = allEquipments.find((e: Equipment) => e.id === updated.equipment_id);
+        setEquipmentItems([
+          {
+            tempId: Math.random().toString(36).substring(2, 9),
+            equipment_id: updated.equipment_id,
+            equipment_name: updated.equipment_name || '',
+            equipment_type: updated.equipment_type || '',
+            equipment_size: updated.equipment_size || '',
+            asset_number: updated.asset_number || '',
+            serial_number: updated.serial_number || match?.serial_number || '',
+            billing_period_start: updated.billing_period_start ? updated.billing_period_start.split('T')[0] : '',
+            billing_period_end: updated.billing_period_end ? updated.billing_period_end.split('T')[0] : '',
+            return_date: updated.return_date ? updated.return_date.split('T')[0] : '',
+            cost_rental: Number(updated.cost_rental) || 0,
+            cost_insurance: Number(updated.cost_insurance) || 0,
+            cost_freight: Number(updated.cost_freight) || 0,
+            cost_rcd: Number(updated.cost_rcd) || 0,
+            cost_third_party: Number(updated.cost_third_party) || 0,
+            cost_training: Number(updated.cost_training) || 0,
+            total_value: Number(updated.total_value) || 0,
+            notes: updated.notes
+          }
+        ]);
       }
 
       await loadRentalDeal(id);
@@ -647,7 +689,8 @@ const RentalEdit: React.FC = () => {
         equipment_name: selected.name,
         equipment_type: selected.type,
         equipment_size: selected.height ? `${selected.height}m` : '',
-        asset_number: selected.asset_number
+        asset_number: selected.asset_number,
+        serial_number: selected.serial_number || ''
       };
       return updated;
     });
@@ -720,6 +763,22 @@ const RentalEdit: React.FC = () => {
       setError(err.response?.data?.error || err.message || 'Erro ao salvar locação.');
     } finally {
       setSaving(false);
+    }
+  };
+
+  const handleDeleteRental = async () => {
+    if (!id) return;
+    try {
+      setDeletingRental(true);
+      setDeleteError(null);
+      await api.delete(`/rentals/${id}`);
+      navigate('/locacoes', {
+        state: { message: 'Locação e contas a receber associadas foram excluídas com sucesso.' }
+      });
+    } catch (err: any) {
+      console.error('Erro ao excluir locação:', err);
+      setDeleteError(err.response?.data?.error || err.message || 'Erro ao excluir locação.');
+      setDeletingRental(false);
     }
   };
 
@@ -850,11 +909,10 @@ const RentalEdit: React.FC = () => {
         <button
           type="button"
           onClick={() => setActiveTab('equipments')}
-          className={`pb-4 text-sm font-bold flex items-center gap-2 border-b-2 transition-all ${
-            activeTab === 'equipments'
+          className={`pb-4 text-sm font-bold flex items-center gap-2 border-b-2 transition-all ${activeTab === 'equipments'
               ? 'border-mustard-500 text-mustard-600 dark:text-mustard-400'
               : 'border-transparent text-slate-400 hover:text-slate-600 dark:hover:text-slate-300'
-          }`}
+            }`}
         >
           <span className="material-symbols-outlined text-lg">precision_manufacturing</span>
           Equipamentos da Locação
@@ -866,11 +924,10 @@ const RentalEdit: React.FC = () => {
         <button
           type="button"
           onClick={() => setActiveTab('billing')}
-          className={`pb-4 text-sm font-bold flex items-center gap-2 border-b-2 transition-all ${
-            activeTab === 'billing'
+          className={`pb-4 text-sm font-bold flex items-center gap-2 border-b-2 transition-all ${activeTab === 'billing'
               ? 'border-mustard-500 text-mustard-600 dark:text-mustard-400'
               : 'border-transparent text-slate-400 hover:text-slate-600 dark:hover:text-slate-300'
-          }`}
+            }`}
         >
           <span className="material-symbols-outlined text-lg">business</span>
           Faturamento & Cobrança
@@ -879,11 +936,10 @@ const RentalEdit: React.FC = () => {
         <button
           type="button"
           onClick={() => setActiveTab('contract')}
-          className={`pb-4 text-sm font-bold flex items-center gap-2 border-b-2 transition-all ${
-            activeTab === 'contract'
+          className={`pb-4 text-sm font-bold flex items-center gap-2 border-b-2 transition-all ${activeTab === 'contract'
               ? 'border-mustard-500 text-mustard-600 dark:text-mustard-400'
               : 'border-transparent text-slate-400 hover:text-slate-600 dark:hover:text-slate-300'
-          }`}
+            }`}
         >
           <span className="material-symbols-outlined text-lg">description</span>
           Contrato de Locação
@@ -892,11 +948,10 @@ const RentalEdit: React.FC = () => {
         <button
           type="button"
           onClick={() => setActiveTab('service_orders')}
-          className={`pb-4 text-sm font-bold flex items-center gap-2 border-b-2 transition-all ${
-            activeTab === 'service_orders'
+          className={`pb-4 text-sm font-bold flex items-center gap-2 border-b-2 transition-all ${activeTab === 'service_orders'
               ? 'border-mustard-500 text-mustard-600 dark:text-mustard-400'
               : 'border-transparent text-slate-400 hover:text-slate-600 dark:hover:text-slate-300'
-          }`}
+            }`}
         >
           <span className="material-symbols-outlined text-lg">construction</span>
           Ordens de Serviço
@@ -934,9 +989,9 @@ const RentalEdit: React.FC = () => {
                   .filter((_, i) => i !== index)
                   .map(e => e.equipment_id);
 
-                const selectableEquips = allEquipments.filter(e => 
-                  e.status === 'Disponível' || 
-                  e.id === currentEquipId || 
+                const selectableEquips = allEquipments.filter(e =>
+                  e.status === 'Disponível' ||
+                  e.id === currentEquipId ||
                   !selectedInOtherTabs.includes(e.id)
                 );
 
@@ -948,13 +1003,19 @@ const RentalEdit: React.FC = () => {
                     className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm overflow-hidden"
                   >
                     <div className="p-4 border-b border-slate-100 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-800/20 flex items-center justify-between">
-                      <div className="flex items-center gap-2">
+                      <div className="flex items-center gap-2 flex-wrap">
                         <span className="w-6 h-6 rounded-full bg-mustard-500 text-white text-xs font-bold flex items-center justify-center font-mono">
                           {index + 1}
                         </span>
                         <span className="font-bold text-sm text-slate-900 dark:text-white">
                           {item.equipment_name ? `${item.equipment_name} (${item.asset_number || 'S/N'})` : 'Novo Equipamento'}
                         </span>
+                        {item.serial_number && (
+                          <span className="px-2 py-0.5 rounded-md bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 font-mono text-xs font-semibold border border-slate-200 dark:border-slate-700 flex items-center gap-1">
+                            <span className="text-[10px] text-slate-400 uppercase tracking-wider">Série:</span>
+                            <span>{item.serial_number}</span>
+                          </span>
+                        )}
                       </div>
 
                       <div className="flex items-center gap-3">
@@ -993,14 +1054,42 @@ const RentalEdit: React.FC = () => {
                     <div className="p-6 space-y-6">
                       <SearchableSelect
                         label="Equipamento"
-                        placeholder="Pesquise por nome, patrimônio ou modelo..."
+                        placeholder="Pesquise por nome, patrimônio, número de série ou modelo..."
                         items={selectableEquips}
                         selectedId={item.equipment_id}
                         onSelect={(id) => handleEquipmentSelect(index, id)}
-                        getDisplayValue={(eq) => `${eq.asset_number} - ${eq.name} (${eq.status})`}
-                        getSearchValue={(eq) => `${eq.name} ${eq.asset_number} ${eq.type}`}
+                        getDisplayValue={(eq) => `${eq.asset_number} - ${eq.name}${eq.serial_number ? ` (Série: ${eq.serial_number})` : ''} (${eq.status})`}
+                        getSearchValue={(eq) => `${eq.name} ${eq.asset_number} ${eq.serial_number || ''} ${eq.type}`}
                         required
                       />
+
+                      {/* Informações detalhadas do equipamento selecionado */}
+                      {item.equipment_id && (
+                        <div className="flex flex-wrap items-center gap-4 p-3.5 bg-slate-50 dark:bg-slate-800/40 rounded-xl border border-slate-200/70 dark:border-slate-700/60 text-xs">
+                          {item.asset_number && (
+                            <div>
+                              <span className="text-slate-400 dark:text-slate-500 text-[10px] uppercase font-bold tracking-wider block">Patrimônio</span>
+                              <span className="font-mono font-bold text-slate-700 dark:text-slate-200">{item.asset_number}</span>
+                            </div>
+                          )}
+                          <div className="pl-4 border-l border-slate-200 dark:border-slate-700">
+                            <span className="text-slate-400 dark:text-slate-500 text-[10px] uppercase font-bold tracking-wider block">Nº de Série</span>
+                            <span className="font-mono font-bold text-slate-700 dark:text-slate-200">{item.serial_number || '-'}</span>
+                          </div>
+                          {item.equipment_type && (
+                            <div className="pl-4 border-l border-slate-200 dark:border-slate-700">
+                              <span className="text-slate-400 dark:text-slate-500 text-[10px] uppercase font-bold tracking-wider block">Tipo</span>
+                              <span className="font-semibold text-slate-700 dark:text-slate-200">{item.equipment_type}</span>
+                            </div>
+                          )}
+                          {item.equipment_size && (
+                            <div className="pl-4 border-l border-slate-200 dark:border-slate-700">
+                              <span className="text-slate-400 dark:text-slate-500 text-[10px] uppercase font-bold tracking-wider block">Altura</span>
+                              <span className="font-semibold text-slate-700 dark:text-slate-200">{item.equipment_size}</span>
+                            </div>
+                          )}
+                        </div>
+                      )}
 
                       {/* Dates */}
                       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
@@ -1110,11 +1199,10 @@ const RentalEdit: React.FC = () => {
                   <label className="text-xs font-bold text-slate-500 dark:text-slate-500 uppercase tracking-widest ml-1 flex items-center gap-2">
                     Status Faturamento
                     {generalData.billing_method !== 'MANUAL' && (
-                      <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-black normal-case tracking-normal ${
-                        invoicePaid
+                      <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-black normal-case tracking-normal ${invoicePaid
                           ? 'bg-emerald-100 dark:bg-emerald-500/10 text-emerald-700 dark:text-emerald-400'
                           : 'bg-amber-100 dark:bg-amber-500/10 text-amber-700 dark:text-amber-400'
-                      }`}>
+                        }`}>
                         <span className="material-symbols-outlined text-[12px]">{invoicePaid ? 'check_circle' : 'schedule'}</span>
                         {invoicePaid ? 'Pago' : 'Aguardando pagamento'}
                       </span>
@@ -1304,9 +1392,8 @@ const RentalEdit: React.FC = () => {
                                   <div className="flex flex-wrap items-center justify-between gap-3">
                                     <div className="flex items-center gap-3">
                                       <span
-                                        className={`w-3 h-3 rounded-full ${
-                                          contract.status === 'Assinado' ? 'bg-emerald-500' : 'bg-blue-500'
-                                        }`}
+                                        className={`w-3 h-3 rounded-full ${contract.status === 'Assinado' ? 'bg-emerald-500' : 'bg-blue-500'
+                                          }`}
                                       />
                                       <div>
                                         <p className="text-sm font-bold text-slate-900 dark:text-white flex items-center gap-2">
@@ -1325,11 +1412,10 @@ const RentalEdit: React.FC = () => {
 
                                     <div className="flex items-center gap-2">
                                       <span
-                                        className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-[10px] font-bold ${
-                                          contract.status === 'Assinado'
+                                        className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-[10px] font-bold ${contract.status === 'Assinado'
                                             ? 'bg-emerald-100 dark:bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-500/20'
                                             : 'bg-blue-100 dark:bg-blue-500/10 text-blue-700 dark:text-blue-400 border border-blue-200 dark:border-blue-500/20'
-                                        }`}
+                                          }`}
                                       >
                                         {contract.status}
                                       </span>
@@ -1474,11 +1560,18 @@ const RentalEdit: React.FC = () => {
                               <span className="font-bold text-slate-800 dark:text-slate-200 block">
                                 {os.equipment_asset_number ? `${os.equipment_asset_number} - ` : ''}{os.equipment_name || 'Equipamento'}
                               </span>
-                              {os.equipment_model && (
-                                <span className="text-[10px] text-slate-400 dark:text-slate-500 font-mono">
-                                  Modelo: {os.equipment_model}
-                                </span>
-                              )}
+                              <div className="flex items-center gap-2 mt-0.5 flex-wrap">
+                                {os.equipment_model && (
+                                  <span className="text-[10px] text-slate-400 dark:text-slate-500 font-mono">
+                                    Modelo: {os.equipment_model}
+                                  </span>
+                                )}
+                                {os.equipment_serial_number && (
+                                  <span className="text-[10px] text-slate-500 dark:text-slate-400 font-mono">
+                                    • Série: {os.equipment_serial_number}
+                                  </span>
+                                )}
+                              </div>
                             </td>
                             <td className="px-6 py-4">
                               <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold bg-indigo-50 dark:bg-indigo-500/10 text-indigo-700 dark:text-indigo-400 border border-indigo-200 dark:border-indigo-500/30">
@@ -1516,250 +1609,376 @@ const RentalEdit: React.FC = () => {
           )}
         </div>
 
-        {/* Right Column: Invoicing Summary */}
+        {/* Right Column: Invoicing Summary & Actions */}
         <div className="space-y-6">
-          <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm p-6 space-y-6 sticky top-6">
+          <div className="bg-white dark:bg-slate-900 rounded-3xl border border-slate-200/80 dark:border-slate-800 shadow-xl shadow-slate-200/40 dark:shadow-none p-6 space-y-5 sticky top-6">
+
+            {/* Header com total consolidado e itens */}
+            <div className="flex items-center justify-between pb-3 border-b border-slate-100 dark:border-slate-800">
+              <span className="text-[11px] font-extrabold uppercase tracking-widest text-slate-400 dark:text-slate-500 flex items-center gap-1.5">
+                <span className="material-symbols-outlined text-[16px] text-mustard-500">payments</span>
+                Faturamento da Locação
+              </span>
+              <span className="text-[11px] font-semibold px-2.5 py-1 rounded-xl bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 flex items-center gap-1">
+                <span className="material-symbols-outlined text-[14px]">precision_manufacturing</span>
+                <span>{equipmentItems.length} {equipmentItems.length === 1 ? 'item' : 'itens'}</span>
+              </span>
+            </div>
+
+            {/* Valor Total Consolidado */}
             <div>
-              <h3 className="text-xs font-bold uppercase tracking-widest text-slate-400 dark:text-slate-500">Valor Total Consolidado</h3>
-              <p className="text-4xl text-mustard-500 font-bold mt-1">
+              <span className="text-[10px] font-bold uppercase tracking-widest text-slate-400 dark:text-slate-500 block">
+                Valor Total Consolidado
+              </span>
+              <p className="text-3xl sm:text-4xl text-mustard-500 font-black tracking-tight mt-1 font-mono">
                 {totals.total_value.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
               </p>
-              <div className="mt-2 flex items-center gap-2 text-xs text-slate-500">
-                <span className="material-symbols-outlined text-sm">precision_manufacturing</span>
-                <span>{equipmentItems.length} equipamento(s) na locação</span>
-              </div>
             </div>
 
             {/* Breakdown summary */}
-            <div className="p-3 bg-slate-50 dark:bg-slate-800/40 rounded-xl space-y-1.5 text-xs text-slate-600 dark:text-slate-400 border border-slate-100 dark:border-slate-800">
-              <div className="flex justify-between">
+            <div className="p-3.5 bg-slate-50/80 dark:bg-slate-800/40 rounded-2xl space-y-1.5 text-xs text-slate-600 dark:text-slate-400 border border-slate-100 dark:border-slate-800/80">
+              <div className="flex justify-between items-center">
                 <span>Locação total:</span>
-                <span className="font-semibold text-slate-900 dark:text-white">{totals.cost_rental.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}</span>
+                <span className="font-semibold text-slate-900 dark:text-white font-mono">{totals.cost_rental.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}</span>
               </div>
-              <div className="flex justify-between">
+              <div className="flex justify-between items-center">
                 <span>Seguro total:</span>
-                <span className="font-semibold text-slate-900 dark:text-white">{totals.cost_insurance.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}</span>
+                <span className="font-semibold text-slate-900 dark:text-white font-mono">{totals.cost_insurance.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}</span>
               </div>
-              <div className="flex justify-between">
+              <div className="flex justify-between items-center">
                 <span>Frete total:</span>
-                <span className="font-semibold text-slate-900 dark:text-white">{totals.cost_freight.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}</span>
+                <span className="font-semibold text-slate-900 dark:text-white font-mono">{totals.cost_freight.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}</span>
               </div>
-              <div className="flex justify-between">
+              <div className="flex justify-between items-center">
                 <span>RCD total:</span>
-                <span className="font-semibold text-slate-900 dark:text-white">{totals.cost_rcd.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}</span>
+                <span className="font-semibold text-slate-900 dark:text-white font-mono">{totals.cost_rcd.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}</span>
               </div>
-              <div className="flex justify-between">
+              <div className="flex justify-between items-center">
                 <span>Terceiros total:</span>
-                <span className="font-semibold text-slate-900 dark:text-white">{totals.cost_third_party.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}</span>
+                <span className="font-semibold text-slate-900 dark:text-white font-mono">{totals.cost_third_party.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}</span>
               </div>
-              <div className="flex justify-between">
+              <div className="flex justify-between items-center">
                 <span>Treinamento total:</span>
-                <span className="font-semibold text-slate-900 dark:text-white">{totals.cost_training.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}</span>
+                <span className="font-semibold text-slate-900 dark:text-white font-mono">{totals.cost_training.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}</span>
               </div>
             </div>
 
-            <div className="space-y-4 pt-4 border-t border-slate-100 dark:border-slate-800">
-              <div className="space-y-1.5">
-                <label className="text-[10px] font-bold uppercase tracking-widest text-slate-500 dark:text-slate-400">Nº Fatura / Contrato</label>
-                <input type="text" name="invoice_number" value={generalData.invoice_number} onChange={handleGeneralChange} placeholder="Nº da Fatura" className="w-full px-4 py-2.5 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-slate-900 dark:text-white text-sm outline-none focus:ring-2 focus:ring-mustard-500/10" />
+            {/* Campos de Dados da Fatura */}
+            <div className="space-y-3 pt-3 border-t border-slate-100 dark:border-slate-800">
+              {/* Linha 1: Nº Fatura / Contrato e Vencimento */}
+              <div className="grid grid-cols-2 gap-3">
+                <div className="space-y-1.5">
+                  <label className="text-[10px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 block truncate" title="Nº Fatura / Contrato">
+                    Nº Fatura
+                  </label>
+                  <input
+                    type="text"
+                    name="invoice_number"
+                    value={generalData.invoice_number}
+                    onChange={handleGeneralChange}
+                    placeholder="Nº da Fatura"
+                    className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700 rounded-xl text-slate-900 dark:text-white text-xs outline-none focus:ring-2 focus:ring-mustard-500/20 font-mono transition-colors"
+                  />
+                </div>
+                <div className="space-y-1.5">
+                  <label className="text-[10px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 block truncate" title="Data de Vencimento">
+                    Vencimento *
+                  </label>
+                  <input
+                    required
+                    type="date"
+                    name="due_date"
+                    value={generalData.due_date}
+                    onChange={handleGeneralChange}
+                    className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700 rounded-xl text-slate-900 dark:text-white text-xs outline-none focus:ring-2 focus:ring-mustard-500/20 transition-colors"
+                  />
+                </div>
               </div>
-              <div className="space-y-1.5">
-                <label className="text-[10px] font-bold uppercase tracking-widest text-slate-500 dark:text-slate-400">Vencimento *</label>
-                <input required type="date" name="due_date" value={generalData.due_date} onChange={handleGeneralChange} className="w-full px-4 py-2.5 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-slate-900 dark:text-white text-sm outline-none focus:ring-2 focus:ring-mustard-500/10" />
-              </div>
-              <div className="space-y-1.5">
-                <label className="text-[10px] font-bold uppercase tracking-widest text-slate-500 dark:text-slate-400">Forma de Pagamento</label>
-                <select name="payment_method" value={generalData.payment_method} onChange={handleGeneralChange} className="w-full px-4 py-2.5 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-sm outline-none focus:ring-2 focus:ring-mustard-500/10 cursor-pointer dark:text-white">
-                  <option value="">Selecione</option>
-                  <option value="BOLETO">BOLETO</option>
-                  <option value="PIX">PIX</option>
-                  <option value="DEPÓSITO BANCÁRIO">DEPÓSITO BANCÁRIO</option>
-                </select>
-              </div>
-              <div className="space-y-1.5">
-                <label className="text-[10px] font-bold uppercase tracking-widest text-slate-500 dark:text-slate-400">Status Conciliação</label>
-                <select name="reconciliation_status" value={generalData.reconciliation_status} onChange={handleGeneralChange} className="w-full px-4 py-2.5 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-sm outline-none focus:ring-2 focus:ring-mustard-500/10 cursor-pointer dark:text-white">
-                  {RECONCILIATION_STATUSES.map(s => <option key={s} value={s}>{s}</option>)}
-                </select>
+
+              {/* Linha 2: Forma de Pagamento e Status Conciliação */}
+              <div className="grid grid-cols-2 gap-3">
+                <div className="space-y-1.5">
+                  <label className="text-[10px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 block truncate" title="Forma de Pagamento">
+                    Forma Pagto
+                  </label>
+                  <select
+                    name="payment_method"
+                    value={generalData.payment_method}
+                    onChange={handleGeneralChange}
+                    className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700 rounded-xl text-xs outline-none focus:ring-2 focus:ring-mustard-500/20 cursor-pointer dark:text-white transition-colors"
+                  >
+                    <option value="">Selecione</option>
+                    <option value="BOLETO">BOLETO</option>
+                    <option value="PIX">PIX</option>
+                    <option value="DEPÓSITO BANCÁRIO">DEPÓSITO</option>
+                  </select>
+                </div>
+                <div className="space-y-1.5">
+                  <label className="text-[10px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 block truncate" title="Status Conciliação">
+                    Conciliação
+                  </label>
+                  <select
+                    name="reconciliation_status"
+                    value={generalData.reconciliation_status}
+                    onChange={handleGeneralChange}
+                    className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700 rounded-xl text-xs outline-none focus:ring-2 focus:ring-mustard-500/20 cursor-pointer dark:text-white transition-colors"
+                  >
+                    {RECONCILIATION_STATUSES.map(s => (
+                      <option key={s} value={s}>
+                        {s}
+                      </option>
+                    ))}
+                  </select>
+                </div>
               </div>
             </div>
 
-            <div className="pt-4 space-y-4">
-              <button type="submit" disabled={saving} className="w-full py-4 bg-mustard-500 hover:bg-mustard-600 text-white rounded-xl font-bold text-sm uppercase tracking-widest active:scale-[0.98] transition-all flex items-center justify-center gap-2 shadow-lg shadow-mustard-500/20 disabled:opacity-70">
-                {saving ? <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" /> : 'Salvar Alterações'}
+            {/* Ações e Botões com Ícones */}
+            <div className="pt-2 space-y-2.5 border-t border-slate-100 dark:border-slate-800">
+              {/* Salvar Alterações */}
+              <button
+                type="submit"
+                disabled={saving}
+                className="w-full py-3 bg-mustard-500 hover:bg-mustard-600 active:scale-[0.98] text-white rounded-xl font-bold text-xs uppercase tracking-wider transition-all flex items-center justify-center gap-2 shadow-lg shadow-mustard-500/20 disabled:opacity-70"
+              >
+                {saving ? (
+                  <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                ) : (
+                  <>
+                    <span className="material-symbols-outlined text-[18px]">save</span>
+                    <span>Salvar Alterações</span>
+                  </>
+                )}
               </button>
 
+              {/* Botões para locações sem data de retorno */}
               {canExtend && (
-                <button
-                  type="button"
-                  onClick={() => {
-                    setError(null);
-                    setIsExtensionModalOpen(true);
-                  }}
-                  className="w-full py-3.5 bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-600 hover:to-amber-700 text-white rounded-xl font-bold text-xs uppercase tracking-widest active:scale-[0.98] transition-all flex items-center justify-center gap-2 shadow-lg shadow-amber-500/20"
-                >
-                  <span className="material-symbols-outlined text-[18px]">more_time</span>
-                  Prorrogar Locação
-                </button>
+                <div className="space-y-2 pt-0.5">
+                  {/* Lançar Prorrogação */}
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setError(null);
+                      setIsExtensionModalOpen(true);
+                    }}
+                    className="w-full py-2.5 px-4 bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-600 hover:to-amber-700 text-white rounded-xl font-bold text-xs uppercase tracking-wider active:scale-[0.98] transition-all flex items-center justify-center gap-2 shadow-md shadow-amber-500/20"
+                  >
+                    <span className="material-symbols-outlined text-[18px]">more_time</span>
+                    <span>Lançar Prorrogação</span>
+                  </button>
+
+                  {/* Retorno */}
+                  <button
+                    type="button"
+                    onClick={() => setShowRetornoNotice(prev => !prev)}
+                    className="w-full py-2.5 px-4 bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 border border-slate-200 dark:border-slate-700 rounded-xl font-bold text-xs uppercase tracking-wider active:scale-[0.98] transition-all flex items-center justify-center gap-2 shadow-sm hover:border-slate-300 dark:hover:border-slate-600"
+                  >
+                    <span className="material-symbols-outlined text-[18px] text-emerald-600 dark:text-emerald-400">checklist</span>
+                    <span>Retorno</span>
+                  </button>
+
+                  {/* Banner de Feedback da Triagem de Retorno */}
+                  {showRetornoNotice && (
+                    <motion.div
+                      initial={{ opacity: 0, y: -4 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      exit={{ opacity: 0, y: -4 }}
+                      className="p-3 bg-blue-50 dark:bg-blue-950/30 border border-blue-200 dark:border-blue-800/50 rounded-xl text-blue-800 dark:text-blue-300 text-xs flex items-start gap-2"
+                    >
+                      <span className="material-symbols-outlined text-base flex-shrink-0 text-blue-600 dark:text-blue-400 mt-0.5">info</span>
+                      <div className="flex-1">
+                        <p className="font-bold text-[11px]">Triagem de Retorno</p>
+                        <p className="text-[11px] text-blue-600 dark:text-blue-400/90 mt-0.5">
+                          A triagem e conferência de retorno dos equipamentos desta locação estará disponível nesta ação.
+                        </p>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => setShowRetornoNotice(false)}
+                        className="text-blue-400 hover:text-blue-600 dark:hover:text-blue-200"
+                      >
+                        <span className="material-symbols-outlined text-sm">close</span>
+                      </button>
+                    </motion.div>
+                  )}
+                </div>
               )}
 
-              {generalData.billing_method !== 'MANUAL' && (
-                <>
-                  {chargeMessage && (
-                    <div className={`px-4 py-3 rounded-xl text-xs font-medium flex items-center gap-2 ${chargeMessage.type === 'success' ? 'bg-emerald-900/20 text-emerald-100' : 'bg-red-900/30 text-red-100'
+              {/* Excluir Locação (Exclusivo Administrador e Diretoria) */}
+              {canDeleteRental && (
+                <div className="pt-2 border-t border-slate-100 dark:border-slate-800">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setDeleteError(null);
+                      setShowDeleteModal(true);
+                    }}
+                    className="w-full py-2.5 px-4 bg-red-50 hover:bg-red-100 dark:bg-red-500/10 dark:hover:bg-red-500/20 text-red-600 dark:text-red-400 border border-red-200 dark:border-red-500/30 rounded-xl font-bold text-xs uppercase tracking-wider active:scale-[0.98] transition-all flex items-center justify-center gap-2 shadow-sm hover:border-red-300 dark:hover:border-red-500/50"
+                    title="Excluir esta locação e contas a receber associadas"
+                  >
+                    <span className="material-symbols-outlined text-[18px]">delete</span>
+                    <span>Excluir Locação</span>
+                  </button>
+                </div>
+              )}
+            </div>
+
+            {generalData.billing_method !== 'MANUAL' && (
+              <>
+                {chargeMessage && (
+                  <div className={`px-4 py-3 rounded-xl text-xs font-medium flex items-center gap-2 ${chargeMessage.type === 'success' ? 'bg-emerald-900/20 text-emerald-100' : 'bg-red-900/30 text-red-100'
+                    }`}>
+                    <span className="material-symbols-outlined text-base">{chargeMessage.type === 'success' ? 'check_circle' : 'error'}</span>
+                    {chargeMessage.text}
+                  </div>
+                )}
+
+                {invoicePaid ? (
+                  <span className="w-full py-3 bg-emerald-900/20 text-emerald-100 rounded-xl font-bold text-xs uppercase tracking-widest flex items-center justify-center gap-2">
+                    <span className="material-symbols-outlined text-[18px]">check_circle</span>
+                    Pagamento Confirmado
+                  </span>
+                ) : chargeResult ? (
+                  <a
+                    href={chargeResult.charge.invoiceUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="w-full py-3 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl font-bold text-xs uppercase tracking-widest transition-all flex items-center justify-center gap-2 shadow-lg"
+                  >
+                    <span className="material-symbols-outlined text-[18px]">receipt_long</span>
+                    Ver Boleto
+                  </a>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={() => setChargeConfirmOpen(true)}
+                    disabled={charging}
+                    className="w-full py-3 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl font-bold text-xs uppercase tracking-widest transition-all flex items-center justify-center gap-2 shadow-lg disabled:opacity-70"
+                  >
+                    {charging ? (
+                      <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                    ) : (
+                      <>
+                        <span className="material-symbols-outlined text-[18px]">payments</span>
+                        {generalData.billing_status === 'Faturado' ? 'Gerar Segunda Via do Boleto' : 'Gerar Cobrança'}
+                      </>
+                    )}
+                  </button>
+                )}
+
+                <div className="pt-4 mt-4 border-t border-slate-100 dark:border-slate-800 space-y-3">
+                  <h4 className="text-[10px] font-bold uppercase tracking-widest text-slate-500 dark:text-slate-400 flex items-center gap-2">
+                    <span className="material-symbols-outlined text-[16px]">request_quote</span>
+                    Nota Fiscal
+                  </h4>
+
+                  {nfseMessage && (
+                    <div className={`px-4 py-3 rounded-xl text-xs font-medium flex items-center gap-2 ${nfseMessage.type === 'success' ? 'bg-emerald-900/20 text-emerald-100' : 'bg-red-900/30 text-red-100'
                       }`}>
-                      <span className="material-symbols-outlined text-base">{chargeMessage.type === 'success' ? 'check_circle' : 'error'}</span>
-                      {chargeMessage.text}
+                      <span className="material-symbols-outlined text-base">{nfseMessage.type === 'success' ? 'check_circle' : 'error'}</span>
+                      {nfseMessage.text}
                     </div>
                   )}
 
-                  {invoicePaid ? (
-                    <span className="w-full py-3 bg-emerald-900/20 text-emerald-100 rounded-xl font-bold text-xs uppercase tracking-widest flex items-center justify-center gap-2">
-                      <span className="material-symbols-outlined text-[18px]">check_circle</span>
-                      Pagamento Confirmado
-                    </span>
-                  ) : chargeResult ? (
-                    <a
-                      href={chargeResult.charge.invoiceUrl}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="w-full py-3 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl font-bold text-xs uppercase tracking-widest transition-all flex items-center justify-center gap-2 shadow-lg"
-                    >
-                      <span className="material-symbols-outlined text-[18px]">receipt_long</span>
-                      Ver Boleto
-                    </a>
-                  ) : (
-                    <button
-                      type="button"
-                      onClick={() => setChargeConfirmOpen(true)}
-                      disabled={charging}
-                      className="w-full py-3 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl font-bold text-xs uppercase tracking-widest transition-all flex items-center justify-center gap-2 shadow-lg disabled:opacity-70"
-                    >
-                      {charging ? (
-                        <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-                      ) : (
-                        <>
-                          <span className="material-symbols-outlined text-[18px]">payments</span>
-                          {generalData.billing_status === 'Faturado' ? 'Gerar Segunda Via do Boleto' : 'Gerar Cobrança'}
-                        </>
-                      )}
-                    </button>
-                  )}
-
-                  <div className="pt-4 mt-4 border-t border-slate-100 dark:border-slate-800 space-y-3">
-                    <h4 className="text-[10px] font-bold uppercase tracking-widest text-slate-500 dark:text-slate-400 flex items-center gap-2">
-                      <span className="material-symbols-outlined text-[16px]">request_quote</span>
-                      Nota Fiscal
-                    </h4>
-
-                    {nfseMessage && (
-                      <div className={`px-4 py-3 rounded-xl text-xs font-medium flex items-center gap-2 ${nfseMessage.type === 'success' ? 'bg-emerald-900/20 text-emerald-100' : 'bg-red-900/30 text-red-100'
-                        }`}>
-                        <span className="material-symbols-outlined text-base">{nfseMessage.type === 'success' ? 'check_circle' : 'error'}</span>
-                        {nfseMessage.text}
+                  {nfse ? (
+                    <>
+                      <div className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[11px] font-bold ${nfseBadgeClass(nfse.status)}`}>
+                        <span className="material-symbols-outlined text-[14px]">{nfseStatusIcon(nfse.status)}</span>
+                        {nfse.status}
                       </div>
-                    )}
 
-                    {nfse ? (
-                      <>
-                        <div className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[11px] font-bold ${nfseBadgeClass(nfse.status)}`}>
-                          <span className="material-symbols-outlined text-[14px]">{nfseStatusIcon(nfse.status)}</span>
-                          {nfse.status}
-                        </div>
+                      {(nfse.status === 'ERROR' || nfse.status === 'ERRO') && nfse.return_message && (
+                        <p className="text-xs text-red-400">{nfse.return_message}</p>
+                      )}
 
-                        {(nfse.status === 'ERROR' || nfse.status === 'ERRO') && nfse.return_message && (
-                          <p className="text-xs text-red-400">{nfse.return_message}</p>
-                        )}
-
-                        {(nfse.status === 'ERROR' || nfse.status === 'ERRO') && (
-                          <button
-                            type="button"
-                            onClick={handleEmitirNfse}
-                            disabled={!hasCharge || emittingNfse}
-                            className="w-full py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl font-bold text-xs uppercase tracking-widest transition-all flex items-center justify-center gap-2 disabled:opacity-50"
-                          >
-                            {emittingNfse ? (
-                              <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-                            ) : (
-                              <>
-                                <span className="material-symbols-outlined text-[16px]">refresh</span>
-                                Tentar Emitir Novamente
-                              </>
-                            )}
-                          </button>
-                        )}
-
-                        <div className="flex flex-wrap gap-2">
-                          {nfse.nfse_link && (
-                            <a
-                              href={nfse.nfse_link}
-                              target="_blank"
-                              rel="noopener noreferrer"
-                              className="flex-1 py-2.5 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-900 dark:text-white rounded-xl font-bold text-xs uppercase tracking-widest transition-all flex items-center justify-center gap-2"
-                            >
-                              <span className="material-symbols-outlined text-[16px]">description</span>
-                              Ver Nota
-                            </a>
-                          )}
-                          {nfse.xml_url && (
-                            <a
-                              href={nfse.xml_url}
-                              target="_blank"
-                              rel="noopener noreferrer"
-                              className="flex-1 py-2.5 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-900 dark:text-white rounded-xl font-bold text-xs uppercase tracking-widest transition-all flex items-center justify-center gap-2"
-                            >
-                              <span className="material-symbols-outlined text-[16px]">code</span>
-                              XML
-                            </a>
-                          )}
-                        </div>
-
-                        <button
-                          type="button"
-                          onClick={handleAtualizarStatusNfse}
-                          disabled={nfseLoading}
-                          className="w-full py-2.5 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-900 dark:text-white rounded-xl font-bold text-xs uppercase tracking-widest transition-all flex items-center justify-center gap-2 disabled:opacity-70"
-                        >
-                          {nfseLoading ? (
-                            <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-                          ) : (
-                            <>
-                              <span className="material-symbols-outlined text-[16px]">refresh</span>
-                              Atualizar Status
-                            </>
-                          )}
-                        </button>
-                      </>
-                    ) : (
-                      <>
+                      {(nfse.status === 'ERROR' || nfse.status === 'ERRO') && (
                         <button
                           type="button"
                           onClick={handleEmitirNfse}
                           disabled={!hasCharge || emittingNfse}
-                          className="w-full py-3 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl font-bold text-xs uppercase tracking-widest transition-all flex items-center justify-center gap-2 shadow-lg disabled:opacity-50"
+                          className="w-full py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl font-bold text-xs uppercase tracking-widest transition-all flex items-center justify-center gap-2 disabled:opacity-50"
                         >
                           {emittingNfse ? (
-                            <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                            <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
                           ) : (
                             <>
-                              <span className="material-symbols-outlined text-[18px]">request_quote</span>
-                              Emitir NFS-e
+                              <span className="material-symbols-outlined text-[16px]">refresh</span>
+                              Tentar Emitir Novamente
                             </>
                           )}
                         </button>
-                        {!hasCharge && (
-                          <p className="text-[11px] text-slate-400 text-center">Gere a cobrança antes de emitir a nota fiscal.</p>
-                        )}
-                      </>
-                    )}
-                  </div>
-                </>
-              )}
+                      )}
 
-              <button type="button" onClick={() => navigate('/locacoes')} className="w-full py-2.5 text-xs font-bold text-slate-500 hover:text-slate-800 dark:hover:text-slate-200 uppercase tracking-widest transition-colors text-center">
-                Cancelar e Voltar
-              </button>
-            </div>
+                      <div className="flex flex-wrap gap-2">
+                        {nfse.nfse_link && (
+                          <a
+                            href={nfse.nfse_link}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="flex-1 py-2.5 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-900 dark:text-white rounded-xl font-bold text-xs uppercase tracking-widest transition-all flex items-center justify-center gap-2"
+                          >
+                            <span className="material-symbols-outlined text-[16px]">description</span>
+                            Ver Nota
+                          </a>
+                        )}
+                        {nfse.xml_url && (
+                          <a
+                            href={nfse.xml_url}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="flex-1 py-2.5 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-900 dark:text-white rounded-xl font-bold text-xs uppercase tracking-widest transition-all flex items-center justify-center gap-2"
+                          >
+                            <span className="material-symbols-outlined text-[16px]">code</span>
+                            XML
+                          </a>
+                        )}
+                      </div>
+
+                      <button
+                        type="button"
+                        onClick={handleAtualizarStatusNfse}
+                        disabled={nfseLoading}
+                        className="w-full py-2.5 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-900 dark:text-white rounded-xl font-bold text-xs uppercase tracking-widest transition-all flex items-center justify-center gap-2 disabled:opacity-70"
+                      >
+                        {nfseLoading ? (
+                          <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                        ) : (
+                          <>
+                            <span className="material-symbols-outlined text-[16px]">refresh</span>
+                            Atualizar Status
+                          </>
+                        )}
+                      </button>
+                    </>
+                  ) : (
+                    <>
+                      <button
+                        type="button"
+                        onClick={handleEmitirNfse}
+                        disabled={!hasCharge || emittingNfse}
+                        className="w-full py-3 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl font-bold text-xs uppercase tracking-widest transition-all flex items-center justify-center gap-2 shadow-lg disabled:opacity-50"
+                      >
+                        {emittingNfse ? (
+                          <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                        ) : (
+                          <>
+                            <span className="material-symbols-outlined text-[18px]">request_quote</span>
+                            Emitir NFS-e
+                          </>
+                        )}
+                      </button>
+                      {!hasCharge && (
+                        <p className="text-[11px] text-slate-400 text-center">Gere a cobrança antes de emitir a nota fiscal.</p>
+                      )}
+                    </>
+                  )}
+                </div>
+              </>
+            )}
+
+            <button type="button" onClick={() => navigate('/locacoes')} className="w-full py-2.5 text-xs font-bold text-slate-500 hover:text-slate-800 dark:hover:text-slate-200 uppercase tracking-widest transition-colors text-center">
+              Cancelar e Voltar
+            </button>
           </div>
         </div>
       </form>
@@ -1886,7 +2105,7 @@ const RentalEdit: React.FC = () => {
                           {item.asset_number ? `${item.asset_number} - ` : ''}{item.equipment_name || 'Equipamento'}
                         </span>
                         <span className="text-xs text-slate-400 font-mono">
-                          {item.equipment_type || ''} {item.equipment_size ? `(${item.equipment_size})` : ''}
+                          {item.equipment_type || ''} {item.equipment_size ? `(${item.equipment_size})` : ''} {item.serial_number ? ` • Série: ${item.serial_number}` : ''}
                         </span>
                       </div>
                       <div className="flex items-center gap-2">
@@ -1920,6 +2139,93 @@ const RentalEdit: React.FC = () => {
           }}
         />
       )}
+
+      {/* Modal de Confirmação de Exclusão da Locação (Administrador e Diretoria) */}
+      <AnimatePresence>
+        {showDeleteModal && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              onClick={() => !deletingRental && setShowDeleteModal(false)}
+              className="absolute inset-0 bg-slate-900/60 backdrop-blur-sm"
+            />
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95, y: 10 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.95, y: 10 }}
+              className="relative w-full max-w-lg bg-white dark:bg-slate-900 rounded-3xl shadow-2xl border border-red-200 dark:border-red-900/40 overflow-hidden z-10 p-6 space-y-5"
+            >
+              <div className="flex items-center gap-3 pb-3 border-b border-slate-100 dark:border-slate-800">
+                <div className="w-11 h-11 rounded-2xl bg-red-50 dark:bg-red-500/10 text-red-600 dark:text-red-400 flex items-center justify-center flex-shrink-0">
+                  <span className="material-symbols-outlined text-2xl">delete_forever</span>
+                </div>
+                <div>
+                  <h3 className="text-base font-black text-slate-900 dark:text-white flex items-center gap-2">
+                    <span>Excluir Locação</span>
+                    {generalData.invoice_number && (
+                      <span className="text-xs px-2 py-0.5 rounded-full bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 font-mono">
+                        #{generalData.invoice_number}
+                      </span>
+                    )}
+                  </h3>
+                  <p className="text-xs text-slate-500 dark:text-slate-400">
+                    Ação restrita a Administradores e Diretoria
+                  </p>
+                </div>
+              </div>
+
+              {deleteError && (
+                <div className="p-3 bg-red-50 dark:bg-red-500/10 border border-red-200 dark:border-red-500/20 rounded-xl text-red-700 dark:text-red-400 text-xs flex items-center gap-2">
+                  <span className="material-symbols-outlined text-base flex-shrink-0">error</span>
+                  <span>{deleteError}</span>
+                </div>
+              )}
+
+              <div className="space-y-3 text-xs text-slate-600 dark:text-slate-300">
+                <p className="font-semibold text-slate-800 dark:text-slate-200">
+                  Tem certeza que deseja excluir esta locação? Esta ação é <strong className="text-red-600 dark:text-red-400">irreversível</strong> e executará as seguintes ações:
+                </p>
+                <ul className="space-y-1.5 pl-4 list-disc marker:text-red-500">
+                  <li>Exclusão permanente da fatura de locação.</li>
+                  <li><strong>Exclusão de todos os lançamentos financeiros</strong> atrelados a esta locação.</li>
+                  <li>Liberação automática das máquinas vinculadas para o status <strong>Disponível</strong> no estoque.</li>
+                </ul>
+              </div>
+
+              <div className="pt-2 flex items-center justify-end gap-3 border-t border-slate-100 dark:border-slate-800">
+                <button
+                  type="button"
+                  disabled={deletingRental}
+                  onClick={() => setShowDeleteModal(false)}
+                  className="px-4 py-2.5 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 rounded-xl text-xs font-bold transition-all disabled:opacity-50"
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="button"
+                  disabled={deletingRental}
+                  onClick={handleDeleteRental}
+                  className="px-5 py-2.5 bg-red-600 hover:bg-red-700 text-white rounded-xl text-xs font-bold uppercase tracking-wider transition-all flex items-center gap-2 shadow-lg shadow-red-600/20 disabled:opacity-50"
+                >
+                  {deletingRental ? (
+                    <>
+                      <div className="w-3.5 h-3.5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                      <span>Excluindo...</span>
+                    </>
+                  ) : (
+                    <>
+                      <span className="material-symbols-outlined text-[16px]">delete</span>
+                      <span>Sim, Excluir Locação</span>
+                    </>
+                  )}
+                </button>
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
     </motion.div>
   );
 };

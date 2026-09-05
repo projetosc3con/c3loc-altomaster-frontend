@@ -4,14 +4,29 @@ import api from '../services/api';
 import { formatDate } from '../utils/date';
 import type { RentalInvoiceEquipment } from '../types';
 
-interface EquipmentExtensionItem {
-  id?: string;
-  tempId?: string;
+function addDaysToDateStr(dateStr: string, days: number): string {
+  if (!dateStr) return '';
+  const parts = dateStr.split('-').map(Number);
+  if (parts.length !== 3 || parts.some(isNaN)) return dateStr;
+  const [year, month, day] = parts;
+  const d = new Date(year, month - 1, day);
+  d.setDate(d.getDate() + days);
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, '0');
+  const dt = String(d.getDate()).padStart(2, '0');
+  return `${y}-${m}-${dt}`;
+}
+
+interface MachineExtensionItem {
+  tempId: string;
   equipment_id: string;
   equipment_name: string;
   equipment_type?: string;
   equipment_size?: string;
   asset_number?: string;
+  serial_number?: string;
+  last_period_start?: string;
+  last_period_end?: string;
   billing_period_start: string;
   billing_period_end: string;
   cost_rental: number;
@@ -41,49 +56,12 @@ export const RentalExtensionModal: React.FC<RentalExtensionModalProps> = ({
   equipments,
   onSuccess
 }) => {
-  const [items, setItems] = useState<EquipmentExtensionItem[]>([]);
+  const [items, setItems] = useState<MachineExtensionItem[]>([]);
+  const [billDueDate, setBillDueDate] = useState<string>(() => new Date().toISOString().split('T')[0]);
   const [submitting, setSubmitting] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
-  // Inicializa a lista de equipamentos clonando os dados recebidos
-  useEffect(() => {
-    if (isOpen && equipments && equipments.length > 0) {
-      setErrorMessage(null);
-      setItems(
-        equipments.map((eq) => {
-          const r = Number(eq.cost_rental) || 0;
-          const i = Number(eq.cost_insurance) || 0;
-          const f = Number(eq.cost_freight) || 0;
-          const rcd = Number(eq.cost_rcd) || 0;
-          const tp = Number(eq.cost_third_party) || 0;
-          const tr = Number(eq.cost_training) || 0;
-          const total = r + i + f + rcd + tp + tr;
-
-          return {
-            id: eq.id || (eq as any).tempId,
-            tempId: (eq as any).tempId,
-            equipment_id: eq.equipment_id,
-            equipment_name: eq.equipment_name || 'Equipamento',
-            equipment_type: eq.equipment_type || '',
-            equipment_size: eq.equipment_size || '',
-            asset_number: eq.asset_number || '',
-            billing_period_start: eq.billing_period_start ? String(eq.billing_period_start).split('T')[0] : '',
-            billing_period_end: eq.billing_period_end ? String(eq.billing_period_end).split('T')[0] : '',
-            cost_rental: r,
-            cost_insurance: i,
-            cost_freight: f,
-            cost_rcd: rcd,
-            cost_third_party: tp,
-            cost_training: tr,
-            total_value: total,
-            notes: eq.notes || ''
-          };
-        })
-      );
-    }
-  }, [isOpen, equipments]);
-
-  // Valor total anterior da locação
+  // Valor total anterior consolidado de toda a locação
   const previousTotal = useMemo(() => {
     return equipments.reduce((acc, eq) => {
       const r = Number(eq.cost_rental) || 0;
@@ -96,8 +74,82 @@ export const RentalExtensionModal: React.FC<RentalExtensionModalProps> = ({
     }, 0);
   }, [equipments]);
 
-  // Novo valor total consolidado
-  const newTotal = useMemo(() => {
+  // Inicializa os itens de extensão para cada máquina distinta na locação
+  useEffect(() => {
+    if (isOpen && equipments && equipments.length > 0) {
+      setErrorMessage(null);
+      setBillDueDate(new Date().toISOString().split('T')[0]);
+
+      // Agrupar por máquina para encontrar o último período de cada equipamento
+      const machineMap = new Map<string, RentalInvoiceEquipment & { tempId?: string }>();
+      for (const eq of equipments) {
+        const key = eq.equipment_id || eq.equipment_name || Math.random().toString();
+        const existing = machineMap.get(key);
+        if (!existing) {
+          machineMap.set(key, eq);
+        } else {
+          const existingEnd = existing.billing_period_end ? String(existing.billing_period_end).split('T')[0] : '';
+          const currentEnd = eq.billing_period_end ? String(eq.billing_period_end).split('T')[0] : '';
+          if (currentEnd >= existingEnd) {
+            machineMap.set(key, eq);
+          }
+        }
+      }
+
+      const newExtensionItems: MachineExtensionItem[] = Array.from(machineMap.values()).map((eq) => {
+        const lastStart = eq.billing_period_start ? String(eq.billing_period_start).split('T')[0] : '';
+        const lastEnd = eq.billing_period_end ? String(eq.billing_period_end).split('T')[0] : '';
+
+        // Calcular a duração do período anterior em dias para sugerir a mesma duração
+        let durationDays = 30;
+        if (lastStart && lastEnd) {
+          const s = new Date(lastStart).getTime();
+          const e = new Date(lastEnd).getTime();
+          const d = Math.round((e - s) / (1000 * 60 * 60 * 24));
+          if (d > 0) durationDays = d + 1;
+        }
+
+        // Sugerir início 1 dia depois do último término
+        const suggestedStart = lastEnd ? addDaysToDateStr(lastEnd, 1) : new Date().toISOString().split('T')[0];
+        const suggestedEnd = addDaysToDateStr(suggestedStart, durationDays - 1);
+
+        const r = Number(eq.cost_rental) || 0;
+        const i = Number(eq.cost_insurance) || 0;
+        const f = 0; // Frete zerado por padrão no novo período
+        const rcd = Number(eq.cost_rcd) || 0;
+        const tp = Number(eq.cost_third_party) || 0;
+        const tr = Number(eq.cost_training) || 0;
+        const total = r + i + f + rcd + tp + tr;
+
+        return {
+          tempId: Math.random().toString(36).substring(2, 9),
+          equipment_id: eq.equipment_id,
+          equipment_name: eq.equipment_name || 'Equipamento',
+          equipment_type: eq.equipment_type || '',
+          equipment_size: eq.equipment_size || '',
+          asset_number: eq.asset_number || '',
+          serial_number: eq.serial_number || '',
+          last_period_start: lastStart,
+          last_period_end: lastEnd,
+          billing_period_start: suggestedStart,
+          billing_period_end: suggestedEnd,
+          cost_rental: r,
+          cost_insurance: i,
+          cost_freight: f,
+          cost_rcd: rcd,
+          cost_third_party: tp,
+          cost_training: tr,
+          total_value: total,
+          notes: 'Prorrogação de locação'
+        };
+      });
+
+      setItems(newExtensionItems);
+    }
+  }, [isOpen, equipments]);
+
+  // Total deste novo período de prorrogação (a lançar em bills)
+  const extensionTotal = useMemo(() => {
     return items.reduce((acc, item) => {
       const r = Number(item.cost_rental) || 0;
       const i = Number(item.cost_insurance) || 0;
@@ -109,19 +161,19 @@ export const RentalExtensionModal: React.FC<RentalExtensionModalProps> = ({
     }, 0);
   }, [items]);
 
-  const difference = Math.round((newTotal - previousTotal) * 100) / 100;
-  const isValueDecreased = newTotal < previousTotal;
+  // Novo total acumulado da locação
+  const newConsolidatedTotal = previousTotal + extensionTotal;
 
-  // Validação das datas de fim
+  // Validação das datas de início e fim
   const hasInvalidDates = useMemo(() => {
     return items.some((item) => {
-      if (!item.billing_period_end) return true;
-      if (item.billing_period_start && item.billing_period_end < item.billing_period_start) return true;
+      if (!item.billing_period_start || !item.billing_period_end) return true;
+      if (item.billing_period_end < item.billing_period_start) return true;
       return false;
     });
   }, [items]);
 
-  const handleFieldChange = (index: number, field: keyof EquipmentExtensionItem, value: any) => {
+  const handleFieldChange = (index: number, field: keyof MachineExtensionItem, value: any) => {
     setItems((prev) => {
       const updated = [...prev];
       const current = { ...updated[index], [field]: value };
@@ -141,15 +193,24 @@ export const RentalExtensionModal: React.FC<RentalExtensionModalProps> = ({
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (isValueDecreased) {
-      setErrorMessage(
-        `O valor total da prorrogação não pode ser inferior ao valor anterior (${previousTotal.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}).`
-      );
+
+    if (items.length === 0) {
+      setErrorMessage('Nenhum equipamento disponível para prorrogação.');
       return;
     }
 
     if (hasInvalidDates) {
-      setErrorMessage('Verifique as datas de fim da locação. Todas devem ser preenchidas e posteriores à data de início.');
+      setErrorMessage('Verifique as datas da prorrogação. As datas de início e fim devem estar preenchidas e a data final deve ser posterior ou igual à inicial.');
+      return;
+    }
+
+    if (extensionTotal <= 0) {
+      setErrorMessage('O valor do novo período de prorrogação deve ser superior a zero.');
+      return;
+    }
+
+    if (!billDueDate) {
+      setErrorMessage('Informe a data de vencimento da conta a receber.');
       return;
     }
 
@@ -158,8 +219,7 @@ export const RentalExtensionModal: React.FC<RentalExtensionModalProps> = ({
       setErrorMessage(null);
 
       const payload = {
-        equipments: items.map((it) => ({
-          id: it.id,
+        extensions: items.map((it) => ({
           equipment_id: it.equipment_id,
           equipment_name: it.equipment_name,
           equipment_type: it.equipment_type,
@@ -174,8 +234,9 @@ export const RentalExtensionModal: React.FC<RentalExtensionModalProps> = ({
           cost_third_party: Number(it.cost_third_party) || 0,
           cost_training: Number(it.cost_training) || 0,
           total_value: it.total_value,
-          notes: it.notes || null
-        }))
+          notes: it.notes || 'Prorrogação de locação'
+        })),
+        due_date: billDueDate
       };
 
       const res = await api.post(`/rentals/${rentalId}/extend`, payload);
@@ -219,7 +280,7 @@ export const RentalExtensionModal: React.FC<RentalExtensionModalProps> = ({
               </div>
               <div>
                 <h3 className="text-lg font-black text-slate-900 dark:text-white flex items-center gap-2">
-                  <span>Prorrogação de Locação</span>
+                  <span>Lançar Prorrogação de Período</span>
                   {invoiceNumber && (
                     <span className="text-xs px-2 py-0.5 rounded-full bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-300 font-mono">
                       #{invoiceNumber}
@@ -227,7 +288,7 @@ export const RentalExtensionModal: React.FC<RentalExtensionModalProps> = ({
                   )}
                 </h3>
                 <p className="text-xs text-slate-500 dark:text-slate-400">
-                  Altere a data de término e os valores dos equipamentos para prorrogar a vigência da locação.
+                  Adicione um novo período para os equipamentos da locação. Um novo registro de período e cobrança em contas a receber serão gerados.
                 </p>
               </div>
             </div>
@@ -251,7 +312,32 @@ export const RentalExtensionModal: React.FC<RentalExtensionModalProps> = ({
                 </div>
               )}
 
-              {/* Lista de Equipamentos */}
+              {/* Configuração de Vencimento da Conta a Receber */}
+              <div className="p-4 rounded-2xl bg-amber-50/70 dark:bg-amber-500/10 border border-amber-200/80 dark:border-amber-500/20 flex flex-wrap items-center justify-between gap-3">
+                <div className="flex items-center gap-2.5">
+                  <span className="material-symbols-outlined text-amber-600 dark:text-amber-400 text-xl">payments</span>
+                  <div>
+                    <h5 className="text-xs font-bold text-slate-900 dark:text-white">Conta a Receber do Novo Período</h5>
+                    <p className="text-[11px] text-slate-500 dark:text-slate-400">
+                      Defina a data de vencimento para a cobrança gerada desta prorrogação.
+                    </p>
+                  </div>
+                </div>
+                <div className="flex items-center gap-2">
+                  <label className="text-[11px] font-bold text-slate-600 dark:text-slate-300 uppercase tracking-wider">
+                    Vencimento:
+                  </label>
+                  <input
+                    type="date"
+                    required
+                    value={billDueDate}
+                    onChange={(e) => setBillDueDate(e.target.value)}
+                    className="px-3 py-1.5 bg-white dark:bg-slate-800 border border-amber-300 dark:border-amber-500/40 rounded-xl text-xs font-bold text-slate-900 dark:text-white outline-none focus:ring-2 focus:ring-amber-500/30"
+                  />
+                </div>
+              </div>
+
+              {/* Lista de Máquinas a Prorrogar */}
               <div className="space-y-4">
                 <h4 className="text-xs font-bold uppercase tracking-widest text-slate-400 dark:text-slate-500 flex items-center gap-2">
                   <span className="material-symbols-outlined text-sm">precision_manufacturing</span>
@@ -261,42 +347,57 @@ export const RentalExtensionModal: React.FC<RentalExtensionModalProps> = ({
                 {items.map((item, index) => {
                   return (
                     <div
-                      key={item.id || item.tempId || index}
+                      key={item.tempId || index}
                       className="p-5 rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900/40 space-y-4 shadow-sm"
                     >
-                      {/* Equipment Header (Read-only) */}
+                      {/* Header do Equipamento */}
                       <div className="flex flex-wrap items-center justify-between gap-2 pb-3 border-b border-slate-100 dark:border-slate-800">
-                        <div>
+                        <div className="flex items-center gap-2 flex-wrap">
                           <span className="font-bold text-slate-900 dark:text-white text-sm">
                             {item.asset_number ? `${item.asset_number} - ` : ''}
                             {item.equipment_name}
                           </span>
+                          {item.serial_number && (
+                            <span className="text-xs font-mono px-2 py-0.5 rounded-md bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 border border-slate-200 dark:border-slate-700 font-medium">
+                              Série: {item.serial_number}
+                            </span>
+                          )}
                           {(item.equipment_type || item.equipment_size) && (
-                            <span className="text-xs text-slate-400 font-mono ml-2">
+                            <span className="text-xs text-slate-400 font-mono">
                               ({[item.equipment_type, item.equipment_size].filter(Boolean).join(' - ')})
                             </span>
                           )}
+                          {item.last_period_end && (
+                            <span className="text-[11px] px-2 py-0.5 rounded-full bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400">
+                              Último término: {formatDate(item.last_period_end)}
+                            </span>
+                          )}
                         </div>
-                        <div className="text-xs font-bold text-mustard-600 dark:text-mustard-400">
-                          Subtotal: {item.total_value.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
+                        <div className="text-xs font-bold text-mustard-600 dark:text-mustard-400 font-mono">
+                          Subtotal do Período: {item.total_value.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
                         </div>
                       </div>
 
-                      {/* Period Section */}
+                      {/* Period Section (Totalmente Editável: Início e Fim) */}
                       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                         <div className="space-y-1">
-                          <label className="text-[11px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wider">
-                            Início da Locação (Fixo)
+                          <label className="text-[11px] font-bold text-slate-600 dark:text-slate-300 uppercase tracking-wider flex items-center justify-between">
+                            <span>Novo Início do Período *</span>
+                            <span className="text-[10px] text-amber-500 font-normal">livre escolha</span>
                           </label>
-                          <div className="px-3.5 py-2 bg-slate-100 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700 rounded-xl text-xs font-medium text-slate-600 dark:text-slate-300">
-                            {item.billing_period_start ? formatDate(item.billing_period_start) : 'Não definido'}
-                          </div>
+                          <input
+                            type="date"
+                            required
+                            value={item.billing_period_start}
+                            onChange={(e) => handleFieldChange(index, 'billing_period_start', e.target.value)}
+                            className="w-full px-3.5 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-xs font-medium text-slate-900 dark:text-white outline-none focus:ring-2 focus:ring-amber-500/20 focus:border-amber-500 transition-all"
+                          />
                         </div>
 
                         <div className="space-y-1">
                           <label className="text-[11px] font-bold text-slate-600 dark:text-slate-300 uppercase tracking-wider flex items-center justify-between">
-                            <span>Nova Data de Término *</span>
-                            <span className="text-[10px] text-amber-500 lowercase font-normal">editável</span>
+                            <span>Novo Fim do Período *</span>
+                            <span className="text-[10px] text-amber-500 font-normal">livre escolha</span>
                           </label>
                           <input
                             type="date"
@@ -312,8 +413,8 @@ export const RentalExtensionModal: React.FC<RentalExtensionModalProps> = ({
                       {/* Cost Inputs */}
                       <div className="space-y-2">
                         <label className="text-[11px] font-bold text-slate-600 dark:text-slate-300 uppercase tracking-wider flex items-center justify-between">
-                          <span>Valores deste Equipamento (R$)</span>
-                          <span className="text-[10px] text-amber-500 lowercase font-normal">ajustáveis</span>
+                          <span>Valores para Este Novo Período (R$)</span>
+                          <span className="text-[10px] text-amber-500 font-normal">ajustáveis</span>
                         </label>
                         <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2.5">
                           {[
@@ -349,36 +450,26 @@ export const RentalExtensionModal: React.FC<RentalExtensionModalProps> = ({
               {/* Financial Summary */}
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                 <div className="p-3 bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800">
-                  <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 block">Valor Anterior</span>
-                  <span className="text-sm font-bold text-slate-700 dark:text-slate-300">
+                  <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 block">Total da Locação Anterior</span>
+                  <span className="text-sm font-bold text-slate-700 dark:text-slate-300 font-mono">
                     {previousTotal.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
                   </span>
                 </div>
 
-                <div className="p-3 bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800">
-                  <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 block">Novo Valor Total</span>
-                  <span className="text-sm font-bold text-slate-900 dark:text-white">
-                    {newTotal.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
+                <div className="p-3 rounded-xl border bg-emerald-50 dark:bg-emerald-500/10 border-emerald-200 dark:border-emerald-500/30 text-emerald-600 dark:text-emerald-400">
+                  <span className="text-[10px] font-bold uppercase tracking-wider block opacity-75">
+                    Valor a Lançar (Novo Período)
+                  </span>
+                  <span className="text-sm font-bold flex items-center gap-1 font-mono">
+                    +{extensionTotal.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
+                    <span className="text-[10px] font-normal opacity-80">(Conta a Receber)</span>
                   </span>
                 </div>
 
-                <div
-                  className={`p-3 rounded-xl border ${isValueDecreased
-                      ? 'bg-red-50 dark:bg-red-500/10 border-red-200 dark:border-red-500/30 text-red-600 dark:text-red-400'
-                      : difference > 0
-                        ? 'bg-emerald-50 dark:bg-emerald-500/10 border-emerald-200 dark:border-emerald-500/30 text-emerald-600 dark:text-emerald-400'
-                        : 'bg-slate-100 dark:bg-slate-800 border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300'
-                    }`}
-                >
-                  <span className="text-[10px] font-bold uppercase tracking-wider block opacity-75">
-                    Diferença a Lançar (Hoje)
-                  </span>
-                  <span className="text-sm font-bold flex items-center gap-1">
-                    {difference > 0 ? '+' : ''}
-                    {difference.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
-                    {difference > 0 && (
-                      <span className="text-[10px] font-normal opacity-80">(Conta a Receber)</span>
-                    )}
+                <div className="p-3 bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800">
+                  <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 block">Novo Total Acumulado</span>
+                  <span className="text-sm font-bold text-slate-900 dark:text-white font-mono">
+                    {newConsolidatedTotal.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
                   </span>
                 </div>
               </div>
@@ -396,7 +487,7 @@ export const RentalExtensionModal: React.FC<RentalExtensionModalProps> = ({
 
                 <button
                   type="submit"
-                  disabled={submitting || isValueDecreased || hasInvalidDates}
+                  disabled={submitting || hasInvalidDates || extensionTotal <= 0}
                   className="px-6 py-2.5 rounded-xl bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-600 hover:to-amber-700 text-white font-bold text-xs uppercase tracking-wider shadow-lg shadow-amber-500/20 active:scale-[0.98] transition-all flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   {submitting ? (
@@ -406,8 +497,8 @@ export const RentalExtensionModal: React.FC<RentalExtensionModalProps> = ({
                     </>
                   ) : (
                     <>
-                      <span className="material-symbols-outlined text-[18px]">check_circle</span>
-                      <span>Confirmar Prorrogação</span>
+                      <span className="material-symbols-outlined text-[18px]">add_circle</span>
+                      <span>Lançar Prorrogação</span>
                     </>
                   )}
                 </button>

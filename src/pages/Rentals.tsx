@@ -151,6 +151,12 @@ const Rentals: React.FC = () => {
       const timer = setTimeout(() => setFeedbackToast(null), 8000);
       return () => clearTimeout(timer);
     }
+    if (location.state?.message) {
+      setFeedbackToast(`✓ ${location.state.message}`);
+      window.history.replaceState({}, document.title);
+      const timer = setTimeout(() => setFeedbackToast(null), 8000);
+      return () => clearTimeout(timer);
+    }
   }, [location.state]);
 
   useEffect(() => {
@@ -774,7 +780,7 @@ const Rentals: React.FC = () => {
                               </span>
                               <p className="text-sm font-bold text-slate-900 dark:text-white">{item.equipment_name || 'Equipamento'}</p>
                               <p className="text-[10px] text-slate-500 dark:text-slate-400 font-mono mt-0.5">
-                                {item.asset_number} {item.equipment_type ? `— ${item.equipment_type}` : ''}
+                                {item.asset_number} {item.equipment_type ? `— ${item.equipment_type}` : ''} {item.serial_number ? `• Série: ${item.serial_number}` : ''}
                               </p>
                             </div>
                             <div className="text-left md:text-center">
@@ -804,7 +810,7 @@ const Rentals: React.FC = () => {
                         <div className="md:col-span-1">
                           <span className="block text-[10px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-widest mb-1">Equipamento</span>
                           <p className="text-sm font-bold text-slate-900 dark:text-white">{selectedRental.equipment_name}</p>
-                          <p className="text-[10px] text-slate-500 dark:text-slate-400 font-mono mt-0.5">{selectedRental.asset_number} — {selectedRental.equipment_type}</p>
+                          <p className="text-[10px] text-slate-500 dark:text-slate-400 font-mono mt-0.5">{selectedRental.asset_number} — {selectedRental.equipment_type} {selectedRental.serial_number ? `• Série: ${selectedRental.serial_number}` : ''}</p>
                         </div>
                         <div className="text-center">
                           <span className="block text-[10px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-widest mb-1">Período</span>
