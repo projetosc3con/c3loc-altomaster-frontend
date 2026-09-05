@@ -136,6 +136,8 @@ export interface ParsedNfeData {
   additional_info?: string;
   already_imported?: boolean;
   existing_import?: any;
+  document_type?: 'nfe' | 'nfse';
+  verification_code?: string;
 }
 
 export type BillingStatus = 'Pendente' | 'Faturado' | 'Emitida' | 'Cancelada';

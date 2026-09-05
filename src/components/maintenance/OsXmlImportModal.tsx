@@ -370,13 +370,13 @@ const OsXmlImportModal: React.FC<OsXmlImportModalProps> = ({ isOpen, onClose, on
             </div>
             <div>
               <h2 className="text-lg font-black text-slate-900 dark:text-white flex items-center gap-2">
-                Importar NF-e para Ordem de Serviço
+                Importar Nota Fiscal para Ordem de Serviço
                 <span className="text-[10px] uppercase font-bold tracking-widest px-2 py-0.5 rounded-full bg-mustard-100 dark:bg-mustard-500/20 text-mustard-700 dark:text-mustard-400">
                   XML ou PDF
                 </span>
               </h2>
               <p className="text-xs text-slate-500 dark:text-slate-400">
-                Cadastre as peças no estoque e selecione os itens consumidos nesta OS
+                Alimente estoque, vincule serviços terceirizados e selecione os itens consumidos nesta OS
               </p>
             </div>
           </div>
@@ -395,7 +395,7 @@ const OsXmlImportModal: React.FC<OsXmlImportModalProps> = ({ isOpen, onClose, on
             <div className="p-4 rounded-2xl bg-red-50 dark:bg-red-500/10 border border-red-200 dark:border-red-500/20 text-red-700 dark:text-red-400 text-sm flex items-start gap-3">
               <span className="material-symbols-outlined text-red-500 mt-0.5 text-lg">error</span>
               <div>
-                <p className="font-bold">Erro ao processar NF-e</p>
+                <p className="font-bold">Erro ao processar Nota Fiscal</p>
                 <p className="text-xs mt-0.5">{error}</p>
               </div>
             </div>
@@ -418,14 +418,14 @@ const OsXmlImportModal: React.FC<OsXmlImportModalProps> = ({ isOpen, onClose, on
                   <span className="material-symbols-outlined text-3xl">upload_file</span>
                 </div>
                 <h3 className="text-base font-bold text-slate-800 dark:text-white">
-                  Selecione o arquivo XML ou PDF (DANFE) da NF-e
+                  Selecione o arquivo XML ou PDF da Nota Fiscal
                 </h3>
                 <p className="text-xs text-slate-400 mt-1 max-w-sm mx-auto">
-                  Clique ou arraste o arquivo XML ou PDF da nota fiscal emitida pelo fornecedor
+                  Clique ou arraste o arquivo XML (NF-e) ou PDF (DANFE ou NFS-e de serviços)
                 </p>
                 <div className="mt-4 inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-xs font-bold text-slate-700 dark:text-slate-300 shadow-sm">
                   <span className="material-symbols-outlined text-sm text-mustard-500">description</span>
-                  Formatos aceitos: .xml ou .pdf (DANFE da NF-e)
+                  Formatos aceitos: .xml ou .pdf (NF-e de produtos ou NFS-e de serviços)
                 </div>
               </div>
             </div>
@@ -437,11 +437,18 @@ const OsXmlImportModal: React.FC<OsXmlImportModalProps> = ({ isOpen, onClose, on
               <div className="p-5 rounded-2xl bg-gradient-to-br from-slate-50 to-slate-100/60 dark:from-slate-800/60 dark:to-slate-800/20 border border-slate-200 dark:border-slate-800 space-y-3">
                 <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-200/60 dark:border-slate-700/60 pb-3">
                   <div className="flex items-center gap-2">
-                    <span className="text-xs font-black text-slate-400 uppercase tracking-wider">NF-e Nº</span>
+                    <span className="text-xs font-black text-slate-400 uppercase tracking-wider">
+                      {parsedData.document_type === 'nfse' ? 'NFS-e Nº' : 'NF-e Nº'}
+                    </span>
                     <span className="text-base font-black text-slate-900 dark:text-white font-mono">
                       {parsedData.invoice_number}
                     </span>
                     <span className="text-xs font-bold text-slate-500">Série {parsedData.series || '1'}</span>
+                    {parsedData.document_type === 'nfse' && (
+                      <span className="text-[10px] uppercase font-bold tracking-widest px-2 py-0.5 rounded-full bg-sky-100 text-sky-800 dark:bg-sky-500/20 dark:text-sky-300">
+                        NFS-e Serviço
+                      </span>
+                    )}
                     {fileName && (
                       <span className="text-[11px] px-2 py-0.5 rounded-md bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-300 font-medium">
                         {fileType?.toUpperCase()}: {fileName}

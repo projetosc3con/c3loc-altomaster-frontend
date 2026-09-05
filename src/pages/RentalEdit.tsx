@@ -18,6 +18,7 @@ import { pdf } from '@react-pdf/renderer';
 import ContractDocument from '../components/crm-modals/ContractDocument';
 import { saveAs } from 'file-saver';
 import { formatDate } from '../utils/date';
+import RentalExtensionModal from '../components/RentalExtensionModal';
 
 type NfseRecord = any;
 type DealContract = any;
@@ -265,6 +266,11 @@ const RentalEdit: React.FC = () => {
   const [showContractDeleteConfirm, setShowContractDeleteConfirm] = useState(false);
   const [contractToDelete, setContractToDelete] = useState<any | null>(null);
 
+  // Rental & Extension state
+  const [rental, setRental] = useState<any | null>(null);
+  const [isExtensionModalOpen, setIsExtensionModalOpen] = useState(false);
+  const [extensionSuccessMsg, setExtensionSuccessMsg] = useState<string | null>(null);
+
   useEffect(() => {
     const fetchData = async () => {
       try {
@@ -276,6 +282,7 @@ const RentalEdit: React.FC = () => {
         ]);
 
         const rental = rentalRes.data;
+        setRental(rental);
         setClients(clientsRes.data.filter((c: Client) => c.active || c.id === rental.client_id));
         setAllEquipments(equipmentsRes.data);
 
@@ -379,6 +386,59 @@ const RentalEdit: React.FC = () => {
       total_value
     };
   }, [equipmentItems]);
+
+  const canExtend = useMemo(() => {
+    // Visível apenas para faturas sem return_date
+    if (rental?.return_date) return false;
+    if (equipmentItems.some(item => Boolean(item.return_date))) return false;
+    return true;
+  }, [rental, equipmentItems]);
+
+  const reloadRentalData = async () => {
+    if (!id) return;
+    try {
+      const rentalRes = await api.get(`/rentals/${id}`);
+      const updated = rentalRes.data;
+      setRental(updated);
+
+      setGeneralData({
+        invoice_number: updated.invoice_number || '',
+        client_id: updated.client_id || '',
+        work_site: updated.work_site || '',
+        billing_status: updated.billing_status || 'Pendente',
+        billing_method: updated.billing_method || 'MANUAL',
+        due_date: updated.due_date ? updated.due_date.split('T')[0] : '',
+        payment_method: updated.payment_method || '',
+        reconciliation_status: updated.reconciliation_status || 'Pendente',
+        notes: updated.notes || '',
+      });
+
+      setServiceOrders(updated.service_orders || []);
+
+      if (Array.isArray(updated.equipments) && updated.equipments.length > 0) {
+        setEquipmentItems(
+          updated.equipments.map((eq: RentalInvoiceEquipment) => ({
+            ...eq,
+            tempId: eq.id || Math.random().toString(36).substring(2, 9),
+            billing_period_start: eq.billing_period_start ? eq.billing_period_start.split('T')[0] : '',
+            billing_period_end: eq.billing_period_end ? eq.billing_period_end.split('T')[0] : '',
+            return_date: eq.return_date ? eq.return_date.split('T')[0] : '',
+            cost_rental: Number(eq.cost_rental) || 0,
+            cost_insurance: Number(eq.cost_insurance) || 0,
+            cost_freight: Number(eq.cost_freight) || 0,
+            cost_rcd: Number(eq.cost_rcd) || 0,
+            cost_third_party: Number(eq.cost_third_party) || 0,
+            cost_training: Number(eq.cost_training) || 0,
+            total_value: Number(eq.total_value) || 0
+          }))
+        );
+      }
+
+      await loadRentalDeal(id);
+    } catch (err: any) {
+      console.error('Erro ao recarregar dados da locação:', err);
+    }
+  };
 
   const loadContractData = async (targetDealId?: string) => {
     const currentDealId = targetDealId || deal?.id;
@@ -766,6 +826,22 @@ const RentalEdit: React.FC = () => {
         <div className="bg-red-50 dark:bg-red-500/10 border border-red-200 dark:border-red-500/20 text-red-700 dark:text-red-400 px-4 py-3 rounded-xl text-sm flex items-center gap-3">
           <span className="material-symbols-outlined text-red-500">error</span>
           {error}
+        </div>
+      )}
+
+      {extensionSuccessMsg && (
+        <div className="bg-emerald-50 dark:bg-emerald-500/10 border border-emerald-200 dark:border-emerald-500/20 text-emerald-700 dark:text-emerald-400 px-4 py-3 rounded-xl text-sm flex items-center justify-between gap-3 shadow-sm">
+          <div className="flex items-center gap-2.5">
+            <span className="material-symbols-outlined text-emerald-500">check_circle</span>
+            <span>{extensionSuccessMsg}</span>
+          </div>
+          <button
+            type="button"
+            onClick={() => setExtensionSuccessMsg(null)}
+            className="text-emerald-600 hover:text-emerald-800 dark:text-emerald-400 dark:hover:text-emerald-200 text-xs font-bold uppercase tracking-wider"
+          >
+            Dispensar
+          </button>
         </div>
       )}
 
@@ -1513,6 +1589,20 @@ const RentalEdit: React.FC = () => {
                 {saving ? <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" /> : 'Salvar Alterações'}
               </button>
 
+              {canExtend && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setError(null);
+                    setIsExtensionModalOpen(true);
+                  }}
+                  className="w-full py-3.5 bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-600 hover:to-amber-700 text-white rounded-xl font-bold text-xs uppercase tracking-widest active:scale-[0.98] transition-all flex items-center justify-center gap-2 shadow-lg shadow-amber-500/20"
+                >
+                  <span className="material-symbols-outlined text-[18px]">more_time</span>
+                  Prorrogar Locação
+                </button>
+              )}
+
               {generalData.billing_method !== 'MANUAL' && (
                 <>
                   {chargeMessage && (
@@ -1815,6 +1905,21 @@ const RentalEdit: React.FC = () => {
           </div>
         )}
       </AnimatePresence>
+
+      {/* Modal de Prorrogação de Locação */}
+      {id && (
+        <RentalExtensionModal
+          isOpen={isExtensionModalOpen}
+          onClose={() => setIsExtensionModalOpen(false)}
+          rentalId={id}
+          invoiceNumber={generalData.invoice_number}
+          equipments={equipmentItems}
+          onSuccess={(result) => {
+            setExtensionSuccessMsg(result?.message || 'Locação prorrogada com sucesso!');
+            reloadRentalData();
+          }}
+        />
+      )}
     </motion.div>
   );
 };

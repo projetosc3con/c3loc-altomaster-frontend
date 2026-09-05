@@ -300,10 +300,10 @@ export const XmlImportModal: React.FC<XmlImportModalProps> = ({ isOpen, onClose,
             </div>
             <div>
               <h2 className="text-xl font-black text-slate-900 dark:text-white">
-                Importar Nota Fiscal Eletrônica (NF-e - XML ou PDF)
+                Importar Nota Fiscal (NF-e ou NFS-e)
               </h2>
               <p className="text-xs text-slate-500 dark:text-slate-400 font-medium">
-                Entrada de equipamentos, peças, consumo, EPIs e geração de contas a pagar.
+                Entrada de equipamentos, peças, serviços terceirizados e geração de contas a pagar.
               </p>
             </div>
           </div>
@@ -358,10 +358,10 @@ export const XmlImportModal: React.FC<XmlImportModalProps> = ({ isOpen, onClose,
                   <span className="material-symbols-outlined text-3xl">upload_file</span>
                 </div>
                 <h3 className="text-lg font-bold text-slate-900 dark:text-white">
-                  Selecione ou Arraste o arquivo XML ou PDF (DANFE) da NF-e
+                  Selecione ou Arraste o arquivo XML ou PDF da Nota Fiscal
                 </h3>
                 <p className="text-sm text-slate-500 dark:text-slate-400 mt-1 max-w-md mx-auto font-medium">
-                  Aceita arquivos no padrão SEFAZ em formato .xml ou .pdf (DANFE gerada digitalmente), contendo dados de fornecedor, produtos e duplicatas.
+                  Aceita notas fiscais de produtos (NF-e em XML ou DANFE PDF) e notas fiscais de serviços (NFS-e em PDF).
                 </p>
 
                 <div className="mt-6 flex items-center justify-center gap-4">
@@ -402,13 +402,24 @@ export const XmlImportModal: React.FC<XmlImportModalProps> = ({ isOpen, onClose,
               {/* Header Card */}
               <div className="bg-slate-50 dark:bg-slate-800/40 p-5 rounded-2xl border border-slate-200 dark:border-slate-800 grid grid-cols-2 md:grid-cols-4 gap-4">
                 <div>
-                  <span className="block text-[10px] font-bold text-slate-400 uppercase tracking-widest">Número NF-e</span>
-                  <span className="text-base font-black text-slate-900 dark:text-white font-mono">
-                    {parsedData.invoice_number} (Série {parsedData.series})
+                  <span className="block text-[10px] font-bold text-slate-400 uppercase tracking-widest">
+                    {parsedData.document_type === 'nfse' ? 'Número NFS-e' : 'Número NF-e'}
                   </span>
+                  <div className="flex items-center gap-2 mt-0.5">
+                    <span className="text-base font-black text-slate-900 dark:text-white font-mono">
+                      {parsedData.invoice_number} (Série {parsedData.series})
+                    </span>
+                    {parsedData.document_type === 'nfse' && (
+                      <span className="text-[10px] uppercase font-bold tracking-widest px-2 py-0.5 rounded-full bg-sky-100 text-sky-800 dark:bg-sky-500/20 dark:text-sky-300">
+                        NFS-e
+                      </span>
+                    )}
+                  </div>
                 </div>
                 <div>
-                  <span className="block text-[10px] font-bold text-slate-400 uppercase tracking-widest">Emitente / Fornecedor</span>
+                  <span className="block text-[10px] font-bold text-slate-400 uppercase tracking-widest">
+                    {parsedData.document_type === 'nfse' ? 'Prestador de Serviço' : 'Emitente / Fornecedor'}
+                  </span>
                   <span className="text-sm font-bold text-slate-900 dark:text-white truncate block" title={parsedData.issuer?.name}>
                     {parsedData.issuer?.fantasy_name || parsedData.issuer?.name}
                   </span>
@@ -428,10 +439,20 @@ export const XmlImportModal: React.FC<XmlImportModalProps> = ({ isOpen, onClose,
                 </div>
               </div>
 
+              {parsedData.document_type === 'nfse' && (
+                <div className="p-4 bg-sky-50 dark:bg-sky-500/10 border border-sky-200 dark:border-sky-500/30 rounded-2xl flex items-start gap-3 text-sky-900 dark:text-sky-200 text-xs font-medium">
+                  <span className="material-symbols-outlined text-[20px] text-sky-600 dark:text-sky-400 shrink-0 mt-0.5">info</span>
+                  <div>
+                    <strong className="block font-bold">Nota Fiscal de Serviços Eletrônica (NFS-e)</strong>
+                    <span>Esta nota fiscal corresponde a prestação de serviços / mão de obra terceirizada. O lançamento financeiro será gerado em Contas a Pagar sem movimentar estoque físico de peças.</span>
+                  </div>
+                </div>
+              )}
+
               {parsedData.already_imported && (
                 <div className="p-4 bg-amber-50 dark:bg-amber-500/10 border border-amber-200 dark:border-amber-500/30 rounded-2xl flex items-center gap-3 text-amber-800 dark:text-amber-300 text-xs font-bold">
                   <span className="material-symbols-outlined text-[20px]">warning</span>
-                  <span>Atenção: Esta chave de acesso já consta como importada no banco de dados.</span>
+                  <span>Atenção: Esta chave/identificador já consta como importado no banco de dados.</span>
                 </div>
               )}
 
