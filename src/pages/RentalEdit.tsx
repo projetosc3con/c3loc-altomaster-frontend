@@ -647,10 +647,6 @@ const RentalEdit: React.FC = () => {
     setGeneralData(prev => ({ ...prev, [name]: value }));
   };
 
-  const handleAddEquipment = () => {
-    setEquipmentItems(prev => [...prev, createDefaultEquipmentItem()]);
-  };
-
   const handleRemoveEquipment = (index: number) => {
     if (equipmentItems.length <= 1) {
       alert('A locação deve conter obrigatoriamente pelo menos um equipamento.');
@@ -973,14 +969,6 @@ const RentalEdit: React.FC = () => {
                   <h3 className="text-base font-bold text-slate-900 dark:text-white">Equipamentos Atrelados</h3>
                   <p className="text-xs text-slate-500 dark:text-slate-400">Edite os itens, datas individuais e devoluções parciais.</p>
                 </div>
-                <button
-                  type="button"
-                  onClick={handleAddEquipment}
-                  className="px-4 py-2 bg-mustard-500 hover:bg-mustard-600 active:scale-95 text-white rounded-xl text-xs font-bold transition-all flex items-center gap-2 shadow-sm"
-                >
-                  <span className="material-symbols-outlined text-[18px]">add</span>
-                  Adicionar Equipamento
-                </button>
               </div>
 
               {equipmentItems.map((item, index) => {
