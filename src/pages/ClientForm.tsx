@@ -17,6 +17,37 @@ const maskCnpj = (value: string) => {
     .slice(0, 18);
 };
 
+const isValidCnpjChecksum = (cnpj: string): boolean => {
+  const clean = cnpj.replace(/\D/g, '');
+  if (clean.length !== 14) return false;
+  if (/^(\d)\1+$/.test(clean)) return false;
+
+  let size = clean.length - 2;
+  let numbers = clean.substring(0, size);
+  const digits = clean.substring(size);
+  let sum = 0;
+  let pos = size - 7;
+  for (let i = size; i >= 1; i--) {
+    sum += Number(numbers.charAt(size - i)) * pos--;
+    if (pos < 2) pos = 9;
+  }
+  let result = sum % 11 < 2 ? 0 : 11 - (sum % 11);
+  if (result !== Number(digits.charAt(0))) return false;
+
+  size = size + 1;
+  numbers = clean.substring(0, size);
+  sum = 0;
+  pos = size - 7;
+  for (let i = size; i >= 1; i--) {
+    sum += Number(numbers.charAt(size - i)) * pos--;
+    if (pos < 2) pos = 9;
+  }
+  result = sum % 11 < 2 ? 0 : 11 - (sum % 11);
+  if (result !== Number(digits.charAt(1))) return false;
+
+  return true;
+};
+
 const ClientForm: React.FC = () => {
   const { id } = useParams();
   const navigate = useNavigate();
@@ -28,6 +59,9 @@ const ClientForm: React.FC = () => {
   const [uploading, setUploading] = useState(false);
   const [fetching, setFetching] = useState(isEdit);
   const [error, setError] = useState<string | null>(null);
+
+  const [cnpjStatus, setCnpjStatus] = useState<'idle' | 'validating' | 'valid' | 'invalid'>(isEdit ? 'valid' : 'idle');
+  const [cnpjError, setCnpjError] = useState<string | null>(null);
 
   const [asaasCustomerId, setAsaasCustomerId] = useState<string | undefined>(undefined);
   const [syncingAsaas, setSyncingAsaas] = useState(false);
@@ -74,6 +108,7 @@ const ClientForm: React.FC = () => {
             active: data.active ?? true,
           });
           setAsaasCustomerId(data.asaas_customer_id || undefined);
+          setCnpjStatus(data.cnpj ? 'valid' : 'idle');
         } catch (err: any) {
           console.error('Erro ao buscar cliente:', err);
           setError('Não foi possível carregar os dados do cliente.');
@@ -96,11 +131,42 @@ const ClientForm: React.FC = () => {
     setFormData(prev => ({ ...prev, cnpj: masked }));
 
     const unmasked = masked.replace(/\D/g, '');
+    if (unmasked.length === 0) {
+      setCnpjStatus('idle');
+      setCnpjError(null);
+      return;
+    }
+
+    if (unmasked.length < 14) {
+      setCnpjStatus('invalid');
+      setCnpjError('CNPJ incompleto (deve conter 14 dígitos).');
+      return;
+    }
+
     if (unmasked.length === 14) {
+      if (!isValidCnpjChecksum(unmasked)) {
+        setCnpjStatus('invalid');
+        setCnpjError('CNPJ inválido (dígitos verificadores incorretos).');
+        return;
+      }
+
+      setCnpjStatus('validating');
+      setCnpjError(null);
+
       try {
         const response = await fetch(`https://api.opencnpj.org/${unmasked}`);
-        if (!response.ok) return;
+        if (!response.ok) {
+          setCnpjStatus('invalid');
+          setCnpjError('CNPJ não encontrado ou inválido na Receita Federal.');
+          return;
+        }
         const data = await response.json();
+
+        if (data.error || (!data.razao_social && !data.razao_scoial && !data.cnpj)) {
+          setCnpjStatus('invalid');
+          setCnpjError('CNPJ não localizado na base de dados da Receita Federal.');
+          return;
+        }
 
         const company_name = data.razao_scoial || data.razao_social || '';
         const tel = data.telefones?.[0];
@@ -132,8 +198,13 @@ const ClientForm: React.FC = () => {
           address_state: uf || prev.address_state,
           address_zip: cep_formatado || prev.address_zip
         }));
+
+        setCnpjStatus('valid');
+        setCnpjError(null);
       } catch (err) {
-        // não fazer nada se a api falhar
+        console.error('Erro na consulta do CNPJ:', err);
+        setCnpjStatus('invalid');
+        setCnpjError('Falha ao validar o CNPJ junto à Receita Federal. Verifique o número digitado.');
       }
     }
   };
@@ -179,6 +250,18 @@ const ClientForm: React.FC = () => {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+
+    if (cnpjStatus === 'validating') {
+      setError('Aguarde a validação do CNPJ junto à Receita Federal antes de cadastrar.');
+      return;
+    }
+
+    if (cnpjStatus !== 'valid') {
+      const msg = cnpjError || 'O CNPJ informado não foi validado com sucesso pela Receita Federal. Não é possível cadastrar o cliente.';
+      setError(msg);
+      return;
+    }
+
     setLoading(true);
     setError(null);
 
@@ -260,7 +343,7 @@ const ClientForm: React.FC = () => {
       </div>
 
       {error && (
-        <div className="bg-red-50 border border-red-100 text-red-700 px-4 py-3 rounded-xl text-sm flex items-center gap-3">
+        <div className="bg-red-50 dark:bg-red-500/10 border border-red-100 dark:border-red-500/20 text-red-700 dark:text-red-400 px-4 py-3 rounded-xl text-sm flex items-center gap-3">
           <span className="material-symbols-outlined text-red-500">error</span>
           {error}
         </div>
@@ -290,16 +373,65 @@ const ClientForm: React.FC = () => {
                 />
               </div>
               <div className="space-y-1.5">
-                <label className="text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-widest ml-1">CNPJ *</label>
-                <input
-                  required
-                  type="text"
-                  name="cnpj"
-                  value={formData.cnpj}
-                  onChange={handleCnpjChange}
-                  placeholder="00.000.000/0000-00"
-                  className="w-full px-4 py-2.5 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-slate-900 dark:text-white focus:bg-white dark:focus:bg-slate-900 focus:ring-2 focus:ring-mustard-500/10 focus:border-mustard-500 transition-all outline-none text-sm placeholder:text-slate-400 dark:placeholder:text-slate-600"
-                />
+                <div className="flex items-center justify-between">
+                  <label className="text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-widest ml-1">CNPJ *</label>
+                  {cnpjStatus === 'validating' && (
+                    <span className="text-[11px] text-amber-600 dark:text-amber-400 font-medium flex items-center gap-1">
+                      <div className="w-3 h-3 border-2 border-amber-500/30 border-t-amber-500 rounded-full animate-spin"></div>
+                      Consultando Receita...
+                    </span>
+                  )}
+                  {cnpjStatus === 'valid' && (
+                    <span className="text-[11px] text-emerald-600 dark:text-emerald-400 font-bold flex items-center gap-0.5">
+                      <span className="material-symbols-outlined text-[15px]">check_circle</span>
+                      CNPJ Validado
+                    </span>
+                  )}
+                  {cnpjStatus === 'invalid' && (
+                    <span className="text-[11px] text-red-600 dark:text-red-400 font-bold flex items-center gap-0.5">
+                      <span className="material-symbols-outlined text-[15px]">cancel</span>
+                      Não Validado
+                    </span>
+                  )}
+                </div>
+                <div className="relative">
+                  <input
+                    required
+                    type="text"
+                    name="cnpj"
+                    value={formData.cnpj}
+                    onChange={handleCnpjChange}
+                    placeholder="00.000.000/0000-00"
+                    className={`w-full px-4 py-2.5 bg-slate-50 dark:bg-slate-800 border rounded-xl text-slate-900 dark:text-white focus:bg-white dark:focus:bg-slate-900 transition-all outline-none text-sm placeholder:text-slate-400 dark:placeholder:text-slate-600 ${
+                      cnpjStatus === 'invalid'
+                        ? 'border-red-500 focus:ring-2 focus:ring-red-500/20 focus:border-red-500'
+                        : cnpjStatus === 'valid'
+                        ? 'border-emerald-500/50 focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500'
+                        : 'border-slate-200 dark:border-slate-700 focus:ring-2 focus:ring-mustard-500/10 focus:border-mustard-500'
+                    }`}
+                  />
+                  {cnpjStatus === 'validating' && (
+                    <div className="absolute right-3 top-1/2 -translate-y-1/2">
+                      <div className="w-4 h-4 border-2 border-amber-500/30 border-t-amber-500 rounded-full animate-spin"></div>
+                    </div>
+                  )}
+                  {cnpjStatus === 'valid' && (
+                    <span className="absolute right-3 top-1/2 -translate-y-1/2 material-symbols-outlined text-emerald-500 text-[18px]">
+                      verified
+                    </span>
+                  )}
+                  {cnpjStatus === 'invalid' && (
+                    <span className="absolute right-3 top-1/2 -translate-y-1/2 material-symbols-outlined text-red-500 text-[18px]">
+                      error
+                    </span>
+                  )}
+                </div>
+                {cnpjStatus === 'invalid' && cnpjError && (
+                  <p className="text-xs text-red-600 dark:text-red-400 font-medium ml-1 flex items-center gap-1 mt-1">
+                    <span className="material-symbols-outlined text-[14px]">error</span>
+                    {cnpjError}
+                  </p>
+                )}
               </div>
               <div className="space-y-1.5">
                 <label className="text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-widest ml-1">Inscrição Estadual</label>
@@ -628,8 +760,15 @@ const ClientForm: React.FC = () => {
           </button>
           <button
             type="submit"
-            disabled={loading}
-            className="px-8 py-3 bg-mustard-500 text-white rounded-xl font-bold text-sm uppercase tracking-wider hover:bg-mustard-600 active:scale-[0.98] transition-all flex items-center justify-center gap-2 disabled:opacity-70 disabled:pointer-events-none"
+            disabled={loading || cnpjStatus === 'validating' || cnpjStatus === 'invalid'}
+            title={
+              cnpjStatus === 'invalid'
+                ? 'Valide o CNPJ na Receita Federal para salvar'
+                : cnpjStatus === 'validating'
+                ? 'Aguarde a validação do CNPJ'
+                : undefined
+            }
+            className="px-8 py-3 bg-mustard-500 text-white rounded-xl font-bold text-sm uppercase tracking-wider hover:bg-mustard-600 active:scale-[0.98] transition-all flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
           >
             {loading ? (
               <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin"></div>

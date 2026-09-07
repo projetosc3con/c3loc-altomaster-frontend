@@ -9,7 +9,6 @@ import { formatDate } from '../../../utils/date';
 import type { Client, StatementItem, BillStatus } from '../../../types';
 
 const STATUS_OPTIONS: BillStatus[] = ['Pendente', 'Atrasado', 'Recebido', 'Divergente', 'No prazo'];
-const ORIGIN_OPTIONS = ['ASAAS', 'MANUAL', 'NFE'];
 const ITEMS_PER_PAGE = 20;
 
 const isSettled = (item: StatementItem) =>
@@ -69,8 +68,8 @@ const sourceBadge = (item: StatementItem) => {
 const ContasReceberTab: React.FC = () => {
   const [clients, setClients] = useState<Client[]>([]);
   const [selectedClientId, setSelectedClientId] = useState('');
+  const [invoiceNumber, setInvoiceNumber] = useState('');
   const [status, setStatus] = useState('');
-  const [origin, setOrigin] = useState('');
   const [dateFrom, setDateFrom] = useState('');
   const [dateTo, setDateTo] = useState('');
 
@@ -104,8 +103,8 @@ const ContasReceberTab: React.FC = () => {
       const data = await financeiroService.listarExtratoBancario({
         type: 'receivable',
         client_id: selectedClientId || undefined,
+        invoice_number: invoiceNumber || undefined,
         status: status || undefined,
-        origin: origin || undefined,
         from: dateFrom || undefined,
         to: dateTo || undefined,
         page: currentPage,
@@ -120,7 +119,7 @@ const ContasReceberTab: React.FC = () => {
     } finally {
       setLoading(false);
     }
-  }, [selectedClientId, status, origin, dateFrom, dateTo, currentPage]);
+  }, [selectedClientId, invoiceNumber, status, dateFrom, dateTo, currentPage]);
 
   useEffect(() => {
     fetchContasReceber();
@@ -128,12 +127,12 @@ const ContasReceberTab: React.FC = () => {
 
   useEffect(() => {
     setCurrentPage(1);
-  }, [selectedClientId, status, origin, dateFrom, dateTo]);
+  }, [selectedClientId, invoiceNumber, status, dateFrom, dateTo]);
 
   const handleClearFilters = () => {
     setSelectedClientId('');
+    setInvoiceNumber('');
     setStatus('');
-    setOrigin('');
     setDateFrom('');
     setDateTo('');
   };
@@ -142,7 +141,7 @@ const ContasReceberTab: React.FC = () => {
     fetchContasReceber();
   };
 
-  const hasActiveFilters = Boolean(selectedClientId || status || origin || dateFrom || dateTo);
+  const hasActiveFilters = Boolean(selectedClientId || invoiceNumber || status || dateFrom || dateTo);
 
   return (
     <div className="space-y-6">
@@ -182,6 +181,34 @@ const ContasReceberTab: React.FC = () => {
             />
 
             <div className="space-y-1.5">
+              <label className="text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-widest ml-1">
+                Nº Fatura
+              </label>
+              <div className="relative">
+                <input
+                  type="text"
+                  value={invoiceNumber}
+                  onChange={(e) => setInvoiceNumber(e.target.value)}
+                  placeholder="Buscar por fatura..."
+                  className="w-full pl-9 pr-8 py-2.5 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-slate-900 dark:text-white focus:bg-white dark:focus:bg-slate-900 focus:ring-2 focus:ring-mustard-500/10 focus:border-mustard-500 transition-all outline-none text-sm placeholder:text-slate-400 dark:placeholder:text-slate-600 font-medium"
+                />
+                <span className="material-symbols-outlined absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400 text-[18px]">
+                  tag
+                </span>
+                {invoiceNumber && (
+                  <button
+                    type="button"
+                    onClick={() => setInvoiceNumber('')}
+                    className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 p-0.5"
+                    title="Limpar número da fatura"
+                  >
+                    <span className="material-symbols-outlined text-[16px]">close</span>
+                  </button>
+                )}
+              </div>
+            </div>
+
+            <div className="space-y-1.5">
               <label className="text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-widest ml-1">Status</label>
               <select
                 value={status}
@@ -190,18 +217,6 @@ const ContasReceberTab: React.FC = () => {
               >
                 <option value="">Todos</option>
                 {STATUS_OPTIONS.map((s) => <option key={s} value={s}>{s}</option>)}
-              </select>
-            </div>
-
-            <div className="space-y-1.5">
-              <label className="text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-widest ml-1">Origem</label>
-              <select
-                value={origin}
-                onChange={(e) => setOrigin(e.target.value)}
-                className="w-full px-4 py-2.5 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-slate-900 dark:text-white focus:bg-white dark:focus:bg-slate-900 focus:ring-2 focus:ring-mustard-500/10 focus:border-mustard-500 transition-all outline-none text-sm cursor-pointer"
-              >
-                <option value="">Todas</option>
-                {ORIGIN_OPTIONS.map((o) => <option key={o} value={o}>{o}</option>)}
               </select>
             </div>
 
@@ -295,9 +310,18 @@ const ContasReceberTab: React.FC = () => {
                           <p className="font-bold text-slate-900 dark:text-white">
                             {item.client_name || item.counterparty_name || '—'}
                           </p>
-                          <p className="text-[11px] text-slate-400 dark:text-slate-500 font-mono">
-                            {item.invoice_number || '—'}
-                          </p>
+                          <div className="flex flex-col text-[11px] font-mono text-slate-400 dark:text-slate-500">
+                            {item.invoice_number ? (
+                              <span>{item.invoice_number}</span>
+                            ) : (
+                              <span>—</span>
+                            )}
+                            {item.fatura_numero && (
+                              <span className="text-emerald-600 dark:text-emerald-400 font-semibold mt-0.5">
+                                Fatura Nº {item.fatura_numero}
+                              </span>
+                            )}
+                          </div>
                         </td>
                         <td className="px-6 py-4">
                           <span className={`inline-flex items-center px-2.5 py-1 rounded-full text-[11px] font-bold ${badge.className}`}>

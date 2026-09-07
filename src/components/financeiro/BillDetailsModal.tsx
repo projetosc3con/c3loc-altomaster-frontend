@@ -25,6 +25,31 @@ const formatMoney = (val?: number | null): string => {
   return num.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
 };
 
+const getBoletoUrls = (rawVal: any): string[] => {
+  if (!rawVal) return [];
+  if (Array.isArray(rawVal)) {
+    return rawVal.filter((u): u is string => typeof u === 'string' && u.trim().length > 0);
+  }
+  if (typeof rawVal === 'string' && rawVal.trim().length > 0) {
+    return [rawVal.trim()];
+  }
+  return [];
+};
+
+const getBoletoFileName = (url: string, index: number): string => {
+  try {
+    const parts = url.split('/');
+    const lastPart = parts[parts.length - 1];
+    const match = lastPart.match(/^boleto_\d+_(.+)$/);
+    if (match && match[1]) {
+      return decodeURIComponent(match[1]);
+    }
+    return decodeURIComponent(lastPart);
+  } catch {
+    return `Boleto ${index + 1}.pdf`;
+  }
+};
+
 const BillDetailsModal: React.FC<BillDetailsModalProps> = ({ isOpen, item, onClose, onUpdated }) => {
   const { profile } = useAuth();
   const [copiedId, setCopiedId] = useState(false);
@@ -37,10 +62,10 @@ const BillDetailsModal: React.FC<BillDetailsModalProps> = ({ isOpen, item, onClo
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  // Boleto PDF attachment state
+  // Boleto PDF attachment state (suporta múltiplos boletos)
   const [uploadingBoleto, setUploadingBoleto] = useState(false);
-  const [deletingBoleto, setDeletingBoleto] = useState(false);
-  const [confirmDeleteBoleto, setConfirmDeleteBoleto] = useState(false);
+  const [deletingBoletoIndex, setDeletingBoletoIndex] = useState<number | null>(null);
+  const [confirmDeleteBoletoIndex, setConfirmDeleteBoletoIndex] = useState<number | null>(null);
   const [boletoSuccessMessage, setBoletoSuccessMessage] = useState<string | null>(null);
 
   const [confirmDelete, setConfirmDelete] = useState(false);
@@ -57,7 +82,8 @@ const BillDetailsModal: React.FC<BillDetailsModalProps> = ({ isOpen, item, onClo
       setIsReconciledValue(Boolean(item.is_reconciled || item.settled_date || item.raw?.reconciled_at));
       setIsEditing(false);
       setConfirmDelete(false);
-      setConfirmDeleteBoleto(false);
+      setConfirmDeleteBoletoIndex(null);
+      setDeletingBoletoIndex(null);
       setError(null);
       setFaturaSuccessMessage(null);
       setBoletoSuccessMessage(null);
@@ -73,12 +99,17 @@ const BillDetailsModal: React.FC<BillDetailsModalProps> = ({ isOpen, item, onClo
   const bankDate = raw.bank_transaction_date;
   const barcode = raw.barcode;
   const cnpj = raw.client?.cnpj;
+  const boletoUrls = getBoletoUrls(currentItem.bank_slip_url);
 
   const isManual = currentItem.origin === 'MANUAL';
   const canEdit = Boolean(profile && ['Administrador', 'Gerente', 'Diretoria', 'Financeiro'].includes(profile.access_level));
   const canDelete = isManual && profile?.access_level === 'Administrador';
 
   const rentalInvoiceId = currentItem.rental_invoice_id || raw.rental_invoice_id || raw.invoice_id || raw.invoice?.id;
+  const rawSnap = (currentItem.raw as any)?.bank_raw_snapshot || {};
+  const attachedFaturaUrl = currentItem.invoice_url || rawSnap.fatura_pdf_url || null;
+  const faturaNumero = rawSnap.fatura_numero || currentItem.fatura_numero || null;
+  const hasFatura = Boolean(attachedFaturaUrl || rawSnap.fatura_numero);
 
   const creatorName = currentItem.created_by_name || raw.creator?.full_name || null;
   const creatorPhoto = currentItem.created_by_photo || raw.creator?.photo_url || null;
@@ -98,6 +129,28 @@ const BillDetailsModal: React.FC<BillDetailsModalProps> = ({ isOpen, item, onClo
       navigator.clipboard.writeText(String(barcode));
       setCopiedBarcode(true);
       setTimeout(() => setCopiedBarcode(false), 2000);
+    }
+  };
+
+  const handleDownloadExistingFatura = async () => {
+    if (attachedFaturaUrl) {
+      try {
+        const response = await fetch(attachedFaturaUrl);
+        const blob = await response.blob();
+        saveAs(blob, `FATURA_LOCACAO_${(faturaNumero || 'FATURA').replace('/', '_')}.pdf`);
+      } catch {
+        window.open(attachedFaturaUrl, '_blank');
+      }
+    } else {
+      await handleGerarFaturaLocacao('download');
+    }
+  };
+
+  const handleViewExistingFatura = () => {
+    if (attachedFaturaUrl) {
+      window.open(attachedFaturaUrl, '_blank');
+    } else {
+      handleGerarFaturaLocacao('view');
     }
   };
 
@@ -144,6 +197,87 @@ const BillDetailsModal: React.FC<BillDetailsModalProps> = ({ isOpen, item, onClo
       // Número real do contrato em crm_deal_contracts (ex: "002")
       const realContractNumber = contracts[0]?.contract_number || null;
 
+      // Identificar se este lançamento de bill refere-se a uma prorrogação
+      const currentRawSnap = (currentItem.raw as any)?.bank_raw_snapshot || {};
+      const descLower = (currentItem.description || '').toLowerCase();
+      const isExtension = Boolean(
+        currentRawSnap.is_extension ||
+        descLower.includes('prorrogação') ||
+        descLower.includes('prorrogacao')
+      );
+
+      let targetEquipments: any[] = [];
+      let targetPeriodStart: string = '';
+      let targetPeriodEnd: string = '';
+      const targetCostRental: number = Number(currentItem.gross_value || 0);
+      const targetCostTotal: number = Number(currentItem.gross_value || 0);
+
+      const allRentalEquipments: any[] = Array.isArray(rental.equipments) ? rental.equipments : [];
+
+      if (isExtension) {
+        // Prorrogação: buscar equipamentos específicos da prorrogação
+        if (Array.isArray(currentRawSnap.extension_items) && currentRawSnap.extension_items.length > 0) {
+          targetEquipments = currentRawSnap.extension_items;
+        } else {
+          // Fallback: itens com notes 'Prorrogação de locação'
+          const extensionItems = allRentalEquipments.filter(
+            (eq: any) => eq.notes === 'Prorrogação de locação' || (eq.notes && eq.notes.toLowerCase().includes('prorroga'))
+          );
+          if (extensionItems.length > 0) {
+            targetEquipments = extensionItems;
+          } else {
+            // Se não encontrou pela nota, pega o último equipamento cadastrado
+            targetEquipments = allRentalEquipments.length > 0 ? [allRentalEquipments[allRentalEquipments.length - 1]] : [];
+          }
+        }
+
+        targetPeriodStart =
+          currentRawSnap.period_start ||
+          targetEquipments[0]?.billing_period_start ||
+          targetEquipments[0]?.period_start ||
+          rental.billing_period_start ||
+          currentItem.due_date ||
+          '';
+
+        targetPeriodEnd =
+          currentRawSnap.period_end ||
+          targetEquipments[targetEquipments.length - 1]?.billing_period_end ||
+          targetEquipments[targetEquipments.length - 1]?.period_end ||
+          rental.billing_period_end ||
+          currentItem.due_date ||
+          '';
+      } else {
+        // Locação inicial: filtrar e manter apenas itens que NÃO sejam de prorrogação
+        const initialItems = allRentalEquipments.filter(
+          (eq: any) => eq.notes !== 'Prorrogação de locação' && !(eq.notes && eq.notes.toLowerCase().includes('prorroga'))
+        );
+        targetEquipments = initialItems.length > 0 ? initialItems : allRentalEquipments;
+
+        targetPeriodStart =
+          currentRawSnap.period_start ||
+          targetEquipments[0]?.billing_period_start ||
+          targetEquipments[0]?.period_start ||
+          rental.billing_period_start ||
+          currentItem.due_date ||
+          '';
+
+        targetPeriodEnd =
+          currentRawSnap.period_end ||
+          targetEquipments[targetEquipments.length - 1]?.billing_period_end ||
+          targetEquipments[targetEquipments.length - 1]?.period_end ||
+          rental.billing_period_end ||
+          currentItem.due_date ||
+          '';
+      }
+
+      // Ajustar cada equipamento da lista para refletir os valores e períodos deste faturamento
+      const formattedEquipments = targetEquipments.map((eq: any) => ({
+        ...eq,
+        billing_period_start: eq.billing_period_start || eq.period_start || targetPeriodStart,
+        billing_period_end: eq.billing_period_end || eq.period_end || targetPeriodEnd,
+        total_value: targetEquipments.length === 1 ? targetCostTotal : (Number(eq.total_value ?? eq.cost_rental ?? 0) || (targetCostTotal / targetEquipments.length))
+      }));
+
       const contractObj: any = {
         contract_number: realContractNumber,
         rental_invoice_id: rental.id,
@@ -170,54 +304,137 @@ const BillDetailsModal: React.FC<BillDetailsModalProps> = ({ isOpen, item, onClo
           locatario_phone: rental.phone || contractForm?.site_contact_phone || '',
           locatario_address: rental.delivery_address || rental.work_site || contractForm?.locatario_address_full || '',
           work_site: rental.work_site || rental.delivery_address || contractForm?.work_site || '',
-          period_start: rental.equipments?.[0]?.billing_period_start || rental.billing_period_start || rental.due_date || currentItem.due_date,
-          period_end: rental.equipments?.[0]?.billing_period_end || rental.billing_period_end || rental.due_date || currentItem.due_date,
-          cost_rental: rental.cost_rental ?? rental.total_value ?? currentItem.gross_value,
-          cost_total: rental.total_value ?? currentItem.gross_value,
-          equipments: rental.equipments || []
+          period_start: targetPeriodStart,
+          period_end: targetPeriodEnd,
+          cost_rental: targetCostRental,
+          cost_total: targetCostTotal,
+          equipments: formattedEquipments
         },
         snapshot: contracts[0]?.snapshot,
-        equipments: rental.equipments || []
+        equipments: formattedEquipments
       };
 
-      const invoiceNum = rental.invoice_number || currentItem.invoice_number || (realContractNumber ? `ND-${String(realContractNumber).padStart(6, '0')}` : undefined);
-      const dueDateFormatted = rental.due_date || currentItem.due_date || undefined;
+      // 2. Obter ou alocar o número sequencial exclusivo da fatura de locação
+      // Formato: int_sequencial & "/" & ano_atual (ex: "1/2026", "2/2026")
+      // As faturas de locação possuem controle sequencial próprio na tabela faturas_locacao
+      const faturaRecord = await financeiroService.gerarFaturaLocacaoRegistro({
+        rental_invoice_id: rental.id,
+        bill_id: currentItem.id,
+        tipo: isExtension ? 'PRORROGACAO' : 'INICIAL',
+        period_start: targetPeriodStart ? String(targetPeriodStart).split('T')[0] : null,
+        period_end: targetPeriodEnd ? String(targetPeriodEnd).split('T')[0] : null,
+        valor_total: targetCostTotal,
+        dados_fatura: {
+          client_name: clientObj?.company_name || rental.client_name,
+          cnpj: clientObj?.cnpj || rental.cnpj,
+          equipments: formattedEquipments,
+        }
+      });
+
+      const finalInvoiceNum = faturaRecord.numero; // Ex: "1/2026"
+      const dueDateFormatted = currentItem.due_date || rental.due_date || undefined;
       const paymentMethodFormatted = rental.payment_method || (rental.billing_method === 'MANUAL' ? 'Lançamento Manual' : 'Boleto Bancário');
 
-      // 2. Gerar PDF da Fatura de Locação
+      // 3. Gerar PDF da Fatura de Locação com o número sequencial oficial
       const blob = await pdf(
         <FaturaLocacaoDocument
           contract={contractObj}
-          invoiceNumber={invoiceNum}
+          invoiceNumber={finalInvoiceNum}
           dueDate={dueDateFormatted}
           paymentMethod={paymentMethodFormatted}
         />
       ).toBlob();
 
-      if (action === 'download') {
-        saveAs(blob, `FATURA_LOCACAO - ${invoiceNum || 'ND'}.pdf`);
-      } else {
-        const blobUrl = URL.createObjectURL(blob);
-        window.open(blobUrl, '_blank');
+      // 4. Fazer upload do documento para o Supabase Storage (bucket boletos)
+      let faturaPdfUrl: string | null = null;
+      try {
+        const fileId = currentItem.id || Date.now();
+        const filePath = `faturas/fatura_${fileId}_${Date.now()}.pdf`;
+        const { error: uploadError } = await supabase.storage
+          .from('boletos')
+          .upload(filePath, blob, {
+            contentType: 'application/pdf',
+            upsert: true,
+          });
+
+        if (!uploadError) {
+          const { data: urlData } = supabase.storage.from('boletos').getPublicUrl(filePath);
+          faturaPdfUrl = urlData.publicUrl;
+
+          // Atualizar o registro da fatura com a URL definitiva no banco
+          if (faturaPdfUrl && faturaRecord?.id) {
+            await financeiroService.gerarFaturaLocacaoRegistro({
+              rental_invoice_id: rental.id,
+              bill_id: currentItem.id,
+              tipo: isExtension ? 'PRORROGACAO' : 'INICIAL',
+              pdf_url: faturaPdfUrl,
+              period_start: targetPeriodStart ? String(targetPeriodStart).split('T')[0] : null,
+              period_end: targetPeriodEnd ? String(targetPeriodEnd).split('T')[0] : null,
+              valor_total: targetCostTotal,
+            }).catch(() => null);
+          }
+        } else {
+          console.warn('[handleGerarFaturaLocacao] Erro ao enviar fatura para storage:', uploadError);
+        }
+      } catch (uploadErr) {
+        console.warn('[handleGerarFaturaLocacao] Erro ao processar upload:', uploadErr);
       }
 
-      // 3. Atualizar status da locação para 'Faturado'
-      await api.put(`/rentals/${rentalInvoiceId}`, { billing_status: 'Faturado' });
+      // 5. Executar ação solicitada pelo usuário (visualização ou download)
+      if (action === 'download') {
+        saveAs(blob, `FATURA_LOCACAO_${finalInvoiceNum.replace('/', '_')}.pdf`);
+      } else {
+        if (faturaPdfUrl) {
+          window.open(faturaPdfUrl, '_blank');
+        } else {
+          const blobUrl = URL.createObjectURL(blob);
+          window.open(blobUrl, '_blank');
+        }
+      }
 
-      // 4. Atualizar status do registro financeiro para 'Pendente'
+      // 6. Atualizar status da locação para 'Faturado'
+      await api.put(`/rentals/${rentalInvoiceId}`, { billing_status: 'Faturado' }).catch(() => null);
+
+      // 7. Atualizar status do registro financeiro para 'Pendente' e anexar fatura_pdf_url e fatura_numero
+      const updatedSnapshot = {
+        ...currentRawSnap,
+        fatura_pdf_url: faturaPdfUrl || (currentRawSnap.fatura_pdf_url ?? null),
+        fatura_numero: finalInvoiceNum,
+        fatura_gerada_em: new Date().toISOString(),
+        is_extension: isExtension,
+      };
+
       if (currentItem.source === 'bill') {
-        const updatedBill = await financeiroService.atualizarLancamento(currentItem.id, { status: 'Pendente' });
-        setCurrentItem(updatedBill);
+        const updatedBill = await financeiroService.atualizarLancamento(currentItem.id, {
+          status: 'Pendente',
+          bank_raw_snapshot: updatedSnapshot
+        });
+        const mergedBill = {
+          ...updatedBill,
+          invoice_number: currentItem.invoice_number,
+          fatura_numero: finalInvoiceNum,
+          invoice_url: faturaPdfUrl || updatedBill.invoice_url,
+        };
+        setCurrentItem(mergedBill);
         setStatusValue('Pendente');
-        onUpdated?.(updatedBill);
+        onUpdated?.(mergedBill);
       } else {
         setStatusValue('Pendente');
-        const updatedItem = { ...currentItem, status: 'Pendente' };
+        const updatedItem = {
+          ...currentItem,
+          status: 'Pendente' as BillStatus,
+          fatura_numero: finalInvoiceNum,
+          invoice_url: faturaPdfUrl || currentItem.invoice_url,
+          raw: {
+            ...(currentItem.raw || {}),
+            bank_raw_snapshot: updatedSnapshot
+          }
+        };
         setCurrentItem(updatedItem);
         onUpdated?.(updatedItem);
       }
 
-      setFaturaSuccessMessage('Fatura de locação gerada com sucesso! Status da locação atualizado para "Faturado" e financeiro para "Pendente".');
+      setFaturaSuccessMessage(`Fatura Nº ${finalInvoiceNum} gerada e anexada ao financeiro com sucesso!`);
     } catch (err: any) {
       console.error('Erro ao gerar Fatura de Locação:', err);
       setError(getApiErrorMessage(err));
@@ -253,16 +470,21 @@ const BillDetailsModal: React.FC<BillDetailsModalProps> = ({ isOpen, item, onClo
   };
 
   const handleUploadBoleto = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file || !currentItem) return;
+    const files = e.target.files;
+    if (!files || files.length === 0 || !currentItem) return;
 
-    if (file.type !== 'application/pdf' && !file.name.toLowerCase().endsWith('.pdf')) {
-      setError('Por favor, selecione um arquivo em formato PDF.');
-      return;
-    }
-    if (file.size > 20 * 1024 * 1024) {
-      setError('O arquivo PDF deve ter no máximo 20 MB.');
-      return;
+    const fileList = Array.from(files);
+    for (const file of fileList) {
+      if (file.type !== 'application/pdf' && !file.name.toLowerCase().endsWith('.pdf')) {
+        setError(`O arquivo "${file.name}" não é um PDF válido.`);
+        e.target.value = '';
+        return;
+      }
+      if (file.size > 20 * 1024 * 1024) {
+        setError(`O arquivo "${file.name}" deve ter no máximo 20 MB.`);
+        e.target.value = '';
+        return;
+      }
     }
 
     setUploadingBoleto(true);
@@ -270,27 +492,37 @@ const BillDetailsModal: React.FC<BillDetailsModalProps> = ({ isOpen, item, onClo
     setBoletoSuccessMessage(null);
 
     try {
-      const cleanName = file.name.replace(/[^a-zA-Z0-9.-]/g, '_');
-      const filePath = `contas-pagar/boleto_${Date.now()}_${cleanName}`;
+      const uploadedUrls: string[] = [];
+      for (const file of fileList) {
+        const cleanName = file.name.replace(/[^a-zA-Z0-9.-]/g, '_');
+        const filePath = `contas-pagar/boleto_${Date.now()}_${cleanName}`;
 
-      const { error: uploadError } = await supabase.storage
-        .from('boletos')
-        .upload(filePath, file, { cacheControl: '3600', upsert: true });
+        const { error: uploadError } = await supabase.storage
+          .from('boletos')
+          .upload(filePath, file, { cacheControl: '3600', upsert: true });
 
-      if (uploadError) {
-        throw new Error(`Erro ao enviar boleto: ${uploadError.message}`);
+        if (uploadError) {
+          throw new Error(`Erro ao enviar boleto "${file.name}": ${uploadError.message}`);
+        }
+
+        const { data: urlData } = supabase.storage.from('boletos').getPublicUrl(filePath);
+        uploadedUrls.push(urlData.publicUrl);
       }
 
-      const { data: urlData } = supabase.storage.from('boletos').getPublicUrl(filePath);
-      const newBoletoUrl = urlData.publicUrl;
+      const currentUrls = getBoletoUrls(currentItem.bank_slip_url);
+      const updatedUrls = [...currentUrls, ...uploadedUrls];
 
       const updated = await financeiroService.atualizarLancamento(currentItem.id, {
-        bank_slip_url: newBoletoUrl,
+        bank_slip_url: updatedUrls,
       });
 
-      setCurrentItem((prev) => (prev ? { ...prev, bank_slip_url: newBoletoUrl } : updated));
-      onUpdated?.({ ...currentItem, bank_slip_url: newBoletoUrl });
-      setBoletoSuccessMessage('Boleto bancário anexado com sucesso!');
+      setCurrentItem((prev) => (prev ? { ...prev, bank_slip_url: updatedUrls } : updated));
+      onUpdated?.({ ...currentItem, bank_slip_url: updatedUrls });
+      setBoletoSuccessMessage(
+        fileList.length === 1
+          ? 'Boleto bancário anexado com sucesso!'
+          : `${fileList.length} boletos anexados com sucesso!`
+      );
       setTimeout(() => setBoletoSuccessMessage(null), 4000);
     } catch (err: any) {
       console.error('Erro ao fazer upload do boleto:', err);
@@ -301,27 +533,31 @@ const BillDetailsModal: React.FC<BillDetailsModalProps> = ({ isOpen, item, onClo
     }
   };
 
-  const handleRemoveBoleto = async () => {
+  const handleRemoveBoleto = async (indexToRemove: number) => {
     if (!currentItem) return;
-    setDeletingBoleto(true);
+    setDeletingBoletoIndex(indexToRemove);
     setError(null);
     setBoletoSuccessMessage(null);
 
     try {
+      const currentUrls = getBoletoUrls(currentItem.bank_slip_url);
+      const updatedUrls = currentUrls.filter((_, idx) => idx !== indexToRemove);
+      const finalValue = updatedUrls.length > 0 ? updatedUrls : null;
+
       const updated = await financeiroService.atualizarLancamento(currentItem.id, {
-        bank_slip_url: null,
+        bank_slip_url: finalValue,
       });
 
-      setCurrentItem((prev) => (prev ? { ...prev, bank_slip_url: null } : updated));
-      onUpdated?.({ ...currentItem, bank_slip_url: null });
-      setConfirmDeleteBoleto(false);
+      setCurrentItem((prev) => (prev ? { ...prev, bank_slip_url: finalValue } : updated));
+      onUpdated?.({ ...currentItem, bank_slip_url: finalValue });
+      setConfirmDeleteBoletoIndex(null);
       setBoletoSuccessMessage('Boleto bancário removido com sucesso.');
       setTimeout(() => setBoletoSuccessMessage(null), 4000);
     } catch (err: any) {
       console.error('Erro ao remover boleto:', err);
       setError(getApiErrorMessage(err));
     } finally {
-      setDeletingBoleto(false);
+      setDeletingBoletoIndex(null);
     }
   };
 
@@ -421,11 +657,10 @@ const BillDetailsModal: React.FC<BillDetailsModalProps> = ({ isOpen, item, onClo
           <div className="p-6 border-b border-slate-100 dark:border-slate-800 flex items-center justify-between bg-slate-50/50 dark:bg-slate-800/30">
             <div className="flex items-center gap-3">
               <div
-                className={`w-12 h-12 rounded-2xl flex items-center justify-center ${
-                  isReceivable
+                className={`w-12 h-12 rounded-2xl flex items-center justify-center ${isReceivable
                     ? 'bg-emerald-50 dark:bg-emerald-500/10 text-emerald-600 dark:text-emerald-400'
                     : 'bg-rose-50 dark:bg-rose-500/10 text-rose-600 dark:text-rose-400'
-                }`}
+                  }`}
               >
                 <span className="material-symbols-outlined text-2xl">
                   {isReceivable ? 'trending_up' : 'trending_down'}
@@ -437,11 +672,10 @@ const BillDetailsModal: React.FC<BillDetailsModalProps> = ({ isOpen, item, onClo
                     Detalhes do Lançamento
                   </h3>
                   <span
-                    className={`px-2.5 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider ${
-                      isReceivable
+                    className={`px-2.5 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider ${isReceivable
                         ? 'bg-emerald-100 dark:bg-emerald-500/10 text-emerald-800 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-500/20'
                         : 'bg-rose-100 dark:bg-rose-500/10 text-rose-800 dark:text-rose-400 border border-rose-200 dark:border-rose-500/20'
-                    }`}
+                      }`}
                   >
                     {isReceivable ? 'Conta a Receber' : 'Conta a Pagar'}
                   </span>
@@ -711,13 +945,12 @@ const BillDetailsModal: React.FC<BillDetailsModalProps> = ({ isOpen, item, onClo
                             </td>
                             <td className="px-4 py-3 whitespace-nowrap">
                               <span
-                                className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold ${
-                                  isPaid
+                                className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold ${isPaid
                                     ? 'bg-emerald-100 dark:bg-emerald-500/10 text-emerald-800 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-500/20'
                                     : isOverdue
-                                    ? 'bg-rose-100 dark:bg-rose-500/10 text-rose-800 dark:text-rose-400 border border-rose-200 dark:border-rose-500/20'
-                                    : 'bg-amber-100 dark:bg-amber-500/10 text-amber-800 dark:text-amber-400 border border-amber-200 dark:border-amber-500/20'
-                                }`}
+                                      ? 'bg-rose-100 dark:bg-rose-500/10 text-rose-800 dark:text-rose-400 border border-rose-200 dark:border-rose-500/20'
+                                      : 'bg-amber-100 dark:bg-amber-500/10 text-amber-800 dark:text-amber-400 border border-amber-200 dark:border-amber-500/20'
+                                  }`}
                               >
                                 <span className="material-symbols-outlined text-[12px]">
                                   {isPaid ? 'check_circle' : isOverdue ? 'cancel' : 'schedule'}
@@ -743,11 +976,10 @@ const BillDetailsModal: React.FC<BillDetailsModalProps> = ({ isOpen, item, onClo
                                   type="button"
                                   disabled={isUpdating}
                                   onClick={() => handleUpdateInstallmentStatus(inst.id, isPaid ? 'Pendente' : 'Recebido', !isPaid)}
-                                  className={`px-2.5 py-1 rounded-lg text-[10px] font-bold uppercase tracking-wider transition-all flex items-center gap-1 mx-auto ${
-                                    isPaid
+                                  className={`px-2.5 py-1 rounded-lg text-[10px] font-bold uppercase tracking-wider transition-all flex items-center gap-1 mx-auto ${isPaid
                                       ? 'bg-slate-100 dark:bg-slate-800 hover:bg-rose-50 text-slate-600 dark:text-slate-400 hover:text-rose-600 border border-slate-200 dark:border-slate-700'
                                       : 'bg-emerald-600 hover:bg-emerald-700 text-white shadow-sm'
-                                  }`}
+                                    }`}
                                   title={isPaid ? 'Marcar como Pendente' : 'Marcar como Paga/Recebida'}
                                 >
                                   {isUpdating ? (
@@ -772,60 +1004,6 @@ const BillDetailsModal: React.FC<BillDetailsModalProps> = ({ isOpen, item, onClo
               </div>
             )}
 
-            {/* Fatura de Locação (Bens Móveis) - Quando vinculado a rental_invoice */}
-            {rentalInvoiceId && (
-              <div className="bg-emerald-50/50 dark:bg-emerald-500/10 border border-emerald-200 dark:border-emerald-500/20 rounded-2xl p-5 space-y-3">
-                <div className="flex items-center justify-between">
-                  <span className="text-xs font-bold uppercase tracking-wider text-emerald-800 dark:text-emerald-300 flex items-center gap-1.5">
-                    <span className="material-symbols-outlined text-[18px] text-emerald-600 dark:text-emerald-400">receipt_long</span>
-                    Fatura de Locação (Bens Móveis)
-                  </span>
-                  {currentItem.invoice_number && (
-                    <span className="px-2.5 py-0.5 rounded-full text-[10px] font-mono font-bold bg-emerald-100 dark:bg-emerald-500/20 text-emerald-800 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-500/30">
-                      {currentItem.invoice_number}
-                    </span>
-                  )}
-                </div>
-
-                <p className="text-xs text-slate-600 dark:text-slate-400 leading-relaxed">
-                  Esta conta a receber está vinculada a uma locação. Ao gerar a fatura oficial, o status da locação será atualizado para <strong className="text-emerald-700 dark:text-emerald-300">Faturado</strong> e o status deste lançamento ficará como <strong className="text-amber-700 dark:text-amber-300">Pendente</strong>.
-                </p>
-
-                <div className="flex flex-wrap items-center gap-2.5 pt-1">
-                  <button
-                    type="button"
-                    disabled={generatingFatura}
-                    onClick={() => handleGerarFaturaLocacao('view')}
-                    className="px-4 py-2.5 bg-white dark:bg-slate-800 hover:bg-slate-50 dark:hover:bg-slate-700 text-slate-800 dark:text-white border border-slate-200 dark:border-slate-700 rounded-xl text-xs font-bold uppercase tracking-wider transition-all flex items-center gap-2 shadow-sm disabled:opacity-50"
-                  >
-                    {generatingFatura ? (
-                      <div className="w-4 h-4 border-2 border-slate-400 border-t-slate-800 dark:border-t-white rounded-full animate-spin" />
-                    ) : (
-                      <>
-                        <span className="material-symbols-outlined text-[16px]">visibility</span>
-                        Visualizar Fatura
-                      </>
-                    )}
-                  </button>
-
-                  <button
-                    type="button"
-                    disabled={generatingFatura}
-                    onClick={() => handleGerarFaturaLocacao('download')}
-                    className="px-4 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold uppercase tracking-wider transition-all flex items-center gap-2 shadow-md shadow-emerald-600/20 disabled:opacity-50"
-                  >
-                    {generatingFatura ? (
-                      <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-                    ) : (
-                      <>
-                        <span className="material-symbols-outlined text-[16px]">download</span>
-                        Baixar Fatura (PDF)
-                      </>
-                    )}
-                  </button>
-                </div>
-              </div>
-            )}
 
             {/* Description / Notes */}
             <div className="bg-slate-50/50 dark:bg-slate-800/20 border border-slate-100 dark:border-slate-800 rounded-2xl p-5 space-y-2">
@@ -912,18 +1090,18 @@ const BillDetailsModal: React.FC<BillDetailsModalProps> = ({ isOpen, item, onClo
               </div>
             )}
 
-            {/* Boleto de Pagamento (PDF) */}
-            {(!isReceivable || currentItem.bank_slip_url) && (
+            {/* Boletos de Pagamento (PDF) */}
+            {(!isReceivable || boletoUrls.length > 0) && (
               <div className="bg-slate-50/70 dark:bg-slate-800/30 border border-slate-200/80 dark:border-slate-800 rounded-3xl p-5 space-y-3 shadow-sm">
                 <div className="flex items-center justify-between">
                   <span className="text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 flex items-center gap-2">
                     <span className="material-symbols-outlined text-[18px] text-rose-500">picture_as_pdf</span>
-                    Boleto de Pagamento (PDF)
+                    {boletoUrls.length > 1 ? `Boletos de Pagamento (${boletoUrls.length})` : 'Boleto de Pagamento (PDF)'}
                   </span>
-                  {currentItem.bank_slip_url ? (
+                  {boletoUrls.length > 0 ? (
                     <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-emerald-50 dark:bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-500/20">
                       <span className="material-symbols-outlined text-[13px]">check_circle</span>
-                      Arquivo Anexado
+                      {boletoUrls.length === 1 ? '1 Arquivo Anexado' : `${boletoUrls.length} Arquivos Anexados`}
                     </span>
                   ) : (
                     <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-amber-50 dark:bg-amber-500/10 text-amber-700 dark:text-amber-400 border border-amber-200 dark:border-amber-500/20">
@@ -933,92 +1111,88 @@ const BillDetailsModal: React.FC<BillDetailsModalProps> = ({ isOpen, item, onClo
                   )}
                 </div>
 
-                {currentItem.bank_slip_url ? (
-                  <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 p-4 bg-white dark:bg-slate-900 border border-slate-200/70 dark:border-slate-800 rounded-2xl">
-                    <div className="flex items-center gap-3 min-w-0">
-                      <div className="w-10 h-10 rounded-2xl bg-rose-50 dark:bg-rose-500/10 text-rose-600 dark:text-rose-400 flex items-center justify-center shrink-0">
-                        <span className="material-symbols-outlined text-[24px]">description</span>
-                      </div>
-                      <div className="min-w-0">
-                        <p className="text-xs font-bold text-slate-900 dark:text-white truncate">
-                          Boleto Bancário da Conta
-                        </p>
-                        <p className="text-[11px] text-slate-400 dark:text-slate-500">
-                          Disponível para download e liquidação pelo financeiro
-                        </p>
-                      </div>
-                    </div>
-
-                    <div className="flex items-center gap-2 w-full sm:w-auto shrink-0">
-                      <a
-                        href={currentItem.bank_slip_url}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="flex-1 sm:flex-initial px-4 py-2 bg-rose-500 hover:bg-rose-600 text-white rounded-xl text-xs font-bold uppercase tracking-wider transition-colors inline-flex items-center justify-center gap-1.5 shadow-sm shadow-rose-500/20"
+                {/* Lista de boletos anexados */}
+                {boletoUrls.length > 0 && (
+                  <div className="space-y-2">
+                    {boletoUrls.map((url, idx) => (
+                      <div
+                        key={`${url}-${idx}`}
+                        className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 p-3.5 bg-white dark:bg-slate-900 border border-slate-200/70 dark:border-slate-800 rounded-2xl"
                       >
-                        <span className="material-symbols-outlined text-[16px]">visibility</span>
-                        Visualizar / Baixar
-                      </a>
+                        <div className="flex items-center gap-3 min-w-0 flex-1">
+                          <div className="w-10 h-10 rounded-2xl bg-rose-50 dark:bg-rose-500/10 text-rose-600 dark:text-rose-400 flex items-center justify-center shrink-0">
+                            <span className="material-symbols-outlined text-[24px]">description</span>
+                          </div>
+                          <div className="min-w-0 flex-1">
+                            <p className="text-xs font-bold text-slate-900 dark:text-white truncate">
+                              {getBoletoFileName(url, idx)}
+                            </p>
+                            <p className="text-[11px] text-slate-400 dark:text-slate-500">
+                              Boleto {idx + 1} de {boletoUrls.length} • Disponível para download e liquidação
+                            </p>
+                          </div>
+                        </div>
 
-                      {canEdit && (
-                        <>
-                          <label className="px-3 py-2 bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 rounded-xl text-xs font-bold uppercase tracking-wider transition-colors cursor-pointer inline-flex items-center justify-center gap-1 shadow-sm">
-                            <input
-                              type="file"
-                              accept=".pdf,application/pdf"
-                              className="hidden"
-                              disabled={uploadingBoleto || deletingBoleto}
-                              onChange={handleUploadBoleto}
-                            />
-                            {uploadingBoleto ? (
-                              <div className="w-3.5 h-3.5 border-2 border-slate-400 border-t-transparent rounded-full animate-spin" />
-                            ) : (
-                              <span className="material-symbols-outlined text-[16px]">swap_horiz</span>
-                            )}
-                            Substituir
-                          </label>
+                        <div className="flex items-center gap-2 w-full sm:w-auto shrink-0">
+                          <a
+                            href={url}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="flex-1 sm:flex-initial px-3.5 py-2 bg-rose-500 hover:bg-rose-600 text-white rounded-xl text-xs font-bold uppercase tracking-wider transition-colors inline-flex items-center justify-center gap-1.5 shadow-sm shadow-rose-500/20"
+                          >
+                            <span className="material-symbols-outlined text-[16px]">visibility</span>
+                            Visualizar / Baixar
+                          </a>
 
-                          {confirmDeleteBoleto ? (
-                            <div className="flex items-center gap-1">
-                              <button
-                                type="button"
-                                disabled={deletingBoleto}
-                                onClick={handleRemoveBoleto}
-                                className="px-2.5 py-2 bg-rose-600 hover:bg-rose-700 text-white rounded-xl text-xs font-bold transition-colors disabled:opacity-50"
-                                title="Confirmar remoção"
-                              >
-                                {deletingBoleto ? '...' : 'Confirmar'}
-                              </button>
-                              <button
-                                type="button"
-                                disabled={deletingBoleto}
-                                onClick={() => setConfirmDeleteBoleto(false)}
-                                className="px-2 py-2 text-slate-500 hover:text-slate-700 dark:hover:text-slate-300 text-xs transition-colors"
-                              >
-                                Não
-                              </button>
-                            </div>
-                          ) : (
-                            <button
-                              type="button"
-                              onClick={() => setConfirmDeleteBoleto(true)}
-                              className="p-2 text-slate-400 hover:text-rose-600 dark:hover:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-500/10 rounded-xl transition-colors"
-                              title="Remover boleto"
-                            >
-                              <span className="material-symbols-outlined text-[18px]">delete</span>
-                            </button>
+                          {canEdit && (
+                            <>
+                              {confirmDeleteBoletoIndex === idx ? (
+                                <div className="flex items-center gap-1">
+                                  <button
+                                    type="button"
+                                    disabled={deletingBoletoIndex === idx}
+                                    onClick={() => handleRemoveBoleto(idx)}
+                                    className="px-2.5 py-2 bg-rose-600 hover:bg-rose-700 text-white rounded-xl text-xs font-bold transition-colors disabled:opacity-50"
+                                    title="Confirmar remoção"
+                                  >
+                                    {deletingBoletoIndex === idx ? '...' : 'Confirmar'}
+                                  </button>
+                                  <button
+                                    type="button"
+                                    disabled={deletingBoletoIndex === idx}
+                                    onClick={() => setConfirmDeleteBoletoIndex(null)}
+                                    className="px-2 py-2 text-slate-500 hover:text-slate-700 dark:hover:text-slate-300 text-xs transition-colors"
+                                  >
+                                    Não
+                                  </button>
+                                </div>
+                              ) : (
+                                <button
+                                  type="button"
+                                  onClick={() => setConfirmDeleteBoletoIndex(idx)}
+                                  className="p-2 text-slate-400 hover:text-rose-600 dark:hover:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-500/10 rounded-xl transition-colors"
+                                  title="Remover este boleto"
+                                >
+                                  <span className="material-symbols-outlined text-[18px]">delete</span>
+                                </button>
+                              )}
+                            </>
                           )}
-                        </>
-                      )}
-                    </div>
+                        </div>
+                      </div>
+                    ))}
                   </div>
-                ) : canEdit ? (
+                )}
+
+                {/* Seletor para anexar novo(s) boleto(s) */}
+                {canEdit && (
                   <label className="border-2 border-dashed border-slate-200 dark:border-slate-700 hover:border-mustard-500/60 dark:hover:border-mustard-500/60 rounded-2xl p-4 flex flex-col sm:flex-row items-center justify-between gap-3 cursor-pointer bg-white dark:bg-slate-900 hover:bg-slate-50 dark:hover:bg-slate-800/60 transition-all group">
                     <input
                       type="file"
+                      multiple
                       accept=".pdf,application/pdf"
                       className="hidden"
-                      disabled={uploadingBoleto}
+                      disabled={uploadingBoleto || deletingBoletoIndex !== null}
                       onChange={handleUploadBoleto}
                     />
                     <div className="flex items-center gap-3">
@@ -1026,23 +1200,33 @@ const BillDetailsModal: React.FC<BillDetailsModalProps> = ({ isOpen, item, onClo
                         {uploadingBoleto ? (
                           <div className="w-4 h-4 border-2 border-slate-400 border-t-mustard-500 rounded-full animate-spin" />
                         ) : (
-                          <span className="material-symbols-outlined text-[22px]">upload_file</span>
+                          <span className="material-symbols-outlined text-[22px]">
+                            {boletoUrls.length > 0 ? 'add' : 'upload_file'}
+                          </span>
                         )}
                       </div>
                       <div>
                         <span className="text-xs font-bold text-slate-700 dark:text-slate-200 group-hover:text-mustard-600 dark:group-hover:text-mustard-400 transition-colors block">
-                          {uploadingBoleto ? 'Enviando arquivo do boleto...' : 'Anexar Boleto de Pagamento (PDF)'}
+                          {uploadingBoleto
+                            ? 'Enviando arquivo(s)...'
+                            : boletoUrls.length > 0
+                            ? 'Anexar outro boleto (PDF)'
+                            : 'Anexar Boleto de Pagamento (PDF)'}
                         </span>
                         <span className="text-[11px] text-slate-400 dark:text-slate-500">
-                          Permite que o setor financeiro obtenha o PDF para pagamento diretamente do registro
+                          {boletoUrls.length > 0
+                            ? 'Selecione um ou mais arquivos PDF para anexar a este lançamento'
+                            : 'Permite que o setor financeiro obtenha o PDF para pagamento diretamente do registro'}
                         </span>
                       </div>
                     </div>
                     <span className="shrink-0 px-4 py-2 rounded-xl bg-mustard-500 text-white text-xs font-bold uppercase tracking-wider shadow-sm shadow-mustard-500/20 group-hover:bg-mustard-600 transition-colors">
-                      Selecionar PDF
+                      {boletoUrls.length > 0 ? '+ Adicionar' : 'Selecionar PDF'}
                     </span>
                   </label>
-                ) : (
+                )}
+
+                {boletoUrls.length === 0 && !canEdit && (
                   <p className="text-xs text-slate-400 dark:text-slate-500 italic p-2">
                     Nenhum boleto em PDF anexado a esta conta.
                   </p>
@@ -1057,8 +1241,131 @@ const BillDetailsModal: React.FC<BillDetailsModalProps> = ({ isOpen, item, onClo
               </div>
             )}
 
-            {/* External Links / Asaas */}
-            {currentItem.invoice_url && (
+            {/* Fatura de Locação (PDF com Sequencial Dedicado) */}
+            {(rentalInvoiceId || hasFatura) && (
+              <div className="bg-slate-50/70 dark:bg-slate-800/30 border border-slate-200/80 dark:border-slate-800 rounded-3xl p-5 space-y-3 shadow-sm">
+                <div className="flex items-center justify-between">
+                  <span className="text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 flex items-center gap-2">
+                    <span className="material-symbols-outlined text-[18px] text-emerald-600 dark:text-emerald-400">receipt_long</span>
+                    Fatura de Locação
+                  </span>
+                  <div className="flex items-center gap-2">
+                    {currentItem.invoice_number && (
+                      <span className="px-2 py-0.5 rounded-full text-[10px] font-mono font-bold bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 border border-slate-200 dark:border-slate-700">
+                        Locação #{currentItem.invoice_number}
+                      </span>
+                    )}
+                    {hasFatura ? (
+                      <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-emerald-50 dark:bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-500/20">
+                        <span className="material-symbols-outlined text-[13px]">check_circle</span>
+                        {faturaNumero ? `Fatura Nº ${faturaNumero}` : 'Fatura Emitida'}
+                      </span>
+                    ) : (
+                      <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-amber-50 dark:bg-amber-500/10 text-amber-700 dark:text-amber-400 border border-amber-200 dark:border-amber-500/20">
+                        <span className="material-symbols-outlined text-[13px]">pending</span>
+                        Não Gerada
+                      </span>
+                    )}
+                  </div>
+                </div>
+
+                {hasFatura ? (
+                  <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 p-4 bg-white dark:bg-slate-900 border border-slate-200/70 dark:border-slate-800 rounded-2xl">
+                    <div className="flex items-center gap-3 min-w-0">
+                      <div className="w-10 h-10 rounded-2xl bg-emerald-50 dark:bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 flex items-center justify-center shrink-0">
+                        <span className="material-symbols-outlined text-[24px]">receipt_long</span>
+                      </div>
+                      <div className="min-w-0">
+                        <p className="text-xs font-bold text-slate-900 dark:text-white truncate">
+                          {faturaNumero ? `Fatura de Locação Nº ${faturaNumero}` : 'Fatura de Locação'}
+                        </p>
+                      </div>
+                    </div>
+
+                    <div className="flex items-center gap-2 w-full sm:w-auto shrink-0 flex-wrap">
+                      <button
+                        type="button"
+                        onClick={handleViewExistingFatura}
+                        className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold uppercase tracking-wider transition-colors inline-flex items-center justify-center gap-1.5 shadow-sm shadow-emerald-600/20"
+                      >
+                        <span className="material-symbols-outlined text-[16px]">visibility</span>
+                        Visualizar Fatura
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={handleDownloadExistingFatura}
+                        className="px-3.5 py-2 bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 rounded-xl text-xs font-bold uppercase tracking-wider transition-colors inline-flex items-center justify-center gap-1 shadow-sm"
+                      >
+                        <span className="material-symbols-outlined text-[16px]">download</span>
+                        Baixar
+                      </button>
+
+                      {canEdit && (
+                        <button
+                          type="button"
+                          onClick={() => handleGerarFaturaLocacao('view')}
+                          disabled={generatingFatura}
+                          className="px-3 py-2 border border-slate-200 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-800 text-slate-600 dark:text-slate-300 rounded-xl text-xs font-bold uppercase tracking-wider transition-colors inline-flex items-center justify-center gap-1"
+                          title="Regerar PDF mantendo o número sequencial atribuído"
+                        >
+                          {generatingFatura ? (
+                            <div className="w-3.5 h-3.5 border-2 border-slate-400 border-t-transparent rounded-full animate-spin" />
+                          ) : (
+                            <span className="material-symbols-outlined text-[16px]">sync</span>
+                          )}
+                          Regerar
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                ) : (
+                  <div className="flex flex-col sm:flex-row items-center justify-between gap-4 p-4 bg-white dark:bg-slate-900 border border-dashed border-slate-200 dark:border-slate-700 rounded-2xl">
+                    <div className="flex items-center gap-3">
+                      <div className="w-10 h-10 rounded-2xl bg-emerald-50 dark:bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 flex items-center justify-center shrink-0">
+                        <span className="material-symbols-outlined text-[22px]">receipt_long</span>
+                      </div>
+                      <div>
+                        <span className="text-xs font-bold text-slate-700 dark:text-slate-200 block">
+                          Fatura de Locação não emitida
+                        </span>
+                        <span className="text-[11px] text-slate-400 dark:text-slate-500">
+                          Gera a fatura com número sequencial único (ex: 1/2026), anexa o PDF e vincula ao registro.
+                        </span>
+                      </div>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => handleGerarFaturaLocacao('view')}
+                      disabled={generatingFatura}
+                      className="shrink-0 w-full sm:w-auto px-5 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold uppercase tracking-wider shadow-sm shadow-emerald-600/20 transition-all flex items-center justify-center gap-2 disabled:opacity-50"
+                    >
+                      {generatingFatura ? (
+                        <>
+                          <div className="w-4 h-4 border-2 border-white/20 border-t-white rounded-full animate-spin" />
+                          <span>Gerando...</span>
+                        </>
+                      ) : (
+                        <>
+                          <span className="material-symbols-outlined text-[18px]">receipt_long</span>
+                          <span>Gerar Fatura</span>
+                        </>
+                      )}
+                    </button>
+                  </div>
+                )}
+
+                {faturaSuccessMessage && (
+                  <div className="p-3 bg-emerald-50 dark:bg-emerald-500/10 border border-emerald-200 dark:border-emerald-500/20 rounded-xl text-xs font-semibold text-emerald-700 dark:text-emerald-400 flex items-center gap-2">
+                    <span className="material-symbols-outlined text-[18px]">check_circle</span>
+                    {faturaSuccessMessage}
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* External Links / Asaas (se não for locação) */}
+            {!rentalInvoiceId && !hasFatura && currentItem.invoice_url && (
               <div className="flex flex-wrap items-center gap-3 pt-1">
                 <a
                   href={currentItem.invoice_url}

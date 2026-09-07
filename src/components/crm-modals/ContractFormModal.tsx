@@ -5,10 +5,15 @@ import api from '../../services/api';
 
 interface ContractEquipmentItem {
   tempId: string;
+  id?: string;
+  equipment_id?: string | null;
+  asset_number?: string | null;
+  equipment_type?: string | null;
   equipment_name: string;
   equipment_size?: string;
   billing_period_start: string;
   billing_period_end: string;
+  return_date?: string | null;
   cost_rental: number;
   cost_insurance: number;
   cost_freight: number;
@@ -16,21 +21,27 @@ interface ContractEquipmentItem {
   cost_third_party: number;
   cost_training: number;
   total_value: number;
+  notes?: string | null;
 }
 
 const createDefaultEquipmentItem = (start = '', end = ''): ContractEquipmentItem => ({
   tempId: Math.random().toString(36).substring(2, 9),
+  equipment_id: null,
+  asset_number: null,
+  equipment_type: null,
   equipment_name: '',
   equipment_size: '',
   billing_period_start: start || new Date().toISOString().split('T')[0],
   billing_period_end: end || '',
+  return_date: null,
   cost_rental: 0,
   cost_insurance: 0,
   cost_freight: 0,
   cost_rcd: 0,
   cost_third_party: 0,
   cost_training: 0,
-  total_value: 0
+  total_value: 0,
+  notes: null
 });
 
 export const normalizeBillingInterval = (val: any): string => {
@@ -106,17 +117,23 @@ const ContractFormModal: React.FC<ContractFormModalProps> = ({ isOpen, onClose, 
         if (rentalEquipments.length > 0) {
           setEquipmentItems(rentalEquipments.map((eq: any) => ({
             tempId: eq.id || eq.tempId || Math.random().toString(36).substring(2, 9),
+            id: eq.id || undefined,
+            equipment_id: eq.equipment_id || null,
+            asset_number: eq.asset_number || null,
+            equipment_type: eq.equipment_type || null,
             equipment_name: eq.equipment_name || '',
             equipment_size: eq.equipment_size || '',
             billing_period_start: eq.billing_period_start ? String(eq.billing_period_start).split('T')[0] : (form?.period_start || ''),
             billing_period_end: eq.billing_period_end ? String(eq.billing_period_end).split('T')[0] : (form?.period_end || ''),
+            return_date: eq.return_date ? String(eq.return_date).split('T')[0] : null,
             cost_rental: Number(eq.cost_rental) || 0,
             cost_insurance: Number(eq.cost_insurance) || 0,
             cost_freight: Number(eq.cost_freight) || 0,
             cost_rcd: Number(eq.cost_rcd) || 0,
             cost_third_party: Number(eq.cost_third_party) || 0,
             cost_training: Number(eq.cost_training) || 0,
-            total_value: Number(eq.total_value) || 0
+            total_value: Number(eq.total_value) || 0,
+            notes: eq.notes || null
           })));
           return;
         }
@@ -124,17 +141,23 @@ const ContractFormModal: React.FC<ContractFormModalProps> = ({ isOpen, onClose, 
         if (form?.equipments && Array.isArray(form.equipments) && form.equipments.length > 0) {
           setEquipmentItems(form.equipments.map((eq: any) => ({
             tempId: eq.tempId || eq.id || Math.random().toString(36).substring(2, 9),
+            id: eq.id || undefined,
+            equipment_id: eq.equipment_id || null,
+            asset_number: eq.asset_number || null,
+            equipment_type: eq.equipment_type || null,
             equipment_name: eq.equipment_name || eq.equipment_description || '',
             equipment_size: eq.equipment_size || '',
             billing_period_start: eq.billing_period_start || eq.period_start || form?.period_start || '',
             billing_period_end: eq.billing_period_end || eq.period_end || form?.period_end || '',
+            return_date: eq.return_date ? String(eq.return_date).split('T')[0] : null,
             cost_rental: Number(eq.cost_rental) || 0,
             cost_insurance: Number(eq.cost_insurance) || 0,
             cost_freight: Number(eq.cost_freight) || 0,
             cost_rcd: Number(eq.cost_rcd) || 0,
             cost_third_party: Number(eq.cost_third_party) || 0,
             cost_training: Number(eq.cost_training) || 0,
-            total_value: Number(eq.total_value) || 0
+            total_value: Number(eq.total_value) || 0,
+            notes: eq.notes || null
           })));
           return;
         }
@@ -385,17 +408,23 @@ const ContractFormModal: React.FC<ContractFormModalProps> = ({ isOpen, onClose, 
         try {
           await api.put(`/rentals/${deal.rental_invoice_id}`, {
             equipments: equipmentItems.map(item => ({
+              id: item.id,
+              equipment_id: item.equipment_id || null,
+              asset_number: item.asset_number || null,
+              equipment_type: item.equipment_type || null,
               equipment_name: item.equipment_name,
               equipment_size: item.equipment_size,
               billing_period_start: item.billing_period_start,
               billing_period_end: item.billing_period_end,
+              return_date: item.return_date || null,
               cost_rental: item.cost_rental,
               cost_insurance: item.cost_insurance,
               cost_freight: item.cost_freight,
               cost_rcd: item.cost_rcd,
               cost_third_party: item.cost_third_party,
               cost_training: item.cost_training,
-              total_value: item.total_value
+              total_value: item.total_value,
+              notes: item.notes || null
             }))
           });
         } catch (syncErr) {

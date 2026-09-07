@@ -330,7 +330,19 @@ const ContractDocument: React.FC<ContractDocumentProps> = ({ data, generatedAt }
   const locadorBankInfo = `Banco do Brasil Ag.1917-8 Conta Corrente: 14.677-3 em nome de ALTO MASTER LOCADORA DE EQUIPAMENTOS LTDA, CNPJ 48.477.385/0001-09) PIX CNPJ`;
 
   const locatarioName = data.locatario?.company_name || 'N/A';
-  const locatarioAddress = data.locatario?.address_full || 'N/A';
+  
+  const locatarioStreet = data.locatario?.address_street || data.client?.address_street || data.address_street || '';
+  const locatarioNumber = data.locatario?.address_number || data.client?.address_number || data.address_number || '';
+  const locatarioCity = data.locatario?.address_city || data.client?.address_city || data.address_city || '';
+  const locatarioState = data.locatario?.address_state || data.client?.address_state || data.address_state || '';
+  const locatarioZip = data.locatario?.address_zip || data.client?.address_zip || data.address_zip || '';
+
+  const streetNumberPart = [locatarioStreet, locatarioNumber].filter(Boolean).join(', ');
+  const cityStatePart = [locatarioCity, locatarioState].filter(Boolean).join(' - ');
+  const zipPart = locatarioZip ? `CEP: ${locatarioZip}` : '';
+  const composedLocatarioAddress = [streetNumberPart, cityStatePart, zipPart].filter(Boolean).join(', ');
+
+  const locatarioAddress = composedLocatarioAddress || data.locatario?.address_full || data.locatario_address_full || data.client?.address_full || 'N/A';
   const locatarioCnpj = data.locatario?.cnpj || 'N/A';
   const locatarioIe = data.locatario?.state_registration && data.locatario?.state_registration !== ''
     ? data.locatario.state_registration
@@ -480,7 +492,7 @@ const ContractDocument: React.FC<ContractDocumentProps> = ({ data, generatedAt }
           {equipmentsList && equipmentsList.length > 0 ? (
             equipmentsList.map((item: any, idx: number) => {
               const itemDesc = item.equipment_name || item.description || item.name || equipmentDesc;
-              const itemWorkingHeight = item.equipment_size ? ` - ${item.equipment_size} mts` : '';
+              const itemWorkingHeight = item.equipment_size ? ` - ${item.equipment_size}` : '';
               const fullItemDesc = `${itemDesc}${itemWorkingHeight}`.trim();
               const itemStart = item.billing_period_start || item.period_start || data.period_start;
               const itemEnd = item.billing_period_end || item.period_end || data.period_end;

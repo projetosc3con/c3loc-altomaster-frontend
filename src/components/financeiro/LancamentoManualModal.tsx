@@ -11,6 +11,7 @@ interface LancamentoManualModalInitialValues {
   description?: string;
   gross_value?: number;
   due_date?: string;
+  invoice_number?: string;
 }
 
 // Quando presente, indica que este lançamento está sendo criado a partir de
@@ -50,6 +51,7 @@ const LancamentoManualModal: React.FC<LancamentoManualModalProps> = ({
   const { user } = useAuth();
   const [counterpartyName, setCounterpartyName] = useState('');
   const [description, setDescription] = useState('');
+  const [invoiceNumber, setInvoiceNumber] = useState('');
   const [barcode, setBarcode] = useState('');
   const [grossValue, setGrossValue] = useState(0);
   const [dueDate, setDueDate] = useState('');
@@ -59,8 +61,8 @@ const LancamentoManualModal: React.FC<LancamentoManualModalProps> = ({
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  // Boleto PDF attachment state
-  const [boletoFile, setBoletoFile] = useState<File | null>(null);
+  // Boleto PDF attachment state (suporta múltiplos boletos)
+  const [boletoFiles, setBoletoFiles] = useState<File[]>([]);
   const [uploadingBoleto, setUploadingBoleto] = useState(false);
 
   // Parcelamento states
@@ -75,6 +77,7 @@ const LancamentoManualModal: React.FC<LancamentoManualModalProps> = ({
       if (initialValues.description !== undefined) setDescription(initialValues.description);
       if (initialValues.gross_value !== undefined) setGrossValue(initialValues.gross_value);
       if (initialValues.due_date !== undefined) setDueDate(initialValues.due_date);
+      if (initialValues.invoice_number !== undefined) setInvoiceNumber(initialValues.invoice_number);
     }
     if (presetSettlement) {
       setIsReconciled(true);
@@ -91,8 +94,9 @@ const LancamentoManualModal: React.FC<LancamentoManualModalProps> = ({
   const resetForm = () => {
     setCounterpartyName('');
     setDescription('');
+    setInvoiceNumber('');
     setBarcode('');
-    setBoletoFile(null);
+    setBoletoFiles([]);
     setUploadingBoleto(false);
     setGrossValue(0);
     setDueDate('');
@@ -216,6 +220,34 @@ const LancamentoManualModal: React.FC<LancamentoManualModalProps> = ({
   const totalInstallmentsAmount = installments.reduce((acc, curr) => acc + (Number(curr.amount) || 0), 0);
   const difference = Number((grossValue - totalInstallmentsAmount).toFixed(2));
 
+  const handleBoletoFilesAdd = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = Array.from(e.target.files || []);
+    if (files.length === 0) return;
+
+    const validFiles: File[] = [];
+    for (const file of files) {
+      if (file.type !== 'application/pdf' && !file.name.toLowerCase().endsWith('.pdf')) {
+        setError(`O arquivo "${file.name}" não é um PDF válido.`);
+        e.target.value = '';
+        return;
+      }
+      if (file.size > 20 * 1024 * 1024) {
+        setError(`O arquivo "${file.name}" deve ter no máximo 20 MB.`);
+        e.target.value = '';
+        return;
+      }
+      validFiles.push(file);
+    }
+
+    setError(null);
+    setBoletoFiles((prev) => [...prev, ...validFiles]);
+    e.target.value = '';
+  };
+
+  const handleRemoveBoletoFile = (index: number) => {
+    setBoletoFiles((prev) => prev.filter((_, i) => i !== index));
+  };
+
   const handleSubmit = async () => {
     setError(null);
 
@@ -253,23 +285,29 @@ const LancamentoManualModal: React.FC<LancamentoManualModalProps> = ({
 
     setSubmitting(true);
     try {
-      let bankSlipUrl: string | undefined = undefined;
+      let bankSlipUrls: string[] | undefined = undefined;
 
-      if (!isReceivable && boletoFile) {
+      if (!isReceivable && boletoFiles.length > 0) {
         setUploadingBoleto(true);
-        const cleanName = boletoFile.name.replace(/[^a-zA-Z0-9.-]/g, '_');
-        const filePath = `contas-pagar/boleto_${Date.now()}_${cleanName}`;
+        const uploadedUrls: string[] = [];
 
-        const { error: uploadError } = await supabase.storage
-          .from('boletos')
-          .upload(filePath, boletoFile, { cacheControl: '3600', upsert: true });
+        for (const file of boletoFiles) {
+          const cleanName = file.name.replace(/[^a-zA-Z0-9.-]/g, '_');
+          const filePath = `contas-pagar/boleto_${Date.now()}_${cleanName}`;
 
-        if (uploadError) {
-          throw new Error(`Erro ao fazer upload do boleto: ${uploadError.message}`);
+          const { error: uploadError } = await supabase.storage
+            .from('boletos')
+            .upload(filePath, file, { cacheControl: '3600', upsert: true });
+
+          if (uploadError) {
+            throw new Error(`Erro ao fazer upload do boleto "${file.name}": ${uploadError.message}`);
+          }
+
+          const { data: urlData } = supabase.storage.from('boletos').getPublicUrl(filePath);
+          uploadedUrls.push(urlData.publicUrl);
         }
 
-        const { data: urlData } = supabase.storage.from('boletos').getPublicUrl(filePath);
-        bankSlipUrl = urlData.publicUrl;
+        bankSlipUrls = uploadedUrls;
       }
 
       const isParcelado = !isReceivable && paymentType === 'parcelado' && installments.length > 1;
@@ -277,8 +315,9 @@ const LancamentoManualModal: React.FC<LancamentoManualModalProps> = ({
         type,
         counterparty_name: counterpartyName.trim() || undefined,
         description: description.trim() || undefined,
+        invoice_number: invoiceNumber.trim() || undefined,
         barcode: isReceivable ? undefined : barcode.trim() || undefined,
-        bank_slip_url: bankSlipUrl,
+        bank_slip_url: bankSlipUrls,
         gross_value: grossValue,
         due_date: dueDate,
         status,
@@ -286,7 +325,10 @@ const LancamentoManualModal: React.FC<LancamentoManualModalProps> = ({
         already_settled: isReconciled,
         settled_date: isReconciled ? (settledDate || dueDate || new Date().toISOString().split('T')[0]) : undefined,
         bank_transaction_date: presetSettlement?.bank_transaction_date,
-        bank_raw_snapshot: presetSettlement?.bank_raw_snapshot,
+        bank_raw_snapshot: {
+          ...(presetSettlement?.bank_raw_snapshot || {}),
+          ...(invoiceNumber.trim() ? { invoice_number: invoiceNumber.trim() } : {}),
+        },
         created_by: user?.id,
         payment_type: isParcelado ? 'parcelado' : 'a_vista',
         installments: isParcelado
@@ -394,17 +436,32 @@ const LancamentoManualModal: React.FC<LancamentoManualModalProps> = ({
               )}
 
               {isReceivable ? (
-                <div className="space-y-1.5">
-                  <label className="text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-widest ml-1">
-                    Nome
-                  </label>
-                  <input
-                    type="text"
-                    value={counterpartyName}
-                    onChange={(e) => setCounterpartyName(e.target.value)}
-                    placeholder="Nome de quem vai pagar (opcional)"
-                    className="w-full px-4 py-2.5 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-slate-900 dark:text-white focus:bg-white dark:focus:bg-slate-900 focus:ring-2 focus:ring-mustard-500/10 focus:border-mustard-500 transition-all outline-none text-sm"
-                  />
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div className="space-y-1.5">
+                    <label className="text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-widest ml-1">
+                      Nome
+                    </label>
+                    <input
+                      type="text"
+                      value={counterpartyName}
+                      onChange={(e) => setCounterpartyName(e.target.value)}
+                      placeholder="Nome de quem vai pagar (opcional)"
+                      className="w-full px-4 py-2.5 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-slate-900 dark:text-white focus:bg-white dark:focus:bg-slate-900 focus:ring-2 focus:ring-mustard-500/10 focus:border-mustard-500 transition-all outline-none text-sm"
+                    />
+                  </div>
+
+                  <div className="space-y-1.5">
+                    <label className="text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-widest ml-1">
+                      Nº Nota Fiscal
+                    </label>
+                    <input
+                      type="text"
+                      value={invoiceNumber}
+                      onChange={(e) => setInvoiceNumber(e.target.value)}
+                      placeholder="Ex: 12345 (se houver)"
+                      className="w-full px-4 py-2.5 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-slate-900 dark:text-white focus:bg-white dark:focus:bg-slate-900 focus:ring-2 focus:ring-mustard-500/10 focus:border-mustard-500 transition-all outline-none text-sm font-mono"
+                    />
+                  </div>
                 </div>
               ) : (
                 <>
@@ -437,92 +494,105 @@ const LancamentoManualModal: React.FC<LancamentoManualModalProps> = ({
 
                     <div className="space-y-1.5">
                       <label className="text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-widest ml-1">
-                        Código de Barras / Boleto
+                        Nº Nota Fiscal
                       </label>
                       <input
                         type="text"
-                        value={barcode}
-                        onChange={(e) => setBarcode(e.target.value)}
-                        placeholder="Linha digitável ou código de barras"
+                        value={invoiceNumber}
+                        onChange={(e) => setInvoiceNumber(e.target.value)}
+                        placeholder="Ex: 12345 (se houver)"
                         className="w-full px-4 py-2.5 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-slate-900 dark:text-white focus:bg-white dark:focus:bg-slate-900 focus:ring-2 focus:ring-mustard-500/10 focus:border-mustard-500 transition-all outline-none text-sm font-mono"
                       />
                     </div>
                   </div>
 
-                  {/* Anexo do Boleto Bancário (PDF) */}
                   <div className="space-y-1.5">
+                    <label className="text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-widest ml-1">
+                      Código de Barras / Boleto
+                    </label>
+                    <input
+                      type="text"
+                      value={barcode}
+                      onChange={(e) => setBarcode(e.target.value)}
+                      placeholder="Linha digitável ou código de barras"
+                      className="w-full px-4 py-2.5 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-slate-900 dark:text-white focus:bg-white dark:focus:bg-slate-900 focus:ring-2 focus:ring-mustard-500/10 focus:border-mustard-500 transition-all outline-none text-sm font-mono"
+                    />
+                  </div>
+
+                  {/* Anexo dos Boletos Bancários (PDF) */}
+                  <div className="space-y-2">
                     <div className="flex items-center justify-between">
                       <label className="text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-widest ml-1 flex items-center gap-1.5">
                         <span className="material-symbols-outlined text-[16px] text-rose-500">picture_as_pdf</span>
-                        Anexar Boleto Bancário (PDF)
+                        Anexar Boletos Bancários (PDF)
                       </label>
-                      <span className="text-[11px] text-slate-400 dark:text-slate-500">Opcional</span>
+                      <span className="text-[11px] text-slate-400 dark:text-slate-500">
+                        {boletoFiles.length > 0 ? `${boletoFiles.length} anexo${boletoFiles.length > 1 ? 's' : ''}` : 'Opcional'}
+                      </span>
                     </div>
 
-                    {boletoFile ? (
-                      <div className="flex items-center justify-between p-3 bg-rose-50/60 dark:bg-rose-500/10 border border-rose-200 dark:border-rose-500/30 rounded-2xl">
-                        <div className="flex items-center gap-3 min-w-0">
-                          <div className="w-9 h-9 rounded-xl bg-rose-100 dark:bg-rose-500/20 text-rose-600 dark:text-rose-400 flex items-center justify-center shrink-0">
-                            <span className="material-symbols-outlined text-[22px]">description</span>
+                    {/* Lista de boletos já selecionados */}
+                    {boletoFiles.length > 0 && (
+                      <div className="space-y-1.5 max-h-48 overflow-y-auto pr-1">
+                        {boletoFiles.map((file, idx) => (
+                          <div
+                            key={`${file.name}-${idx}`}
+                            className="flex items-center justify-between p-2.5 bg-rose-50/60 dark:bg-rose-500/10 border border-rose-200 dark:border-rose-500/30 rounded-2xl"
+                          >
+                            <div className="flex items-center gap-3 min-w-0">
+                              <div className="w-8 h-8 rounded-xl bg-rose-100 dark:bg-rose-500/20 text-rose-600 dark:text-rose-400 flex items-center justify-center shrink-0">
+                                <span className="material-symbols-outlined text-[20px]">description</span>
+                              </div>
+                              <div className="truncate">
+                                <p className="text-xs font-bold text-slate-800 dark:text-slate-200 truncate">
+                                  {file.name}
+                                </p>
+                                <p className="text-[10px] text-slate-500 dark:text-slate-400">
+                                  {(file.size / 1024).toFixed(1)} KB • Pronto para envio
+                                </p>
+                              </div>
+                            </div>
+                            <button
+                              type="button"
+                              onClick={() => handleRemoveBoletoFile(idx)}
+                              className="p-1.5 text-slate-400 hover:text-rose-600 dark:hover:text-rose-400 rounded-xl hover:bg-rose-100/60 dark:hover:bg-rose-500/20 transition-colors"
+                              title="Remover anexo"
+                            >
+                              <span className="material-symbols-outlined text-[18px]">close</span>
+                            </button>
                           </div>
-                          <div className="truncate">
-                            <p className="text-xs font-bold text-slate-800 dark:text-slate-200 truncate">
-                              {boletoFile.name}
-                            </p>
-                            <p className="text-[11px] text-slate-500 dark:text-slate-400">
-                              {(boletoFile.size / 1024).toFixed(1)} KB • Pronto para envio
-                            </p>
-                          </div>
-                        </div>
-                        <button
-                          type="button"
-                          onClick={() => setBoletoFile(null)}
-                          className="p-1.5 text-slate-400 hover:text-rose-600 dark:hover:text-rose-400 rounded-xl hover:bg-rose-100/60 dark:hover:bg-rose-500/20 transition-colors"
-                          title="Remover anexo"
-                        >
-                          <span className="material-symbols-outlined text-[18px]">close</span>
-                        </button>
+                        ))}
                       </div>
-                    ) : (
-                      <label className="border-2 border-dashed border-slate-200 dark:border-slate-700 hover:border-mustard-500/60 dark:hover:border-mustard-500/60 rounded-2xl p-3 flex items-center justify-between gap-3 cursor-pointer bg-slate-50/50 dark:bg-slate-800/30 hover:bg-slate-50 dark:hover:bg-slate-800/60 transition-all group">
-                        <input
-                          type="file"
-                          accept=".pdf,application/pdf"
-                          className="hidden"
-                          onChange={(e) => {
-                            const file = e.target.files?.[0];
-                            if (file) {
-                              if (file.type !== 'application/pdf' && !file.name.toLowerCase().endsWith('.pdf')) {
-                                setError('Por favor, selecione apenas arquivos em formato PDF para o boleto.');
-                                return;
-                              }
-                              if (file.size > 20 * 1024 * 1024) {
-                                setError('O arquivo PDF deve ter no máximo 20 MB.');
-                                return;
-                              }
-                              setError(null);
-                              setBoletoFile(file);
-                            }
-                          }}
-                        />
-                        <div className="flex items-center gap-3">
-                          <div className="w-8 h-8 rounded-xl bg-slate-200/70 dark:bg-slate-700 text-slate-500 dark:text-slate-400 group-hover:bg-mustard-500/10 group-hover:text-mustard-600 dark:group-hover:text-mustard-400 flex items-center justify-center transition-colors">
-                            <span className="material-symbols-outlined text-[20px]">upload_file</span>
-                          </div>
-                          <div>
-                            <span className="text-xs font-semibold text-slate-700 dark:text-slate-300 group-hover:text-mustard-600 dark:group-hover:text-mustard-400 transition-colors block">
-                              Clique para anexar o PDF do boleto
-                            </span>
-                            <span className="text-[10px] text-slate-400 dark:text-slate-500">
-                              O financeiro poderá consultar e pagar diretamente pelo sistema
-                            </span>
-                          </div>
-                        </div>
-                        <span className="shrink-0 px-2.5 py-1 rounded-lg bg-white dark:bg-slate-700 border border-slate-200 dark:border-slate-600 text-[11px] font-bold text-slate-600 dark:text-slate-300 shadow-sm group-hover:border-mustard-500/50">
-                          Procurar
-                        </span>
-                      </label>
                     )}
+
+                    {/* Seletor de arquivos para adicionar boletos */}
+                    <label className="border-2 border-dashed border-slate-200 dark:border-slate-700 hover:border-mustard-500/60 dark:hover:border-mustard-500/60 rounded-2xl p-3 flex items-center justify-between gap-3 cursor-pointer bg-slate-50/50 dark:bg-slate-800/30 hover:bg-slate-50 dark:hover:bg-slate-800/60 transition-all group">
+                      <input
+                        type="file"
+                        multiple
+                        accept=".pdf,application/pdf"
+                        className="hidden"
+                        onChange={handleBoletoFilesAdd}
+                      />
+                      <div className="flex items-center gap-3">
+                        <div className="w-8 h-8 rounded-xl bg-slate-200/70 dark:bg-slate-700 text-slate-500 dark:text-slate-400 group-hover:bg-mustard-500/10 group-hover:text-mustard-600 dark:group-hover:text-mustard-400 flex items-center justify-center transition-colors">
+                          <span className="material-symbols-outlined text-[20px]">
+                            {boletoFiles.length > 0 ? 'add' : 'upload_file'}
+                          </span>
+                        </div>
+                        <div>
+                          <span className="text-xs font-semibold text-slate-700 dark:text-slate-300 group-hover:text-mustard-600 dark:group-hover:text-mustard-400 transition-colors block">
+                            {boletoFiles.length > 0 ? 'Adicionar mais boletos (PDF)' : 'Clique para anexar o(s) boleto(s) em PDF'}
+                          </span>
+                          <span className="text-[10px] text-slate-400 dark:text-slate-500">
+                            {boletoFiles.length > 0 ? 'Selecione mais arquivos PDF se necessário' : 'O financeiro poderá consultar e pagar diretamente pelo sistema'}
+                          </span>
+                        </div>
+                      </div>
+                      <span className="shrink-0 px-2.5 py-1 rounded-lg bg-white dark:bg-slate-700 border border-slate-200 dark:border-slate-600 text-[11px] font-bold text-slate-600 dark:text-slate-300 shadow-sm group-hover:border-mustard-500/50">
+                        {boletoFiles.length > 0 ? '+ Adicionar' : 'Procurar'}
+                      </span>
+                    </label>
                   </div>
                 </>
               )}

@@ -24,11 +24,13 @@ export interface ExtratoFilters {
 
 export interface ExtratoBancarioFilters {
   client_id?: string;
+  rental_invoice_id?: string;
   status?: string;
   origin?: string;
   type?: 'payable' | 'receivable';
   from?: string;
   to?: string;
+  invoice_number?: string;
   page?: number;
   limit?: number;
   group_nfe?: boolean;
@@ -100,8 +102,42 @@ export const financeiroService = {
     return data;
   },
 
-  atualizarLancamento: async (billId: string, payload: { status?: string; is_reconciled?: boolean; bank_slip_url?: string | null }): Promise<StatementItem> => {
+  atualizarLancamento: async (
+    billId: string,
+    payload: {
+      status?: string;
+      is_reconciled?: boolean;
+      bank_slip_url?: string[] | string | null;
+      bank_raw_snapshot?: Record<string, any>;
+    }
+  ): Promise<StatementItem> => {
     const { data } = await api.patch<StatementItem>(`/bills/${billId}`, payload);
+    return data;
+  },
+
+  buscarFaturasLocacao: async (rentalInvoiceId: string): Promise<StatementItem[]> => {
+    const { data } = await api.get<any>('/bills', {
+      params: { rental_invoice_id: rentalInvoiceId, group_nfe: false, limit: 100 }
+    });
+    return Array.isArray(data) ? data : (data?.data || []);
+  },
+
+  gerarFaturaLocacaoRegistro: async (payload: {
+    rental_invoice_id: string;
+    bill_id?: string | null;
+    tipo?: 'INICIAL' | 'PRORROGACAO';
+    pdf_url?: string | null;
+    period_start?: string | null;
+    period_end?: string | null;
+    valor_total?: number;
+    dados_fatura?: Record<string, any> | null;
+  }): Promise<{ id: string; numero: string; ano: number; sequencial: number; pdf_url: string; is_new: boolean }> => {
+    const { data } = await api.post('/rentals/faturas/generate', payload);
+    return data;
+  },
+
+  buscarFaturasLocacaoRegistradas: async (rentalInvoiceId: string): Promise<any[]> => {
+    const { data } = await api.get(`/rentals/${rentalInvoiceId}/faturas`);
     return data;
   },
 

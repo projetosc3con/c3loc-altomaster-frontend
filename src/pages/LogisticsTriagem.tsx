@@ -520,13 +520,19 @@ const LogisticsTriagem: React.FC = () => {
   });
 
   // Estrutura de dados para o documento PDF de checklist consolidado
-  const equipmentsChecklistDataForPdf = triagedEquipments.map((item, idx) => ({
-    equipmentLabel: item.asset_number ? `#${item.asset_number} - ${item.equipment_name || 'Equipamento'}` : (item.equipment_name || `Máquina #${idx + 1}`),
-    assetNumber: item.asset_number,
-    model: item.model,
-    period: item.billing_period_start && item.billing_period_end ? `${formatDate(item.billing_period_start)} a ${formatDate(item.billing_period_end)}` : undefined,
-    photos: triagePhotos.filter(p => p.equipment_id === item.equipment_id || (!p.equipment_id && idx === 0))
-  }));
+  const equipmentsChecklistDataForPdf = triagedEquipments.map((item, idx) => {
+    const matchedStock = equipments.find(e => e.id === item.equipment_id);
+    const resolvedAssetNumber = item.asset_number || matchedStock?.asset_number || '';
+    const resolvedSerialNumber = item.serial_number || matchedStock?.serial_number || (item as any).serialNumber || '';
+    return {
+      equipmentLabel: resolvedAssetNumber ? `#${resolvedAssetNumber} - ${item.equipment_name || 'Equipamento'}` : (item.equipment_name || `Máquina #${idx + 1}`),
+      assetNumber: resolvedAssetNumber,
+      serialNumber: resolvedSerialNumber,
+      model: item.model || matchedStock?.model,
+      period: item.billing_period_start && item.billing_period_end ? `${formatDate(item.billing_period_start)} a ${formatDate(item.billing_period_end)}` : undefined,
+      photos: triagePhotos.filter(p => p.equipment_id === item.equipment_id || (!p.equipment_id && idx === 0))
+    };
+  });
 
   return (
     <motion.div

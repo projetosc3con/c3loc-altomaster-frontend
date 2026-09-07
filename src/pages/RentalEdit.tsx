@@ -10,7 +10,8 @@ import type {
   Client,
   Equipment,
   AsaasChargeResult,
-  RentalInvoiceEquipment
+  RentalInvoiceEquipment,
+  StatementItem
 } from '../types';
 import { useAuth } from '../contexts/AuthContext';
 import ContractFormModal from '../components/crm-modals/ContractFormModal';
@@ -19,6 +20,7 @@ import ContractDocument from '../components/crm-modals/ContractDocument';
 import { saveAs } from 'file-saver';
 import { formatDate } from '../utils/date';
 import RentalExtensionModal from '../components/RentalExtensionModal';
+import BillDetailsModal from '../components/financeiro/BillDetailsModal';
 
 type NfseRecord = any;
 type DealContract = any;
@@ -29,6 +31,11 @@ const RECONCILIATION_STATUSES: ReconciliationStatus[] = ['Pendente', 'Atrasado',
 
 function isPaidStatus(status: string): boolean {
   return ['RECEIVED', 'CONFIRMED', 'RECEIVED_IN_CASH', 'PAGO', 'RECEBIDO'].includes(status?.toUpperCase());
+}
+
+function formatCurrency(val?: number | null): string {
+  const num = typeof val === 'number' && !isNaN(val) ? val : 0;
+  return num.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
 }
 
 function getApiErrorMessage(err: any): string {
@@ -261,9 +268,20 @@ const RentalEdit: React.FC = () => {
   const [contracts, setContracts] = useState<DealContract[]>([]);
   const [contractLoading, setContractLoading] = useState(false);
   const [contractError, setContractError] = useState<string | null>(null);
+  const [contractSuccessMsg, setContractSuccessMsg] = useState<string | null>(null);
   const [isContractModalOpen, setIsContractModalOpen] = useState(false);
   const [showContractDeleteConfirm, setShowContractDeleteConfirm] = useState(false);
   const [contractToDelete, setContractToDelete] = useState<any | null>(null);
+
+  // Toast notification state
+  const [toast, setToast] = useState<{ type: 'success' | 'warning' | 'error'; title: string; message: string } | null>(null);
+
+  const showToast = (type: 'success' | 'warning' | 'error', title: string, message: string) => {
+    setToast({ type, title, message });
+    setTimeout(() => {
+      setToast(prev => (prev?.title === title ? null : prev));
+    }, 5000);
+  };
 
   // Rental & Extension state
   const [rental, setRental] = useState<any | null>(null);
@@ -275,6 +293,24 @@ const RentalEdit: React.FC = () => {
   const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [deletingRental, setDeletingRental] = useState(false);
   const [deleteError, setDeleteError] = useState<string | null>(null);
+
+  // Faturas da Locação (Financeiro / Bills)
+  const [rentalBills, setRentalBills] = useState<StatementItem[]>([]);
+  const [billsLoading, setBillsLoading] = useState(false);
+  const [selectedBillForModal, setSelectedBillForModal] = useState<StatementItem | null>(null);
+  const [isBillModalOpen, setIsBillModalOpen] = useState(false);
+
+  const loadRentalBills = async (rentalId: string) => {
+    try {
+      setBillsLoading(true);
+      const bills = await financeiroService.buscarFaturasLocacao(rentalId);
+      setRentalBills(bills);
+    } catch (err) {
+      console.error('Erro ao buscar faturas da locação em bills:', err);
+    } finally {
+      setBillsLoading(false);
+    }
+  };
 
   const userRole = profile?.access_level || (user as any)?.role;
   const canDeleteRental = userRole === 'Administrador' || userRole === 'Diretoria';
@@ -360,6 +396,7 @@ const RentalEdit: React.FC = () => {
 
         if (id) {
           loadRentalDeal(id);
+          loadRentalBills(id);
         }
       } catch (err: any) {
         console.error('Erro ao buscar dados:', err);
@@ -477,6 +514,7 @@ const RentalEdit: React.FC = () => {
       }
 
       await loadRentalDeal(id);
+      if (id) await loadRentalBills(id);
     } catch (err: any) {
       console.error('Erro ao recarregar dados da locação:', err);
     }
@@ -568,11 +606,35 @@ const RentalEdit: React.FC = () => {
     if (!deal) return;
     try {
       setContractLoading(true);
-      await crmService.generateContractRecord(deal.id, { rental_invoice_id: id, equipments: contractForm?.equipments || equipmentItems });
+      const candidateEquipments = (contractForm?.equipments && contractForm.equipments.length > 0)
+        ? contractForm.equipments
+        : equipmentItems;
+
+      // Garantir que equipment_id, asset_number e equipment_type sejam sempre preservados
+      const mergedEquipments = candidateEquipments.map((cEq: any, idx: number) => {
+        const fallback = equipmentItems[idx] || equipmentItems.find((e: any) => 
+          (cEq.id && e.id === cEq.id) ||
+          (cEq.asset_number && e.asset_number === cEq.asset_number) ||
+          (cEq.equipment_name && e.equipment_name === cEq.equipment_name)
+        );
+        return {
+          ...cEq,
+          equipment_id: cEq.equipment_id || fallback?.equipment_id || null,
+          asset_number: cEq.asset_number || fallback?.asset_number || null,
+          equipment_type: cEq.equipment_type || fallback?.equipment_type || null,
+        };
+      });
+
+      await crmService.generateContractRecord(deal.id, { rental_invoice_id: id, equipments: mergedEquipments });
       await loadContractData(deal.id);
-      alert('Contrato gerado com sucesso!');
+      setContractError(null);
+      setContractSuccessMsg('Contrato gerado com sucesso!');
+      showToast('success', 'Contrato Gerado com Sucesso!', 'O documento do contrato foi gerado e está disponível para download e visualização.');
+      setTimeout(() => setContractSuccessMsg(null), 5000);
     } catch (e: any) {
-      setContractError(e?.message || 'Não foi possível gerar o contrato. Tente novamente.');
+      const errorMsg = e?.message || 'Não foi possível gerar o contrato. Tente novamente.';
+      setContractError(errorMsg);
+      showToast('error', 'Erro ao Gerar Contrato', errorMsg);
     } finally {
       setContractLoading(false);
     }
@@ -585,7 +647,7 @@ const RentalEdit: React.FC = () => {
       window.open(blobUrl, '_blank');
     } catch (err) {
       console.error('Erro ao abrir PDF', err);
-      alert('Erro ao abrir PDF.');
+      showToast('error', 'Erro ao Abrir PDF', 'Não foi possível renderizar a visualização do contrato.');
     }
   };
 
@@ -593,9 +655,10 @@ const RentalEdit: React.FC = () => {
     try {
       const blob = await pdf(<ContractDocument data={contract.snapshot} generatedAt={contract.generated_at} />).toBlob();
       saveAs(blob, `CONTRATO DE LOCAÇÃO - ${contract.contract_number} - ${contract.snapshot?.locatario?.company_name || 'Contrato'}.pdf`);
+      showToast('success', 'Download Iniciado', `O download do Contrato Nº ${contract.contract_number} foi iniciado.`);
     } catch (err) {
       console.error('Erro ao gerar PDF', err);
-      alert('Erro ao gerar arquivo PDF.');
+      showToast('error', 'Erro ao Baixar PDF', 'Não foi possível gerar o arquivo PDF do contrato para download.');
     }
   };
 
@@ -612,9 +675,11 @@ const RentalEdit: React.FC = () => {
           setContractLoading(true);
           await crmService.uploadSignedContract(deal.id, contract.id, file);
           await loadContractData(deal.id);
-          alert(`Contrato Nº ${contract.contract_number} assinado anexado com sucesso!`);
+          setContractSuccessMsg(`Contrato Nº ${contract.contract_number} assinado anexado com sucesso!`);
+          showToast('success', 'Contrato Assinado Anexado', `O arquivo assinado do Contrato Nº ${contract.contract_number} foi salvo com sucesso.`);
+          setTimeout(() => setContractSuccessMsg(null), 5000);
         } catch (err) {
-          alert('Erro ao enviar contrato');
+          showToast('error', 'Erro ao Anexar Contrato', 'Não foi possível realizar o upload do arquivo assinado.');
         } finally {
           setContractLoading(false);
         }
@@ -769,7 +834,7 @@ const RentalEdit: React.FC = () => {
       setDeleteError(null);
       await api.delete(`/rentals/${id}`);
       navigate('/locacoes', {
-        state: { message: 'Locação e contas a receber associadas foram excluídas com sucesso.' }
+        state: { message: 'Locação, contas a receber e negociações do CRM vinculadas foram excluídas com sucesso.' }
       });
     } catch (err: any) {
       console.error('Erro ao excluir locação:', err);
@@ -1294,6 +1359,17 @@ const RentalEdit: React.FC = () => {
                             </button>
                           </div>
                         )}
+                        {contractSuccessMsg && (
+                          <div className="mb-4 bg-emerald-50 dark:bg-emerald-500/10 border border-emerald-200 dark:border-emerald-500/20 text-emerald-700 dark:text-emerald-400 p-3 rounded-xl text-xs flex items-center justify-between shadow-sm">
+                            <div className="flex items-center gap-2">
+                              <span className="material-symbols-outlined text-sm">check_circle</span>
+                              <span className="font-semibold">{contractSuccessMsg}</span>
+                            </div>
+                            <button type="button" onClick={() => setContractSuccessMsg(null)}>
+                              <span className="material-symbols-outlined text-[16px]">close</span>
+                            </button>
+                          </div>
+                        )}
                         {!contractForm?.id && contracts.length === 0 ? (
                           <div>
                             <p className="text-sm text-slate-600 dark:text-slate-400 mb-4">
@@ -1472,6 +1548,180 @@ const RentalEdit: React.FC = () => {
                   </div>
                 </div>
               )}
+
+              {/* Seção: Faturas da Locação (Financeiro) */}
+              <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm overflow-hidden">
+                <div className="p-6 border-b border-slate-100 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-800/20 rounded-t-2xl flex flex-wrap items-center justify-between gap-3">
+                  <div>
+                    <h3 className="font-bold text-slate-900 dark:text-white flex items-center gap-2 text-base">
+                      <span className="material-symbols-outlined text-emerald-600 dark:text-emerald-400 text-xl">receipt_long</span>
+                      <span>Faturas da Locação (Financeiro)</span>
+                      <span className="px-2.5 py-0.5 text-[10px] font-bold rounded-full bg-emerald-100 dark:bg-emerald-500/20 text-emerald-700 dark:text-emerald-400 font-mono">
+                        {rentalBills.length}
+                      </span>
+                    </h3>
+                    <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
+                      Faturas e contas a receber vinculadas a esta locação (locação inicial e prorrogações de período).
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => id && loadRentalBills(id)}
+                    disabled={billsLoading}
+                    className="p-2 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 rounded-xl hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
+                    title="Atualizar lista de faturas"
+                  >
+                    <span className={`material-symbols-outlined text-[18px] ${billsLoading ? 'animate-spin' : ''}`}>sync</span>
+                  </button>
+                </div>
+
+                <div className="p-6">
+                  {billsLoading ? (
+                    <div className="p-8 text-center">
+                      <div className="w-6 h-6 border-2 border-emerald-500 border-t-transparent rounded-full animate-spin mx-auto mb-2" />
+                      <span className="text-xs text-slate-500">Carregando faturas financeiras...</span>
+                    </div>
+                  ) : rentalBills.length === 0 ? (
+                    <div className="p-8 text-center rounded-xl bg-slate-50/50 dark:bg-slate-800/30 border border-dashed border-slate-200 dark:border-slate-800 space-y-2">
+                      <span className="material-symbols-outlined text-3xl text-slate-300 dark:text-slate-600">receipt_long</span>
+                      <p className="text-xs text-slate-500 dark:text-slate-400 font-medium">
+                        Nenhuma fatura ou lançamento de conta a receber encontrado para esta locação.
+                      </p>
+                    </div>
+                  ) : (
+                    <div className="space-y-3">
+                      {rentalBills.map((bill) => {
+                        const isExtension = Boolean(
+                          (bill.raw as any)?.bank_raw_snapshot?.is_extension ||
+                          bill.description?.toLowerCase().includes('prorrogação') ||
+                          bill.description?.toLowerCase().includes('prorrogacao')
+                        );
+                        const rawSnap = (bill.raw as any)?.bank_raw_snapshot || {};
+                        const attachedPdf = bill.invoice_url || rawSnap.fatura_pdf_url || null;
+                        const faturaNum = rawSnap.fatura_numero || bill.fatura_numero || null;
+
+                        return (
+                          <div
+                            key={bill.id}
+                            className="p-5 rounded-2xl border border-slate-200 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-800/40 space-y-3 hover:border-emerald-300 dark:hover:border-emerald-500/30 transition-all shadow-sm"
+                          >
+                            <div className="flex flex-wrap items-center justify-between gap-3">
+                              <div className="flex items-center gap-3">
+                                <div
+                                  className={`w-9 h-9 rounded-xl flex items-center justify-center ${
+                                    isExtension
+                                      ? 'bg-purple-100 dark:bg-purple-500/10 text-purple-600 dark:text-purple-400 border border-purple-200 dark:border-purple-500/20'
+                                      : 'bg-emerald-100 dark:bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-500/20'
+                                  }`}
+                                >
+                                  <span className="material-symbols-outlined text-[20px]">
+                                    {isExtension ? 'update' : 'receipt_long'}
+                                  </span>
+                                </div>
+                                <div>
+                                  <div className="flex items-center gap-2">
+                                    <p className="text-sm font-bold text-slate-900 dark:text-white">
+                                      {faturaNum ? `Fatura Nº ${faturaNum}` : (bill.description || (isExtension ? 'Prorrogação de Locação' : 'Fatura de Locação'))}
+                                    </p>
+                                    <span
+                                      className={`px-2 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider ${
+                                        isExtension
+                                          ? 'bg-purple-100 dark:bg-purple-500/20 text-purple-700 dark:text-purple-300 border border-purple-200 dark:border-purple-500/30'
+                                          : 'bg-emerald-100 dark:bg-emerald-500/20 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-500/30'
+                                      }`}
+                                    >
+                                      {isExtension ? 'Prorrogação' : 'Fatura Inicial'}
+                                    </span>
+                                  </div>
+                                  <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-slate-500 dark:text-slate-400 mt-0.5">
+                                    {bill.invoice_number && (
+                                      <span>Locação: <strong className="text-slate-700 dark:text-slate-200 font-mono">{bill.invoice_number}</strong></span>
+                                    )}
+                                    {bill.due_date && (
+                                      <span>Vencimento: <strong className="text-slate-700 dark:text-slate-200">{formatDate(bill.due_date)}</strong></span>
+                                    )}
+                                    <span>Valor: <strong className="text-emerald-600 dark:text-emerald-400 font-bold">{formatCurrency(bill.gross_value)}</strong></span>
+                                    {faturaNum && (
+                                      <span>Fatura Nº: <strong className="text-emerald-700 dark:text-emerald-400 font-semibold">{faturaNum}</strong></span>
+                                    )}
+                                  </div>
+                                </div>
+                              </div>
+
+                              <div className="flex items-center gap-2">
+                                {attachedPdf ? (
+                                  <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-emerald-100 dark:bg-emerald-500/20 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-500/30">
+                                    <span className="material-symbols-outlined text-[12px]">attachment</span>
+                                    Fatura Anexada
+                                  </span>
+                                ) : (
+                                  <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-amber-50 dark:bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-200 dark:border-amber-500/20">
+                                    <span className="material-symbols-outlined text-[12px]">pending_actions</span>
+                                    Doc. Pendente
+                                  </span>
+                                )}
+
+                                <span
+                                  className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-[10px] font-bold ${
+                                    bill.status === 'Recebido' || bill.status === 'No prazo'
+                                      ? 'bg-emerald-100 dark:bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-500/20'
+                                      : bill.status === 'Atrasado'
+                                      ? 'bg-rose-100 dark:bg-rose-500/10 text-rose-700 dark:text-rose-400 border border-rose-200 dark:border-rose-500/20'
+                                      : 'bg-amber-100 dark:bg-amber-500/10 text-amber-700 dark:text-amber-400 border border-amber-200 dark:border-amber-500/20'
+                                  }`}
+                                >
+                                  {bill.status}
+                                </span>
+                              </div>
+                            </div>
+
+                            <div className="flex flex-wrap gap-2.5 pt-2 border-t border-slate-200/60 dark:border-slate-700/60">
+                              {attachedPdf && (
+                                <>
+                                  <a
+                                    href={attachedPdf}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    className="px-3.5 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold transition-colors flex items-center gap-1.5 shadow-sm"
+                                  >
+                                    <span className="material-symbols-outlined text-[16px]">visibility</span>
+                                    Visualizar Fatura (PDF)
+                                  </a>
+
+                                  <a
+                                    href={attachedPdf}
+                                    download={`FATURA_LOCACAO_${(faturaNum || 'FATURA').replace('/', '_')}.pdf`}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    className="px-3.5 py-1.5 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-xl text-xs font-bold transition-colors flex items-center gap-1.5 shadow-sm"
+                                  >
+                                    <span className="material-symbols-outlined text-[16px]">download</span>
+                                    Baixar PDF
+                                  </a>
+                                </>
+                              )}
+
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setSelectedBillForModal(bill);
+                                  setIsBillModalOpen(true);
+                                }}
+                                className="px-3.5 py-1.5 border border-emerald-600 dark:border-emerald-500 text-emerald-600 dark:text-emerald-400 hover:bg-emerald-50 dark:hover:bg-emerald-500/10 rounded-xl text-xs font-bold transition-colors flex items-center gap-1.5"
+                              >
+                                <span className="material-symbols-outlined text-[16px]">
+                                  {attachedPdf ? 'edit_document' : 'receipt_long'}
+                                </span>
+                                {attachedPdf ? 'Detalhes / Regerar' : 'Gerar Fatura de Locação'}
+                              </button>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
+              </div>
             </div>
           )}
 
@@ -2178,6 +2428,7 @@ const RentalEdit: React.FC = () => {
                 <ul className="space-y-1.5 pl-4 list-disc marker:text-red-500">
                   <li>Exclusão permanente da fatura de locação.</li>
                   <li><strong>Exclusão de todos os lançamentos financeiros</strong> atrelados a esta locação.</li>
+                  <li><strong>Exclusão de todas as negociações do CRM</strong>, contratos, propostas e tarefas vinculadas.</li>
                   <li>Liberação automática das máquinas vinculadas para o status <strong>Disponível</strong> no estoque.</li>
                 </ul>
               </div>
@@ -2212,6 +2463,84 @@ const RentalEdit: React.FC = () => {
               </div>
             </motion.div>
           </div>
+        )}
+      </AnimatePresence>
+
+      {/* Modal de Detalhes do Lançamento Financeiro / Fatura */}
+      <BillDetailsModal
+        isOpen={isBillModalOpen}
+        item={selectedBillForModal}
+        onClose={() => {
+          setIsBillModalOpen(false);
+          setSelectedBillForModal(null);
+        }}
+        onUpdated={(updated) => {
+          setRentalBills((prev) => prev.map((b) => (b.id === updated.id ? updated : b)));
+          if (id) {
+            loadRentalBills(id);
+            reloadRentalData();
+          }
+        }}
+      />
+
+      {/* Toast Notification Flutuante */}
+      <AnimatePresence>
+        {toast && (
+          <motion.div
+            initial={{ opacity: 0, y: 40, scale: 0.95 }}
+            animate={{ opacity: 1, y: 0, scale: 1 }}
+            exit={{ opacity: 0, y: 20, scale: 0.95 }}
+            transition={{ type: 'spring', stiffness: 400, damping: 25 }}
+            className="fixed bottom-6 right-6 z-[9999] w-[380px] max-w-[90vw]"
+          >
+            <div
+              className={`rounded-2xl border shadow-2xl backdrop-blur-sm overflow-hidden ${
+                toast.type === 'success'
+                  ? 'bg-white dark:bg-slate-900 border-emerald-200 dark:border-emerald-500/30'
+                  : toast.type === 'warning'
+                  ? 'bg-white dark:bg-slate-900 border-amber-200 dark:border-amber-500/30'
+                  : 'bg-white dark:bg-slate-900 border-red-200 dark:border-red-500/30'
+              }`}
+            >
+              <div
+                className={`h-1.5 ${
+                  toast.type === 'success'
+                    ? 'bg-emerald-500'
+                    : toast.type === 'warning'
+                    ? 'bg-amber-500'
+                    : 'bg-red-500'
+                }`}
+              />
+              <div className="p-4">
+                <div className="flex items-start gap-3.5">
+                  <div
+                    className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 ${
+                      toast.type === 'success'
+                        ? 'bg-emerald-50 dark:bg-emerald-500/10 text-emerald-600 dark:text-emerald-400'
+                        : toast.type === 'warning'
+                        ? 'bg-amber-50 dark:bg-amber-500/10 text-amber-600 dark:text-amber-400'
+                        : 'bg-red-50 dark:bg-red-500/10 text-red-600 dark:text-red-400'
+                    }`}
+                  >
+                    <span className="material-symbols-outlined text-xl">
+                      {toast.type === 'success' ? 'check_circle' : toast.type === 'warning' ? 'warning' : 'error'}
+                    </span>
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-bold text-slate-900 dark:text-white mb-0.5">{toast.title}</p>
+                    <p className="text-xs text-slate-500 dark:text-slate-400 leading-relaxed">{toast.message}</p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setToast(null)}
+                    className="w-7 h-7 rounded-lg flex items-center justify-center text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors shrink-0"
+                  >
+                    <span className="material-symbols-outlined text-[16px]">close</span>
+                  </button>
+                </div>
+              </div>
+            </div>
+          </motion.div>
         )}
       </AnimatePresence>
     </motion.div>

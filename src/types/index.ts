@@ -212,6 +212,7 @@ export interface ServiceOrder {
   parts?: ServiceOrderPart[];
   service_order_parts?: ServiceOrderPart[];
   service_order_labor?: ServiceOrderLabor[];
+  executor?: { id: string; full_name: string };
 }
 
 export interface NfeInvoiceReference {
@@ -577,6 +578,7 @@ export interface Bill {
   due_date: string | null;
   pix_end_to_end_id: string | null;
   bank_transaction_date: string | null;
+  bank_slip_url?: string[] | string | null;
   status: BillStatus;
   reconciled_at: string | null;
   created_at: string;
@@ -595,6 +597,7 @@ export interface CreateBillPayload {
   type: BillType;
   counterparty_name?: string;
   description?: string;
+  invoice_number?: string;
   barcode?: string;
   gross_value: number;
   due_date: string;
@@ -607,7 +610,7 @@ export interface CreateBillPayload {
   created_by?: string;
   payment_type?: 'a_vista' | 'parcelado';
   installments?: ManualInstallmentInput[];
-  bank_slip_url?: string | null;
+  bank_slip_url?: string[] | string | null;
 }
 
 // Item normalizado do extrato bancário: mescla `bills` (já conciliado,
@@ -628,10 +631,11 @@ export interface StatementItem {
   client_name: string | null;
   counterparty_name: string | null;
   invoice_number: string | null;
+  fatura_numero?: string | null;
   rental_invoice_id?: string | null;
   description: string | null;
   invoice_url: string | null;
-  bank_slip_url: string | null;
+  bank_slip_url: string[] | string | null;
   is_reconciled: boolean;
   created_by_name?: string | null;
   created_by_photo?: string | null;

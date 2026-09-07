@@ -1,6 +1,6 @@
 import React from 'react';
 import { Document, Page, Text, View, StyleSheet, Image } from '@react-pdf/renderer';
-import logoC3Loc from '../../assets/logo-completo.png';
+import logoAltoMaster from '../../assets/altomaster-dark.png';
 import type { LogisticsContract, TriagePhoto } from '../../services/logistics';
 
 const styles = StyleSheet.create({
@@ -12,47 +12,54 @@ const styles = StyleSheet.create({
     lineHeight: 1.4,
   },
   headerContainer: {
-    borderBottomWidth: 1,
-    borderBottomColor: '#ccc',
-    paddingBottom: 15,
-    marginBottom: 20,
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-  },
-  headerInfo: {
-    flex: 1,
-    marginRight: 20,
+    marginBottom: 16,
   },
   logo: {
-    width: 110,
-    height: 45,
+    width: 170,
+    height: 55,
     objectFit: 'contain',
+    alignSelf: 'flex-start',
+    marginBottom: 8,
   },
   title: {
-    fontSize: 14,
+    fontSize: 13,
     fontWeight: 'bold',
-    color: '#1a1a1a',
-    marginBottom: 8,
+    color: '#0f172a',
+    marginBottom: 10,
     textTransform: 'uppercase',
   },
-  metaGrid: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
+  detailsTable: {
+    borderWidth: 1,
+    borderColor: '#cbd5e1',
+    borderRadius: 4,
+    backgroundColor: '#f8fafc',
+    overflow: 'hidden',
   },
-  metaItem: {
-    width: '50%',
-    marginBottom: 4,
+  tableRow: {
+    flexDirection: 'row',
+    borderBottomWidth: 1,
+    borderBottomColor: '#e2e8f0',
+  },
+  tableCell: {
+    paddingVertical: 4,
+    paddingHorizontal: 8,
+    justifyContent: 'center',
+  },
+  tableCellBorderRight: {
+    borderRightWidth: 1,
+    borderRightColor: '#e2e8f0',
   },
   metaLabel: {
     fontWeight: 'bold',
-    color: '#666',
-    fontSize: 8,
+    color: '#64748b',
+    fontSize: 7.5,
     textTransform: 'uppercase',
+    marginBottom: 1,
   },
   metaValue: {
-    fontSize: 9,
-    color: '#1a1a1a',
+    fontSize: 8.5,
+    fontWeight: 'bold',
+    color: '#1e293b',
   },
   grid: {
     flexDirection: 'row',
@@ -115,6 +122,7 @@ const styles = StyleSheet.create({
 interface EquipmentChecklistData {
   equipmentLabel: string;
   assetNumber?: string;
+  serialNumber?: string;
   model?: string;
   period?: string;
   photos: TriagePhoto[];
@@ -124,6 +132,8 @@ interface TriageChecklistDocumentProps {
   contract: LogisticsContract;
   photos?: TriagePhoto[];
   equipmentLabel?: string;
+  assetNumber?: string;
+  serialNumber?: string;
   clientName?: string;
   workSite?: string;
   equipmentsWithPhotos?: EquipmentChecklistData[];
@@ -133,6 +143,8 @@ export const TriageChecklistDocument: React.FC<TriageChecklistDocumentProps> = (
   contract,
   photos = [],
   equipmentLabel,
+  assetNumber,
+  serialNumber,
   clientName,
   workSite,
   equipmentsWithPhotos,
@@ -170,6 +182,8 @@ export const TriageChecklistDocument: React.FC<TriageChecklistDocumentProps> = (
     ? equipmentsWithPhotos
     : [{
         equipmentLabel: equipmentLabel || 'Não identificado',
+        assetNumber: assetNumber,
+        serialNumber: serialNumber,
         photos: photos
       }];
 
@@ -189,44 +203,70 @@ export const TriageChecklistDocument: React.FC<TriageChecklistDocumentProps> = (
           <Page key={sIdx} size="A4" style={styles.page}>
             {/* Header */}
             <View style={styles.headerContainer}>
-              <View style={styles.headerInfo}>
-                <Text style={styles.title}>Checklist de Confirmação Fotográfica</Text>
-                <View style={styles.metaGrid}>
-                  <View style={styles.metaItem}>
+              <Image style={styles.logo} src={logoAltoMaster} />
+              <Text style={styles.title}>Checklist de Confirmação Fotográfica</Text>
+
+              {/* Tabela de Detalhes */}
+              <View style={styles.detailsTable}>
+                <View style={styles.tableRow}>
+                  <View style={[styles.tableCell, styles.tableCellBorderRight, { width: '50%' }]}>
                     <Text style={styles.metaLabel}>Contrato</Text>
                     <Text style={styles.metaValue}>#{contract.contract_number}</Text>
                   </View>
-                  <View style={styles.metaItem}>
+                  <View style={[styles.tableCell, { width: '50%' }]}>
                     <Text style={styles.metaLabel}>Data Triagem</Text>
                     <Text style={styles.metaValue}>{currentDate}</Text>
                   </View>
-                  <View style={styles.metaItem}>
+                </View>
+
+                <View style={styles.tableRow}>
+                  <View style={[styles.tableCell, styles.tableCellBorderRight, { width: '50%' }]}>
                     <Text style={styles.metaLabel}>Equipamento</Text>
                     <Text style={styles.metaValue}>{section.equipmentLabel}</Text>
                   </View>
-                  <View style={styles.metaItem}>
+                  <View style={[styles.tableCell, { width: '50%' }]}>
                     <Text style={styles.metaLabel}>Cliente</Text>
                     <Text style={styles.metaValue}>{clientName || 'Não informado'}</Text>
                   </View>
-                  <View style={styles.metaItem}>
-                    <Text style={styles.metaLabel}>Responsável(is)</Text>
-                    <Text style={styles.metaValue}>{inspectors.length > 0 ? inspectors.join(', ') : 'Não informado'}</Text>
+                </View>
+
+                <View style={styles.tableRow}>
+                  <View style={[styles.tableCell, styles.tableCellBorderRight, { width: '50%' }]}>
+                    <Text style={styles.metaLabel}>Patrimônio</Text>
+                    <Text style={styles.metaValue}>
+                      {section.assetNumber || assetNumber || (section.equipmentLabel?.match(/#([A-Za-z0-9-]+)/)?.[1]) || 'Não informado'}
+                    </Text>
                   </View>
-                  {workSite && (
-                    <View style={styles.metaItem}>
-                      <Text style={styles.metaLabel}>Local / Obra</Text>
-                      <Text style={styles.metaValue}>{workSite}</Text>
-                    </View>
-                  )}
-                  {section.period && (
-                    <View style={styles.metaItem}>
-                      <Text style={styles.metaLabel}>Período</Text>
+                  <View style={[styles.tableCell, { width: '50%' }]}>
+                    <Text style={styles.metaLabel}>Nº de Série</Text>
+                    <Text style={styles.metaValue}>
+                      {section.serialNumber || serialNumber || 'Não informado'}
+                    </Text>
+                  </View>
+                </View>
+
+                <View style={[styles.tableRow, (workSite || section.period) ? {} : { borderBottomWidth: 0 }]}>
+                  <View style={[styles.tableCell, styles.tableCellBorderRight, { width: '50%' }]}>
+                    <Text style={styles.metaLabel}>Responsável(is)</Text>
+                    <Text style={styles.metaValue}>
+                      {inspectors.length > 0 ? inspectors.join(', ') : 'Não informado'}
+                    </Text>
+                  </View>
+                  <View style={[styles.tableCell, { width: '50%' }]}>
+                    <Text style={styles.metaLabel}>Local / Obra</Text>
+                    <Text style={styles.metaValue}>{workSite || 'Não informado'}</Text>
+                  </View>
+                </View>
+
+                {section.period && (
+                  <View style={[styles.tableRow, { borderBottomWidth: 0 }]}>
+                    <View style={[styles.tableCell, { width: '100%' }]}>
+                      <Text style={styles.metaLabel}>Período de Locação</Text>
                       <Text style={styles.metaValue}>{section.period}</Text>
                     </View>
-                  )}
-                </View>
+                  </View>
+                )}
               </View>
-              <Image style={styles.logo} src={logoC3Loc} />
             </View>
 
             {/* Photos Grid */}

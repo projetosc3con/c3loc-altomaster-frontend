@@ -13,6 +13,13 @@ const STATUS_OPTIONS: BillStatus[] = ['Pendente', 'Atrasado', 'Recebido', 'Diver
 const ORIGIN_OPTIONS = ['MANUAL', 'NFE', 'ASAAS'];
 const ITEMS_PER_PAGE = 20;
 
+const getBoletoUrls = (urlField: any): string[] => {
+  if (!urlField) return [];
+  if (Array.isArray(urlField)) return urlField.filter((u): u is string => typeof u === 'string' && u.trim().length > 0);
+  if (typeof urlField === 'string' && urlField.trim().length > 0) return [urlField.trim()];
+  return [];
+};
+
 const isSettled = (item: StatementItem) =>
   item.status === 'Recebido' || item.status === 'No prazo';
 
@@ -325,19 +332,23 @@ const ContasPagarTab: React.FC = () => {
                                 {item.paid_installments_count || 0}/{item.installments_count} pagas
                               </span>
                             ) : null}
-                            {item.bank_slip_url ? (
-                              <a
-                                href={item.bank_slip_url}
-                                target="_blank"
-                                rel="noopener noreferrer"
-                                onClick={(e) => e.stopPropagation()}
-                                className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-bold bg-rose-50 dark:bg-rose-500/10 text-rose-700 dark:text-rose-400 border border-rose-200/60 dark:border-rose-500/20 hover:bg-rose-100 dark:hover:bg-rose-500/20 transition-colors"
-                                title="Abrir PDF do Boleto"
-                              >
-                                <span className="material-symbols-outlined text-[11px]">picture_as_pdf</span>
-                                Boleto
-                              </a>
-                            ) : null}
+                            {(() => {
+                              const boletos = getBoletoUrls(item.bank_slip_url);
+                              if (boletos.length === 0) return null;
+                              return (
+                                <a
+                                  href={boletos[0]}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  onClick={(e) => e.stopPropagation()}
+                                  className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-bold bg-rose-50 dark:bg-rose-500/10 text-rose-700 dark:text-rose-400 border border-rose-200/60 dark:border-rose-500/20 hover:bg-rose-100 dark:hover:bg-rose-500/20 transition-colors"
+                                  title={boletos.length > 1 ? `${boletos.length} boletos anexados (clique para abrir o 1º)` : 'Abrir PDF do Boleto'}
+                                >
+                                  <span className="material-symbols-outlined text-[11px]">picture_as_pdf</span>
+                                  {boletos.length > 1 ? `Boleto (${boletos.length})` : 'Boleto'}
+                                </a>
+                              );
+                            })()}
                           </div>
                         </td>
                         <td className="px-6 py-4">
@@ -356,18 +367,27 @@ const ContasPagarTab: React.FC = () => {
                         </td>
                         <td className="px-6 py-4 text-center">
                           <div className="inline-flex items-center justify-center gap-1">
-                            {item.bank_slip_url && (
-                              <a
-                                href={item.bank_slip_url}
-                                target="_blank"
-                                rel="noopener noreferrer"
-                                onClick={(e) => e.stopPropagation()}
-                                className="p-2 text-rose-500 hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-500/10 rounded-xl transition-all inline-flex items-center justify-center"
-                                title="Abrir Boleto Bancário (PDF)"
-                              >
-                                <span className="material-symbols-outlined text-[20px]">picture_as_pdf</span>
-                              </a>
-                            )}
+                            {(() => {
+                              const boletos = getBoletoUrls(item.bank_slip_url);
+                              if (boletos.length === 0) return null;
+                              return (
+                                <a
+                                  href={boletos[0]}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  onClick={(e) => e.stopPropagation()}
+                                  className="p-2 text-rose-500 hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-500/10 rounded-xl transition-all inline-flex items-center justify-center relative"
+                                  title={boletos.length > 1 ? `Abrir Boleto Bancário (1 de ${boletos.length})` : 'Abrir Boleto Bancário (PDF)'}
+                                >
+                                  <span className="material-symbols-outlined text-[20px]">picture_as_pdf</span>
+                                  {boletos.length > 1 && (
+                                    <span className="absolute top-1 right-1 w-3.5 h-3.5 bg-rose-600 text-white text-[8px] font-extrabold rounded-full flex items-center justify-center">
+                                      {boletos.length}
+                                    </span>
+                                  )}
+                                </a>
+                              );
+                            })()}
                             <button
                               type="button"
                               onClick={() => setSelectedBill(item)}
