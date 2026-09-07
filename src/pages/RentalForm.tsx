@@ -60,11 +60,10 @@ function SearchableSelect<T extends { id: string }>({
       <label className="text-xs font-bold text-slate-500 uppercase tracking-widest ml-1">{label} {required && '*'}</label>
       <div
         onClick={() => setIsOpen(!isOpen)}
-        className={`w-full px-4 py-2.5 bg-slate-50 dark:bg-slate-800 border rounded-xl flex items-center justify-between cursor-pointer transition-all ${
-          isOpen 
-            ? 'border-mustard-500 ring-2 ring-mustard-500/10 dark:bg-slate-900' 
-            : 'border-slate-200 dark:border-slate-700 hover:border-slate-300 dark:hover:border-slate-600'
-        }`}
+        className={`w-full px-4 py-2.5 bg-slate-50 dark:bg-slate-800 border rounded-xl flex items-center justify-between cursor-pointer transition-all ${isOpen
+          ? 'border-mustard-500 ring-2 ring-mustard-500/10 dark:bg-slate-900'
+          : 'border-slate-200 dark:border-slate-700 hover:border-slate-300 dark:hover:border-slate-600'
+          }`}
       >
         <span className={`text-sm truncate ${selectedItem ? 'text-slate-900 dark:text-white font-medium' : 'text-slate-400 dark:text-slate-500'}`}>
           {selectedItem ? getDisplayValue(selectedItem) : placeholder}
@@ -103,11 +102,10 @@ function SearchableSelect<T extends { id: string }>({
                       setIsOpen(false);
                       setSearchTerm('');
                     }}
-                    className={`px-4 py-2.5 text-xs cursor-pointer hover:bg-mustard-50 dark:hover:bg-mustard-500/10 transition-colors flex flex-col gap-0.5 ${
-                      selectedId === item.id 
-                        ? 'bg-mustard-50/50 dark:bg-mustard-500/20 border-l-4 border-mustard-500' 
-                        : 'border-l-4 border-transparent'
-                    }`}
+                    className={`px-4 py-2.5 text-xs cursor-pointer hover:bg-mustard-50 dark:hover:bg-mustard-500/10 transition-colors flex flex-col gap-0.5 ${selectedId === item.id
+                      ? 'bg-mustard-50/50 dark:bg-mustard-500/20 border-l-4 border-mustard-500'
+                      : 'border-l-4 border-transparent'
+                      }`}
                   >
                     <span className="font-bold text-slate-900 dark:text-white">{getDisplayValue(item)}</span>
                     <span className="text-[10px] text-slate-400 dark:text-slate-500 font-mono">{getSearchValue(item)}</span>
@@ -407,7 +405,7 @@ const RentalForm: React.FC = () => {
             <span className="material-symbols-outlined">arrow_back</span>
           </button>
           <div>
-            <h1 className="text-3xl font-bold text-slate-900 dark:text-white tracking-tight">Nova Fatura de Locação</h1>
+            <h1 className="text-3xl font-bold text-slate-900 dark:text-white tracking-tight">Novo Contrato de Locação</h1>
             <p className="text-slate-500 dark:text-slate-400 mt-1">Cadastre locações com um ou múltiplos equipamentos atrelados.</p>
           </div>
         </div>
@@ -425,11 +423,10 @@ const RentalForm: React.FC = () => {
         <button
           type="button"
           onClick={() => setActiveTab('equipments')}
-          className={`pb-4 text-sm font-bold flex items-center gap-2 border-b-2 transition-all ${
-            activeTab === 'equipments'
-              ? 'border-mustard-500 text-mustard-600 dark:text-mustard-400'
-              : 'border-transparent text-slate-400 hover:text-slate-600 dark:hover:text-slate-300'
-          }`}
+          className={`pb-4 text-sm font-bold flex items-center gap-2 border-b-2 transition-all ${activeTab === 'equipments'
+            ? 'border-mustard-500 text-mustard-600 dark:text-mustard-400'
+            : 'border-transparent text-slate-400 hover:text-slate-600 dark:hover:text-slate-300'
+            }`}
         >
           <span className="material-symbols-outlined text-lg">precision_manufacturing</span>
           Equipamentos da Locação
@@ -441,11 +438,10 @@ const RentalForm: React.FC = () => {
         <button
           type="button"
           onClick={() => setActiveTab('general')}
-          className={`pb-4 text-sm font-bold flex items-center gap-2 border-b-2 transition-all ${
-            activeTab === 'general'
-              ? 'border-mustard-500 text-mustard-600 dark:text-mustard-400'
-              : 'border-transparent text-slate-400 hover:text-slate-600 dark:hover:text-slate-300'
-          }`}
+          className={`pb-4 text-sm font-bold flex items-center gap-2 border-b-2 transition-all ${activeTab === 'general'
+            ? 'border-mustard-500 text-mustard-600 dark:text-mustard-400'
+            : 'border-transparent text-slate-400 hover:text-slate-600 dark:hover:text-slate-300'
+            }`}
         >
           <span className="material-symbols-outlined text-lg">business</span>
           Dados Gerais & Faturamento
@@ -458,21 +454,15 @@ const RentalForm: React.FC = () => {
           {activeTab === 'equipments' && (
             <div className="space-y-6">
               <div className="flex flex-wrap items-center justify-between gap-4">
-                <div>
-                  <h3 className="text-base font-bold text-slate-900 dark:text-white">Equipamentos Selecionados</h3>
-                  <p className="text-xs text-slate-500 dark:text-slate-400">Adicione e configure cada equipamento com seus respectivos períodos e valores.</p>
-                </div>
-
                 <div className="flex flex-wrap items-center gap-3">
                   <div className="flex items-center bg-slate-100 dark:bg-slate-800 p-1 rounded-xl border border-slate-200 dark:border-slate-700 text-xs font-bold">
                     <button
                       type="button"
                       onClick={() => setFilterStockMode('available')}
-                      className={`px-3 py-1.5 rounded-lg transition-all flex items-center gap-1.5 ${
-                        filterStockMode === 'available'
-                          ? 'bg-white dark:bg-slate-700 text-mustard-600 dark:text-mustard-400 shadow-sm'
-                          : 'text-slate-500 hover:text-slate-700 dark:hover:text-slate-300'
-                      }`}
+                      className={`px-3 py-1.5 rounded-lg transition-all flex items-center gap-1.5 ${filterStockMode === 'available'
+                        ? 'bg-white dark:bg-slate-700 text-mustard-600 dark:text-mustard-400 shadow-sm'
+                        : 'text-slate-500 hover:text-slate-700 dark:hover:text-slate-300'
+                        }`}
                     >
                       <span className="w-2 h-2 rounded-full bg-emerald-500" />
                       Apenas Disponíveis
@@ -480,11 +470,10 @@ const RentalForm: React.FC = () => {
                     <button
                       type="button"
                       onClick={() => setFilterStockMode('all')}
-                      className={`px-3 py-1.5 rounded-lg transition-all flex items-center gap-1.5 ${
-                        filterStockMode === 'all'
-                          ? 'bg-white dark:bg-slate-700 text-mustard-600 dark:text-mustard-400 shadow-sm'
-                          : 'text-slate-500 hover:text-slate-700 dark:hover:text-slate-300'
-                      }`}
+                      className={`px-3 py-1.5 rounded-lg transition-all flex items-center gap-1.5 ${filterStockMode === 'all'
+                        ? 'bg-white dark:bg-slate-700 text-mustard-600 dark:text-mustard-400 shadow-sm'
+                        : 'text-slate-500 hover:text-slate-700 dark:hover:text-slate-300'
+                        }`}
                     >
                       <span className="material-symbols-outlined text-[15px]">inventory_2</span>
                       Todos do Estoque

@@ -221,7 +221,11 @@ interface FaturaLocacaoDocumentProps {
   invoiceNumber?: string;
   issueDate?: string;
   dueDate?: string;
+  periodStart?: string;
+  periodEnd?: string;
   paymentMethod?: string;
+  notes?: string;
+  observations?: string;
   companySettings?: {
     company_name?: string;
     cnpj?: string;
@@ -242,7 +246,11 @@ export const FaturaLocacaoDocument: React.FC<FaturaLocacaoDocumentProps> = ({
   invoiceNumber,
   issueDate,
   dueDate,
+  periodStart: explicitPeriodStart,
+  periodEnd: explicitPeriodEnd,
   paymentMethod,
+  notes,
+  observations,
   companySettings,
 }) => {
   const form = contract.contract_form || ({} as any);
@@ -337,8 +345,8 @@ export const FaturaLocacaoDocument: React.FC<FaturaLocacaoDocumentProps> = ({
   const workSite = form.work_site || snapshot.work_site || clientAddress;
 
   // Datas
-  const periodStart = form.period_start || snapshot.period_start || '';
-  const periodEnd = form.period_end || snapshot.period_end || '';
+  const periodStart = explicitPeriodStart || form.period_start || snapshot.period_start || '';
+  const periodEnd = explicitPeriodEnd || form.period_end || snapshot.period_end || '';
   const periodString = periodStart && periodEnd
     ? `${formatDate(periodStart)} a ${formatDate(periodEnd)}`
     : periodStart
@@ -468,8 +476,8 @@ export const FaturaLocacaoDocument: React.FC<FaturaLocacaoDocumentProps> = ({
               const eqHeight = eq.equipment_size ? ` - ${eq.equipment_size}` : '';
               const eqAsset = eq.asset_number ? ` (Patrimônio: ${eq.asset_number})` : '';
               const eqVal = Number(eq.total_value ?? eq.cost_rental ?? 0);
-              const start = eq.billing_period_start || eq.period_start || form.period_start || snapshot.period_start;
-              const end = eq.billing_period_end || eq.period_end || form.period_end || snapshot.period_end;
+              const start = eq.billing_period_start || eq.period_start || periodStart || form.period_start || snapshot.period_start;
+              const end = eq.billing_period_end || eq.period_end || periodEnd || form.period_end || snapshot.period_end;
               const itemPeriod = start && end
                 ? `${formatDate(start)} a ${formatDate(end)}`
                 : start
@@ -518,7 +526,11 @@ export const FaturaLocacaoDocument: React.FC<FaturaLocacaoDocumentProps> = ({
           <View style={styles.obsContainer}>
             <Text style={styles.obsTitle}>Observações:</Text>
             <Text style={styles.obsText}>
-              {form.notes || form.observations || contract.notes || contract.observations || snapshot.observations || snapshot.notes || deal.notes || 'PROPOSTA ASSINADA'}
+              {notes !== undefined && notes !== null && notes.trim() !== ''
+                ? notes.trim()
+                : observations !== undefined && observations !== null && observations.trim() !== ''
+                ? observations.trim()
+                : form.notes || form.observations || contract.notes || contract.observations || snapshot.observations || snapshot.notes || deal.notes || 'PROPOSTA ASSINADA'}
             </Text>
           </View>
 

@@ -260,7 +260,7 @@ const LancamentoManualModal: React.FC<LancamentoManualModalProps> = ({
       return;
     }
 
-    if (!isReceivable && paymentType === 'parcelado') {
+    if (paymentType === 'parcelado') {
       if (installments.length < 2) {
         setError('O parcelamento deve conter no mínimo 2 parcelas.');
         return;
@@ -310,7 +310,7 @@ const LancamentoManualModal: React.FC<LancamentoManualModalProps> = ({
         bankSlipUrls = uploadedUrls;
       }
 
-      const isParcelado = !isReceivable && paymentType === 'parcelado' && installments.length > 1;
+      const isParcelado = paymentType === 'parcelado' && installments.length > 1;
       const bill = await financeiroService.criarLancamentoManual({
         type,
         counterparty_name: counterpartyName.trim() || undefined,
@@ -375,94 +375,107 @@ const LancamentoManualModal: React.FC<LancamentoManualModalProps> = ({
                 <h3 className="text-lg font-black text-slate-900 dark:text-white">{title}</h3>
                 <p className="text-xs text-slate-500 dark:text-slate-400 font-medium">
                   {isReceivable
-                    ? 'Registro de receita manual avulsa'
+                    ? 'Registro de receita com suporte a parcelas e vencimentos'
                     : 'Registro de despesa com suporte a parcelas e vencimentos'}
                 </p>
               </div>
             </div>
 
             <div className="space-y-4 overflow-y-auto pr-1 flex-1">
-              {!isReceivable && (
-                <div className="space-y-1.5">
-                  <label className="text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-widest ml-1">
-                    Forma de Pagamento
-                  </label>
-                  <div className="grid grid-cols-2 gap-3">
-                    <button
-                      type="button"
-                      onClick={() => handleSelectPaymentType('a_vista')}
-                      className={`p-3 rounded-2xl border text-left transition-all flex items-center gap-3 ${
-                        paymentType === 'a_vista'
-                          ? 'border-mustard-500 bg-mustard-50/50 dark:bg-mustard-500/10 ring-2 ring-mustard-500/20'
-                          : 'border-slate-200 dark:border-slate-700 hover:border-slate-300 dark:hover:border-slate-600 bg-slate-50 dark:bg-slate-800/40'
+              <div className="space-y-1.5">
+                <label className="text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-widest ml-1">
+                  Forma de Pagamento
+                </label>
+                <div className="grid grid-cols-2 gap-3">
+                  <button
+                    type="button"
+                    onClick={() => handleSelectPaymentType('a_vista')}
+                    className={`p-3 rounded-2xl border text-left transition-all flex items-center gap-3 ${
+                      paymentType === 'a_vista'
+                        ? 'border-mustard-500 bg-mustard-50/50 dark:bg-mustard-500/10 ring-2 ring-mustard-500/20'
+                        : 'border-slate-200 dark:border-slate-700 hover:border-slate-300 dark:hover:border-slate-600 bg-slate-50 dark:bg-slate-800/40'
+                    }`}
+                  >
+                    <span
+                      className={`material-symbols-outlined text-xl ${
+                        paymentType === 'a_vista' ? 'text-mustard-600 dark:text-mustard-400' : 'text-slate-400'
                       }`}
                     >
-                      <span
-                        className={`material-symbols-outlined text-xl ${
-                          paymentType === 'a_vista' ? 'text-mustard-600 dark:text-mustard-400' : 'text-slate-400'
-                        }`}
-                      >
-                        monetization_on
-                      </span>
-                      <div>
-                        <span className="block font-bold text-xs text-slate-900 dark:text-white">À Vista (1x)</span>
-                        <span className="text-[11px] text-slate-500">Lançamento integral</span>
-                      </div>
-                    </button>
+                      monetization_on
+                    </span>
+                    <div>
+                      <span className="block font-bold text-xs text-slate-900 dark:text-white">À Vista (1x)</span>
+                      <span className="text-[11px] text-slate-500">Lançamento integral</span>
+                    </div>
+                  </button>
 
-                    <button
-                      type="button"
-                      onClick={() => handleSelectPaymentType('parcelado')}
-                      className={`p-3 rounded-2xl border text-left transition-all flex items-center gap-3 ${
-                        paymentType === 'parcelado'
-                          ? 'border-mustard-500 bg-mustard-50/50 dark:bg-mustard-500/10 ring-2 ring-mustard-500/20'
-                          : 'border-slate-200 dark:border-slate-700 hover:border-slate-300 dark:hover:border-slate-600 bg-slate-50 dark:bg-slate-800/40'
+                  <button
+                    type="button"
+                    onClick={() => handleSelectPaymentType('parcelado')}
+                    className={`p-3 rounded-2xl border text-left transition-all flex items-center gap-3 ${
+                      paymentType === 'parcelado'
+                        ? 'border-mustard-500 bg-mustard-50/50 dark:bg-mustard-500/10 ring-2 ring-mustard-500/20'
+                        : 'border-slate-200 dark:border-slate-700 hover:border-slate-300 dark:hover:border-slate-600 bg-slate-50 dark:bg-slate-800/40'
+                    }`}
+                  >
+                    <span
+                      className={`material-symbols-outlined text-xl ${
+                        paymentType === 'parcelado' ? 'text-mustard-600 dark:text-mustard-400' : 'text-slate-400'
                       }`}
                     >
-                      <span
-                        className={`material-symbols-outlined text-xl ${
-                          paymentType === 'parcelado' ? 'text-mustard-600 dark:text-mustard-400' : 'text-slate-400'
-                        }`}
-                      >
-                        view_agenda
-                      </span>
-                      <div>
-                        <span className="block font-bold text-xs text-slate-900 dark:text-white">Parcelado</span>
-                        <span className="text-[11px] text-slate-500">Divide em N parcelas</span>
-                      </div>
-                    </button>
-                  </div>
+                      view_agenda
+                    </span>
+                    <div>
+                      <span className="block font-bold text-xs text-slate-900 dark:text-white">Parcelado</span>
+                      <span className="text-[11px] text-slate-500">Divide em N parcelas</span>
+                    </div>
+                  </button>
                 </div>
-              )}
+              </div>
 
               {isReceivable ? (
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <>
                   <div className="space-y-1.5">
                     <label className="text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-widest ml-1">
-                      Nome
+                      Descrição
                     </label>
-                    <input
-                      type="text"
-                      value={counterpartyName}
-                      onChange={(e) => setCounterpartyName(e.target.value)}
-                      placeholder="Nome de quem vai pagar (opcional)"
-                      className="w-full px-4 py-2.5 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-slate-900 dark:text-white focus:bg-white dark:focus:bg-slate-900 focus:ring-2 focus:ring-mustard-500/10 focus:border-mustard-500 transition-all outline-none text-sm"
+                    <textarea
+                      rows={2}
+                      value={description}
+                      onChange={(e) => setDescription(e.target.value)}
+                      placeholder="Detalhes ou identificador do recebimento (ex: Prestação de serviços, Venda de peças)"
+                      className="w-full px-4 py-2.5 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-slate-900 dark:text-white focus:bg-white dark:focus:bg-slate-900 focus:ring-2 focus:ring-mustard-500/10 focus:border-mustard-500 transition-all outline-none text-sm resize-none"
                     />
                   </div>
 
-                  <div className="space-y-1.5">
-                    <label className="text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-widest ml-1">
-                      Nº Nota Fiscal
-                    </label>
-                    <input
-                      type="text"
-                      value={invoiceNumber}
-                      onChange={(e) => setInvoiceNumber(e.target.value)}
-                      placeholder="Ex: 12345 (se houver)"
-                      className="w-full px-4 py-2.5 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-slate-900 dark:text-white focus:bg-white dark:focus:bg-slate-900 focus:ring-2 focus:ring-mustard-500/10 focus:border-mustard-500 transition-all outline-none text-sm font-mono"
-                    />
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <div className="space-y-1.5">
+                      <label className="text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-widest ml-1">
+                        Cliente / Pagador
+                      </label>
+                      <input
+                        type="text"
+                        value={counterpartyName}
+                        onChange={(e) => setCounterpartyName(e.target.value)}
+                        placeholder="Nome do cliente ou pagador (opcional)"
+                        className="w-full px-4 py-2.5 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-slate-900 dark:text-white focus:bg-white dark:focus:bg-slate-900 focus:ring-2 focus:ring-mustard-500/10 focus:border-mustard-500 transition-all outline-none text-sm"
+                      />
+                    </div>
+
+                    <div className="space-y-1.5">
+                      <label className="text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-widest ml-1">
+                        Nº Nota Fiscal
+                      </label>
+                      <input
+                        type="text"
+                        value={invoiceNumber}
+                        onChange={(e) => setInvoiceNumber(e.target.value)}
+                        placeholder="Ex: 12345 (se houver)"
+                        className="w-full px-4 py-2.5 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-slate-900 dark:text-white focus:bg-white dark:focus:bg-slate-900 focus:ring-2 focus:ring-mustard-500/10 focus:border-mustard-500 transition-all outline-none text-sm font-mono"
+                      />
+                    </div>
                   </div>
-                </div>
+                </>
               ) : (
                 <>
                   <div className="space-y-1.5">
@@ -632,7 +645,7 @@ const LancamentoManualModal: React.FC<LancamentoManualModalProps> = ({
               </div>
 
               {/* SEÇÃO DE PARCELAMENTO */}
-              {!isReceivable && paymentType === 'parcelado' && (
+              {paymentType === 'parcelado' && (
                 <div className="space-y-3 pt-2">
                   <div className="flex flex-wrap items-center justify-between gap-2">
                     <div className="flex items-center gap-2">

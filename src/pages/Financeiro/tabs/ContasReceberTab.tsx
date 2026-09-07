@@ -72,6 +72,7 @@ const ContasReceberTab: React.FC = () => {
   const [status, setStatus] = useState('');
   const [dateFrom, setDateFrom] = useState('');
   const [dateTo, setDateTo] = useState('');
+  const [groupNfe, setGroupNfe] = useState<boolean>(true);
 
   const [items, setItems] = useState<StatementItem[]>([]);
   const [loading, setLoading] = useState(true);
@@ -107,6 +108,7 @@ const ContasReceberTab: React.FC = () => {
         status: status || undefined,
         from: dateFrom || undefined,
         to: dateTo || undefined,
+        group_nfe: groupNfe,
         page: currentPage,
         limit: ITEMS_PER_PAGE,
       });
@@ -119,7 +121,7 @@ const ContasReceberTab: React.FC = () => {
     } finally {
       setLoading(false);
     }
-  }, [selectedClientId, invoiceNumber, status, dateFrom, dateTo, currentPage]);
+  }, [selectedClientId, invoiceNumber, status, dateFrom, dateTo, groupNfe, currentPage]);
 
   useEffect(() => {
     fetchContasReceber();
@@ -127,7 +129,7 @@ const ContasReceberTab: React.FC = () => {
 
   useEffect(() => {
     setCurrentPage(1);
-  }, [selectedClientId, invoiceNumber, status, dateFrom, dateTo]);
+  }, [selectedClientId, invoiceNumber, status, dateFrom, dateTo, groupNfe]);
 
   const handleClearFilters = () => {
     setSelectedClientId('');
@@ -241,15 +243,34 @@ const ContasReceberTab: React.FC = () => {
             </div>
           </div>
 
-          {hasActiveFilters && (
-            <button
-              type="button"
-              onClick={handleClearFilters}
-              className="text-xs font-bold text-mustard-600 dark:text-mustard-400 uppercase tracking-widest hover:underline"
-            >
-              Limpar filtros
-            </button>
-          )}
+          <div className="flex flex-wrap items-center justify-between gap-4 pt-1">
+            <div className="flex items-center gap-3">
+              <button
+                type="button"
+                onClick={() => setGroupNfe((prev) => !prev)}
+                className={`px-3.5 py-2 rounded-xl border text-xs font-bold transition-all flex items-center gap-2 shadow-sm ${groupNfe
+                    ? 'bg-emerald-50 dark:bg-emerald-500/10 border-emerald-200 dark:border-emerald-500/30 text-emerald-700 dark:text-emerald-400'
+                    : 'bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-400 hover:bg-slate-50'
+                  }`}
+                title="Alternar entre visualizar o lançamento consolidado ou parcelas avulsas"
+              >
+                <span className="material-symbols-outlined text-[18px]">
+                  {groupNfe ? 'layers' : 'layers_clear'}
+                </span>
+                <span>{groupNfe ? 'Agrupar Parcelas' : 'Parcelas Individuais'}</span>
+              </button>
+            </div>
+
+            {hasActiveFilters && (
+              <button
+                type="button"
+                onClick={handleClearFilters}
+                className="text-xs font-bold text-mustard-600 dark:text-mustard-400 uppercase tracking-widest hover:underline"
+              >
+                Limpar filtros
+              </button>
+            )}
+          </div>
 
           {error && (
             <div className="bg-red-50 dark:bg-red-500/10 border border-red-200 dark:border-red-500/20 text-red-600 dark:text-red-400 rounded-2xl p-4 text-sm font-medium">
@@ -263,7 +284,7 @@ const ContasReceberTab: React.FC = () => {
                 <tr className="bg-slate-50 dark:bg-slate-800/50 text-left">
                   <th className="px-6 py-3 text-[11px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-widest text-center">Conciliado</th>
                   <th className="px-6 py-3 text-[11px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-widest">Vencimento</th>
-                  <th className="px-6 py-3 text-[11px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-widest">Cliente / Fatura</th>
+                  <th className="px-6 py-3 text-[11px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-widest">Cliente / Contrato</th>
                   <th className="px-6 py-3 text-[11px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-widest">Origem</th>
                   <th className="px-6 py-3 text-[11px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-widest text-right">Valor Bruto</th>
                   <th className="px-6 py-3 text-[11px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-widest text-right">Valor Líquido</th>
@@ -304,20 +325,33 @@ const ContasReceberTab: React.FC = () => {
                           )}
                         </td>
                         <td className="px-6 py-4 text-slate-600 dark:text-slate-400 whitespace-nowrap">
-                          {formatDate(item.due_date)}
+                          <div>
+                            <p className="font-medium text-slate-900 dark:text-white">
+                              {formatDate(item.due_date)}
+                            </p>
+                            {item.installments_count && item.installments_count > 1 ? (
+                              <span className="text-[10px] text-slate-400 dark:text-slate-500 block">
+                                {item.status === 'Recebido' ? 'Todas recebidas' : 'Próx. vencimento'}
+                              </span>
+                            ) : null}
+                          </div>
                         </td>
                         <td className="px-6 py-4">
                           <p className="font-bold text-slate-900 dark:text-white">
                             {item.client_name || item.counterparty_name || '—'}
                           </p>
-                          <div className="flex flex-col text-[11px] font-mono text-slate-400 dark:text-slate-500">
-                            {item.invoice_number ? (
-                              <span>{item.invoice_number}</span>
-                            ) : (
-                              <span>—</span>
-                            )}
+                          <div className="flex flex-wrap items-center gap-1.5 mt-0.5">
+                            <span className="text-[11px] text-slate-400 dark:text-slate-500 font-mono">
+                              {item.invoice_number || item.description || '—'}
+                            </span>
+                            {item.installments_count && item.installments_count > 1 ? (
+                              <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-bold bg-emerald-50 dark:bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 border border-emerald-200/60 dark:border-emerald-500/20">
+                                <span className="material-symbols-outlined text-[11px]">payments</span>
+                                {item.paid_installments_count || 0}/{item.installments_count} recebidas
+                              </span>
+                            ) : null}
                             {item.fatura_numero && (
-                              <span className="text-emerald-600 dark:text-emerald-400 font-semibold mt-0.5">
+                              <span className="text-emerald-600 dark:text-emerald-400 font-semibold text-[11px]">
                                 Fatura Nº {item.fatura_numero}
                               </span>
                             )}

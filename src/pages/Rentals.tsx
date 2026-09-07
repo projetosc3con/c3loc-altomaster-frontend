@@ -38,8 +38,8 @@ const emptyFilters: Filters = {
 };
 
 const buildParams = (page: number, f: Filters) => {
-  const p: Record<string, string | number> = { 
-    page, 
+  const p: Record<string, string | number> = {
+    page,
     limit: ITEMS_PER_PAGE,
     sort_by: f.sort_by || 'billing_period_end',
     sort_order: f.sort_order || 'desc'
@@ -62,8 +62,8 @@ const getInitialFilters = (): Filters => {
     const saved = localStorage.getItem(STORAGE_KEY);
     if (saved) {
       const parsed = JSON.parse(saved);
-      return { 
-        ...emptyFilters, 
+      return {
+        ...emptyFilters,
         ...parsed,
         sort_by: parsed.sort_by || 'billing_period_end',
         sort_order: parsed.sort_order || 'desc'
@@ -311,23 +311,20 @@ const Rentals: React.FC = () => {
     return (
       <th
         onClick={() => handleSort(field)}
-        className={`px-6 py-4 cursor-pointer select-none group transition-colors ${
-          align === 'right' ? 'text-right' : align === 'center' ? 'text-center' : 'text-left'
-        } ${
-          isSorted 
-            ? 'text-mustard-600 dark:text-mustard-400 font-extrabold' 
+        className={`px-6 py-4 cursor-pointer select-none group transition-colors ${align === 'right' ? 'text-right' : align === 'center' ? 'text-center' : 'text-left'
+          } ${isSorted
+            ? 'text-mustard-600 dark:text-mustard-400 font-extrabold'
             : 'text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200'
-        } ${extraClass}`}
+          } ${extraClass}`}
         title={`Clique para ordenar por ${label} (${isSorted && isAsc ? 'decrescente' : 'crescente'})`}
       >
         <div className={`inline-flex items-center gap-1.5 ${align === 'right' ? 'justify-end w-full' : ''}`}>
           <span>{label}</span>
           <span
-            className={`material-symbols-outlined text-[18px] transition-all transform ${
-              isSorted
-                ? 'text-mustard-500 dark:text-mustard-400 opacity-100 scale-110'
-                : 'text-slate-300 dark:text-slate-600 opacity-0 group-hover:opacity-100'
-            }`}
+            className={`material-symbols-outlined text-[18px] transition-all transform ${isSorted
+              ? 'text-mustard-500 dark:text-mustard-400 opacity-100 scale-110'
+              : 'text-slate-300 dark:text-slate-600 opacity-0 group-hover:opacity-100'
+              }`}
           >
             {isSorted
               ? (isAsc ? 'keyboard_arrow_up' : 'keyboard_arrow_down')
@@ -343,7 +340,7 @@ const Rentals: React.FC = () => {
       {/* Header */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>
-          <h1 className="text-3xl font-bold text-slate-900 dark:text-white tracking-tight">Gestão de Locações</h1>
+          <h1 className="text-3xl font-bold text-slate-900 dark:text-white tracking-tight">Gestão de Contratos</h1>
           <p className="text-slate-500 dark:text-slate-400 mt-1">Acompanhe contratos, faturamentos e períodos de locação.</p>
         </div>
 
@@ -353,7 +350,7 @@ const Rentals: React.FC = () => {
             className="flex items-center gap-2 bg-mustard-500 text-white px-5 py-2.5 rounded-xl shadow-lg shadow-mustard-500/20 hover:bg-mustard-600 active:scale-95 transition-all font-bold text-xs uppercase tracking-widest"
           >
             <span className="material-symbols-outlined text-[18px]">add_circle</span>
-            Nova Locação
+            Novo contrato
           </button>
         </div>
       </div>
@@ -361,7 +358,7 @@ const Rentals: React.FC = () => {
       {/* Stats */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
         {[
-          { label: 'Total de Locações', value: totalItems.toString(), color: 'bg-blue-100 dark:bg-blue-900/20 text-blue-800 dark:text-blue-400', icon: 'sync' },
+          { label: 'Total de Contratos', value: totalItems.toString(), color: 'bg-blue-100 dark:bg-blue-900/20 text-blue-800 dark:text-blue-400', icon: 'sync' },
           { label: 'Aguardando conciliação', value: stats.pendingReconciliationCount.toString(), color: 'bg-amber-100 dark:bg-amber-900/20 text-amber-800 dark:text-amber-400', icon: 'pending_actions' },
           { label: 'Total Faturado', value: (stats.totalValue ?? stats.monthlyReceivedTotal ?? 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' }), color: 'bg-emerald-100 dark:bg-emerald-900/20 text-emerald-800 dark:text-emerald-400', icon: 'payments' },
         ].map((stat, i) => (
@@ -637,11 +634,10 @@ const Rentals: React.FC = () => {
                       <button
                         type="button"
                         onClick={() => setFilters(f => ({ ...f, sort_order: 'desc' }))}
-                        className={`px-3 py-2.5 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-1.5 ${
-                          filters.sort_order === 'desc'
-                            ? 'bg-mustard-500 text-white shadow-md'
-                            : 'bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-700'
-                        }`}
+                        className={`px-3 py-2.5 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-1.5 ${filters.sort_order === 'desc'
+                          ? 'bg-mustard-500 text-white shadow-md'
+                          : 'bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-700'
+                          }`}
                       >
                         <span className="material-symbols-outlined text-[16px]">keyboard_arrow_down</span>
                         Mais recente / Maior
@@ -649,11 +645,10 @@ const Rentals: React.FC = () => {
                       <button
                         type="button"
                         onClick={() => setFilters(f => ({ ...f, sort_order: 'asc' }))}
-                        className={`px-3 py-2.5 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-1.5 ${
-                          filters.sort_order === 'asc'
-                            ? 'bg-mustard-500 text-white shadow-md'
-                            : 'bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-700'
-                        }`}
+                        className={`px-3 py-2.5 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-1.5 ${filters.sort_order === 'asc'
+                          ? 'bg-mustard-500 text-white shadow-md'
+                          : 'bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-700'
+                          }`}
                       >
                         <span className="material-symbols-outlined text-[16px]">keyboard_arrow_up</span>
                         Mais antigo / Menor

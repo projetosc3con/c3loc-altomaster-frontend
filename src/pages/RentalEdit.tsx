@@ -130,8 +130,8 @@ function SearchableSelect<T extends { id: string }>({
       <div
         onClick={() => setIsOpen(!isOpen)}
         className={`w-full px-4 py-2.5 bg-slate-50 dark:bg-slate-800 border rounded-xl flex items-center justify-between cursor-pointer transition-all ${isOpen
-            ? 'border-mustard-500 ring-2 ring-mustard-500/10 dark:bg-slate-900'
-            : 'border-slate-200 dark:border-slate-700 hover:border-slate-300 dark:hover:border-slate-600'
+          ? 'border-mustard-500 ring-2 ring-mustard-500/10 dark:bg-slate-900'
+          : 'border-slate-200 dark:border-slate-700 hover:border-slate-300 dark:hover:border-slate-600'
           }`}
       >
         <span className={`text-sm truncate ${selectedItem ? 'text-slate-900 dark:text-white font-medium' : 'text-slate-400 dark:text-slate-500'}`}>
@@ -172,8 +172,8 @@ function SearchableSelect<T extends { id: string }>({
                       setSearchTerm('');
                     }}
                     className={`px-4 py-2.5 text-xs cursor-pointer hover:bg-mustard-50 dark:hover:bg-mustard-500/10 transition-colors flex flex-col gap-0.5 ${selectedId === item.id
-                        ? 'bg-mustard-50/50 dark:bg-mustard-500/20 border-l-4 border-mustard-500'
-                        : 'border-l-4 border-transparent'
+                      ? 'bg-mustard-50/50 dark:bg-mustard-500/20 border-l-4 border-mustard-500'
+                      : 'border-l-4 border-transparent'
                       }`}
                   >
                     <span className="font-bold text-slate-900 dark:text-white">{getDisplayValue(item)}</span>
@@ -612,7 +612,7 @@ const RentalEdit: React.FC = () => {
 
       // Garantir que equipment_id, asset_number e equipment_type sejam sempre preservados
       const mergedEquipments = candidateEquipments.map((cEq: any, idx: number) => {
-        const fallback = equipmentItems[idx] || equipmentItems.find((e: any) => 
+        const fallback = equipmentItems[idx] || equipmentItems.find((e: any) =>
           (cEq.id && e.id === cEq.id) ||
           (cEq.asset_number && e.asset_number === cEq.asset_number) ||
           (cEq.equipment_name && e.equipment_name === cEq.equipment_name)
@@ -971,8 +971,8 @@ const RentalEdit: React.FC = () => {
           type="button"
           onClick={() => setActiveTab('equipments')}
           className={`pb-4 text-sm font-bold flex items-center gap-2 border-b-2 transition-all ${activeTab === 'equipments'
-              ? 'border-mustard-500 text-mustard-600 dark:text-mustard-400'
-              : 'border-transparent text-slate-400 hover:text-slate-600 dark:hover:text-slate-300'
+            ? 'border-mustard-500 text-mustard-600 dark:text-mustard-400'
+            : 'border-transparent text-slate-400 hover:text-slate-600 dark:hover:text-slate-300'
             }`}
         >
           <span className="material-symbols-outlined text-lg">precision_manufacturing</span>
@@ -986,8 +986,8 @@ const RentalEdit: React.FC = () => {
           type="button"
           onClick={() => setActiveTab('billing')}
           className={`pb-4 text-sm font-bold flex items-center gap-2 border-b-2 transition-all ${activeTab === 'billing'
-              ? 'border-mustard-500 text-mustard-600 dark:text-mustard-400'
-              : 'border-transparent text-slate-400 hover:text-slate-600 dark:hover:text-slate-300'
+            ? 'border-mustard-500 text-mustard-600 dark:text-mustard-400'
+            : 'border-transparent text-slate-400 hover:text-slate-600 dark:hover:text-slate-300'
             }`}
         >
           <span className="material-symbols-outlined text-lg">business</span>
@@ -998,8 +998,8 @@ const RentalEdit: React.FC = () => {
           type="button"
           onClick={() => setActiveTab('contract')}
           className={`pb-4 text-sm font-bold flex items-center gap-2 border-b-2 transition-all ${activeTab === 'contract'
-              ? 'border-mustard-500 text-mustard-600 dark:text-mustard-400'
-              : 'border-transparent text-slate-400 hover:text-slate-600 dark:hover:text-slate-300'
+            ? 'border-mustard-500 text-mustard-600 dark:text-mustard-400'
+            : 'border-transparent text-slate-400 hover:text-slate-600 dark:hover:text-slate-300'
             }`}
         >
           <span className="material-symbols-outlined text-lg">description</span>
@@ -1010,8 +1010,8 @@ const RentalEdit: React.FC = () => {
           type="button"
           onClick={() => setActiveTab('service_orders')}
           className={`pb-4 text-sm font-bold flex items-center gap-2 border-b-2 transition-all ${activeTab === 'service_orders'
-              ? 'border-mustard-500 text-mustard-600 dark:text-mustard-400'
-              : 'border-transparent text-slate-400 hover:text-slate-600 dark:hover:text-slate-300'
+            ? 'border-mustard-500 text-mustard-600 dark:text-mustard-400'
+            : 'border-transparent text-slate-400 hover:text-slate-600 dark:hover:text-slate-300'
             }`}
         >
           <span className="material-symbols-outlined text-lg">construction</span>
@@ -1029,12 +1029,6 @@ const RentalEdit: React.FC = () => {
         <div className="lg:col-span-2 space-y-6">
           {activeTab === 'equipments' && (
             <div className="space-y-6">
-              <div className="flex items-center justify-between">
-                <div>
-                  <h3 className="text-base font-bold text-slate-900 dark:text-white">Equipamentos Atrelados</h3>
-                  <p className="text-xs text-slate-500 dark:text-slate-400">Edite os itens, datas individuais e devoluções parciais.</p>
-                </div>
-              </div>
 
               {equipmentItems.map((item, index) => {
                 const currentEquipId = item.equipment_id;
@@ -1253,8 +1247,8 @@ const RentalEdit: React.FC = () => {
                     Status Faturamento
                     {generalData.billing_method !== 'MANUAL' && (
                       <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-black normal-case tracking-normal ${invoicePaid
-                          ? 'bg-emerald-100 dark:bg-emerald-500/10 text-emerald-700 dark:text-emerald-400'
-                          : 'bg-amber-100 dark:bg-amber-500/10 text-amber-700 dark:text-amber-400'
+                        ? 'bg-emerald-100 dark:bg-emerald-500/10 text-emerald-700 dark:text-emerald-400'
+                        : 'bg-amber-100 dark:bg-amber-500/10 text-amber-700 dark:text-amber-400'
                         }`}>
                         <span className="material-symbols-outlined text-[12px]">{invoicePaid ? 'check_circle' : 'schedule'}</span>
                         {invoicePaid ? 'Pago' : 'Aguardando pagamento'}
@@ -1278,10 +1272,15 @@ const RentalEdit: React.FC = () => {
 
               {/* Section: Notes */}
               <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm p-6 space-y-4">
-                <h3 className="font-bold text-slate-900 dark:text-white flex items-center gap-2">
-                  <span className="material-symbols-outlined text-mustard-500 text-xl">description</span>
-                  Observações do Contrato
-                </h3>
+                <div>
+                  <h3 className="font-bold text-slate-900 dark:text-white flex items-center gap-2">
+                    <span className="material-symbols-outlined text-mustard-500 text-xl">description</span>
+                    Observações do Contrato e da Fatura de Locação
+                  </h3>
+                  <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
+                    Este texto constará no corpo do contrato e no Campo 8 (Observações) da Fatura de Locação (padrão: PROPOSTA ASSINADA).
+                  </p>
+                </div>
                 <textarea
                   name="notes"
                   value={generalData.notes}
@@ -1477,8 +1476,8 @@ const RentalEdit: React.FC = () => {
                                     <div className="flex items-center gap-2">
                                       <span
                                         className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-[10px] font-bold ${contract.status === 'Assinado'
-                                            ? 'bg-emerald-100 dark:bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-500/20'
-                                            : 'bg-blue-100 dark:bg-blue-500/10 text-blue-700 dark:text-blue-400 border border-blue-200 dark:border-blue-500/20'
+                                          ? 'bg-emerald-100 dark:bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-500/20'
+                                          : 'bg-blue-100 dark:bg-blue-500/10 text-blue-700 dark:text-blue-400 border border-blue-200 dark:border-blue-500/20'
                                           }`}
                                       >
                                         {contract.status}
@@ -1575,6 +1574,45 @@ const RentalEdit: React.FC = () => {
                   </button>
                 </div>
 
+                {/* Observações da Fatura de Locação */}
+                <div className="px-6 py-4 bg-emerald-500/[0.03] dark:bg-emerald-500/[0.05] border-b border-slate-100 dark:border-slate-800 space-y-1.5">
+                  <div className="flex items-center justify-between">
+                    <label className="text-xs font-bold text-slate-700 dark:text-slate-300 flex items-center gap-1.5">
+                      <span className="material-symbols-outlined text-sm text-emerald-600 dark:text-emerald-400">notes</span>
+                      Observações para a Fatura de Locação (Campo 8 do documento)
+                    </label>
+                    <span className="text-[10px] text-slate-400 dark:text-slate-500">
+                      Preenchimento antes da emissão
+                    </span>
+                  </div>
+                  <div className="flex gap-2 items-center">
+                    <input
+                      type="text"
+                      name="notes"
+                      value={generalData.notes}
+                      onChange={handleGeneralChange}
+                      placeholder="Observações que constarão nas faturas emitidas (ex: PROPOSTA ASSINADA)..."
+                      className="flex-1 text-xs px-3 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-900 dark:text-white focus:outline-none focus:ring-1 focus:ring-emerald-500"
+                    />
+                    <button
+                      type="button"
+                      onClick={async () => {
+                        if (!id) return;
+                        try {
+                          await api.put(`/rentals/${id}`, { notes: generalData.notes });
+                          showToast('success', 'Observações salvas', 'Observações da locação atualizadas com sucesso.');
+                        } catch (e) {
+                          showToast('error', 'Erro', 'Não foi possível salvar as observações.');
+                        }
+                      }}
+                      className="px-3.5 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold transition-colors shrink-0 shadow-sm"
+                      title="Salvar observações na locação"
+                    >
+                      Salvar
+                    </button>
+                  </div>
+                </div>
+
                 <div className="p-6">
                   {billsLoading ? (
                     <div className="p-8 text-center">
@@ -1608,11 +1646,10 @@ const RentalEdit: React.FC = () => {
                             <div className="flex flex-wrap items-center justify-between gap-3">
                               <div className="flex items-center gap-3">
                                 <div
-                                  className={`w-9 h-9 rounded-xl flex items-center justify-center ${
-                                    isExtension
+                                  className={`w-9 h-9 rounded-xl flex items-center justify-center ${isExtension
                                       ? 'bg-purple-100 dark:bg-purple-500/10 text-purple-600 dark:text-purple-400 border border-purple-200 dark:border-purple-500/20'
                                       : 'bg-emerald-100 dark:bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-500/20'
-                                  }`}
+                                    }`}
                                 >
                                   <span className="material-symbols-outlined text-[20px]">
                                     {isExtension ? 'update' : 'receipt_long'}
@@ -1624,11 +1661,10 @@ const RentalEdit: React.FC = () => {
                                       {faturaNum ? `Fatura Nº ${faturaNum}` : (bill.description || (isExtension ? 'Prorrogação de Locação' : 'Fatura de Locação'))}
                                     </p>
                                     <span
-                                      className={`px-2 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider ${
-                                        isExtension
+                                      className={`px-2 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider ${isExtension
                                           ? 'bg-purple-100 dark:bg-purple-500/20 text-purple-700 dark:text-purple-300 border border-purple-200 dark:border-purple-500/30'
                                           : 'bg-emerald-100 dark:bg-emerald-500/20 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-500/30'
-                                      }`}
+                                        }`}
                                     >
                                       {isExtension ? 'Prorrogação' : 'Fatura Inicial'}
                                     </span>
@@ -1662,13 +1698,12 @@ const RentalEdit: React.FC = () => {
                                 )}
 
                                 <span
-                                  className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-[10px] font-bold ${
-                                    bill.status === 'Recebido' || bill.status === 'No prazo'
+                                  className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-[10px] font-bold ${bill.status === 'Recebido' || bill.status === 'No prazo'
                                       ? 'bg-emerald-100 dark:bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-500/20'
                                       : bill.status === 'Atrasado'
-                                      ? 'bg-rose-100 dark:bg-rose-500/10 text-rose-700 dark:text-rose-400 border border-rose-200 dark:border-rose-500/20'
-                                      : 'bg-amber-100 dark:bg-amber-500/10 text-amber-700 dark:text-amber-400 border border-amber-200 dark:border-amber-500/20'
-                                  }`}
+                                        ? 'bg-rose-100 dark:bg-rose-500/10 text-rose-700 dark:text-rose-400 border border-rose-200 dark:border-rose-500/20'
+                                        : 'bg-amber-100 dark:bg-amber-500/10 text-amber-700 dark:text-amber-400 border border-amber-200 dark:border-amber-500/20'
+                                    }`}
                                 >
                                   {bill.status}
                                 </span>
@@ -2329,7 +2364,10 @@ const RentalEdit: React.FC = () => {
 
               <div className="space-y-2 max-h-80 overflow-y-auto">
                 {equipmentItems
-                  .filter((item) => Boolean(item.equipment_id))
+                  .filter((item, index, self) => {
+                    if (!item.equipment_id) return false;
+                    return self.findIndex((t) => t.equipment_id === item.equipment_id) === index;
+                  })
                   .map((item, idx) => (
                     <button
                       key={item.equipment_id || idx}
@@ -2470,6 +2508,7 @@ const RentalEdit: React.FC = () => {
       <BillDetailsModal
         isOpen={isBillModalOpen}
         item={selectedBillForModal}
+        defaultNotes={generalData.notes}
         onClose={() => {
           setIsBillModalOpen(false);
           setSelectedBillForModal(null);
@@ -2494,33 +2533,30 @@ const RentalEdit: React.FC = () => {
             className="fixed bottom-6 right-6 z-[9999] w-[380px] max-w-[90vw]"
           >
             <div
-              className={`rounded-2xl border shadow-2xl backdrop-blur-sm overflow-hidden ${
-                toast.type === 'success'
+              className={`rounded-2xl border shadow-2xl backdrop-blur-sm overflow-hidden ${toast.type === 'success'
                   ? 'bg-white dark:bg-slate-900 border-emerald-200 dark:border-emerald-500/30'
                   : toast.type === 'warning'
-                  ? 'bg-white dark:bg-slate-900 border-amber-200 dark:border-amber-500/30'
-                  : 'bg-white dark:bg-slate-900 border-red-200 dark:border-red-500/30'
-              }`}
+                    ? 'bg-white dark:bg-slate-900 border-amber-200 dark:border-amber-500/30'
+                    : 'bg-white dark:bg-slate-900 border-red-200 dark:border-red-500/30'
+                }`}
             >
               <div
-                className={`h-1.5 ${
-                  toast.type === 'success'
+                className={`h-1.5 ${toast.type === 'success'
                     ? 'bg-emerald-500'
                     : toast.type === 'warning'
-                    ? 'bg-amber-500'
-                    : 'bg-red-500'
-                }`}
+                      ? 'bg-amber-500'
+                      : 'bg-red-500'
+                  }`}
               />
               <div className="p-4">
                 <div className="flex items-start gap-3.5">
                   <div
-                    className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 ${
-                      toast.type === 'success'
+                    className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 ${toast.type === 'success'
                         ? 'bg-emerald-50 dark:bg-emerald-500/10 text-emerald-600 dark:text-emerald-400'
                         : toast.type === 'warning'
-                        ? 'bg-amber-50 dark:bg-amber-500/10 text-amber-600 dark:text-amber-400'
-                        : 'bg-red-50 dark:bg-red-500/10 text-red-600 dark:text-red-400'
-                    }`}
+                          ? 'bg-amber-50 dark:bg-amber-500/10 text-amber-600 dark:text-amber-400'
+                          : 'bg-red-50 dark:bg-red-500/10 text-red-600 dark:text-red-400'
+                      }`}
                   >
                     <span className="material-symbols-outlined text-xl">
                       {toast.type === 'success' ? 'check_circle' : toast.type === 'warning' ? 'warning' : 'error'}

@@ -16,6 +16,7 @@ interface BillDetailsModalProps {
   item: StatementItem | null;
   onClose: () => void;
   onUpdated?: (updatedItem: StatementItem) => void;
+  defaultNotes?: string;
 }
 
 const STATUS_OPTIONS: BillStatus[] = ['Pendente', 'Atrasado', 'Recebido', 'Divergente', 'No prazo'];
@@ -50,7 +51,122 @@ const getBoletoFileName = (url: string, index: number): string => {
   }
 };
 
-const BillDetailsModal: React.FC<BillDetailsModalProps> = ({ isOpen, item, onClose, onUpdated }) => {
+const resolveBillPeriodAndEquipments = (
+  billItem: StatementItem,
+  rental: any,
+  allBills?: StatementItem[]
+) => {
+  const currentRawSnap = (billItem.raw as any)?.bank_raw_snapshot || {};
+  const descLower = (billItem.description || '').toLowerCase();
+  const isExtension = Boolean(
+    currentRawSnap.is_extension ||
+    descLower.includes('prorrogação') ||
+    descLower.includes('prorrogacao')
+  );
+
+  const allRentalEquipments: any[] = Array.isArray(rental?.equipments) ? rental.equipments : [];
+
+  let targetEquipments: any[] = [];
+  let targetPeriodStart: string = '';
+  let targetPeriodEnd: string = '';
+
+  if (isExtension) {
+    if (Array.isArray(currentRawSnap.extension_items) && currentRawSnap.extension_items.length > 0) {
+      targetEquipments = currentRawSnap.extension_items;
+    } else if (currentRawSnap.period_start && currentRawSnap.period_end) {
+      const matched = allRentalEquipments.filter((eq: any) => {
+        const s = eq.billing_period_start || eq.period_start;
+        const e = eq.billing_period_end || eq.period_end;
+        return s === currentRawSnap.period_start && e === currentRawSnap.period_end;
+      });
+      if (matched.length > 0) targetEquipments = matched;
+    }
+
+    if (targetEquipments.length === 0) {
+      const extensionItems = allRentalEquipments.filter(
+        (eq: any) => eq.notes === 'Prorrogação de locação' || (eq.notes && eq.notes.toLowerCase().includes('prorroga'))
+      );
+
+      // Agrupar itens de prorrogação por período
+      const groupsMap = new Map<string, { start: string; end: string; items: any[]; total: number }>();
+      for (const eq of extensionItems) {
+        const s = eq.billing_period_start || eq.period_start || '';
+        const e = eq.billing_period_end || eq.period_end || '';
+        const key = `${s}__${e}`;
+        if (!groupsMap.has(key)) {
+          groupsMap.set(key, { start: s, end: e, items: [], total: 0 });
+        }
+        const g = groupsMap.get(key)!;
+        g.items.push(eq);
+        g.total += Number(eq.total_value ?? eq.cost_rental ?? 0);
+      }
+
+      const periodGroups = Array.from(groupsMap.values()).sort((a, b) => {
+        if (a.start !== b.start) return (a.start || '').localeCompare(b.start || '');
+        return (a.end || '').localeCompare(b.end || '');
+      });
+
+      if (periodGroups.length > 0) {
+        const extBills = (allBills || []).filter((b: any) => {
+          const snap = (b.raw as any)?.bank_raw_snapshot || b.bank_raw_snapshot || {};
+          const d = (b.description || '').toLowerCase();
+          return snap.is_extension || d.includes('prorrogação') || d.includes('prorrogacao');
+        }).sort((a: any, b: any) => {
+          const da = a.due_date || a.created_at || '';
+          const db = b.due_date || b.created_at || '';
+          return da.localeCompare(db);
+        });
+
+        const billIdx = extBills.findIndex((b: any) => b.id === billItem.id);
+        if (billIdx >= 0 && billIdx < periodGroups.length) {
+          targetEquipments = periodGroups[billIdx].items;
+          targetPeriodStart = periodGroups[billIdx].start;
+          targetPeriodEnd = periodGroups[billIdx].end;
+        } else {
+          let bestGroup = periodGroups[0];
+          let minDiff = Infinity;
+          const targetDue = billItem.due_date ? new Date(billItem.due_date).getTime() : 0;
+          for (const g of periodGroups) {
+            const gEnd = g.end ? new Date(g.end).getTime() : 0;
+            const diff = Math.abs(targetDue - gEnd);
+            if (diff < minDiff) {
+              minDiff = diff;
+              bestGroup = g;
+            }
+          }
+          if (bestGroup) {
+            targetEquipments = bestGroup.items;
+            targetPeriodStart = bestGroup.start;
+            targetPeriodEnd = bestGroup.end;
+          }
+        }
+      }
+    }
+
+    if (!targetPeriodStart && targetEquipments.length > 0) {
+      targetPeriodStart = targetEquipments[0].billing_period_start || targetEquipments[0].period_start || '';
+    }
+    if (!targetPeriodEnd && targetEquipments.length > 0) {
+      targetPeriodEnd = targetEquipments[targetEquipments.length - 1].billing_period_end || targetEquipments[targetEquipments.length - 1].period_end || '';
+    }
+  } else {
+    // Locação inicial
+    const initialItems = allRentalEquipments.filter(
+      (eq: any) => eq.notes !== 'Prorrogação de locação' && !(eq.notes && eq.notes.toLowerCase().includes('prorroga'))
+    );
+    targetEquipments = initialItems.length > 0 ? initialItems : allRentalEquipments;
+    targetPeriodStart = currentRawSnap.period_start || targetEquipments[0]?.billing_period_start || targetEquipments[0]?.period_start || rental?.billing_period_start || '';
+    targetPeriodEnd = currentRawSnap.period_end || targetEquipments[targetEquipments.length - 1]?.billing_period_end || targetEquipments[targetEquipments.length - 1]?.period_end || rental?.billing_period_end || '';
+  }
+
+  return {
+    targetEquipments,
+    periodStart: targetPeriodStart,
+    periodEnd: targetPeriodEnd
+  };
+};
+
+const BillDetailsModal: React.FC<BillDetailsModalProps> = ({ isOpen, item, onClose, onUpdated, defaultNotes }) => {
   const { profile } = useAuth();
   const [copiedId, setCopiedId] = useState(false);
   const [copiedBarcode, setCopiedBarcode] = useState(false);
@@ -74,6 +190,9 @@ const BillDetailsModal: React.FC<BillDetailsModalProps> = ({ isOpen, item, onClo
 
   const [generatingFatura, setGeneratingFatura] = useState(false);
   const [faturaSuccessMessage, setFaturaSuccessMessage] = useState<string | null>(null);
+  const [faturaNotes, setFaturaNotes] = useState<string>('');
+  const [faturaPeriodStart, setFaturaPeriodStart] = useState<string>('');
+  const [faturaPeriodEnd, setFaturaPeriodEnd] = useState<string>('');
 
   useEffect(() => {
     if (item) {
@@ -87,8 +206,48 @@ const BillDetailsModal: React.FC<BillDetailsModalProps> = ({ isOpen, item, onClo
       setError(null);
       setFaturaSuccessMessage(null);
       setBoletoSuccessMessage(null);
+
+      const snap = (item.raw as any)?.bank_raw_snapshot || {};
+      if (snap.fatura_notes) {
+        setFaturaNotes(snap.fatura_notes);
+      } else if (defaultNotes) {
+        setFaturaNotes(defaultNotes);
+      }
+
+      if (snap.period_start) setFaturaPeriodStart(snap.period_start);
+      if (snap.period_end) setFaturaPeriodEnd(snap.period_end);
+
+      const rentId = item.rental_invoice_id || item.raw?.rental_invoice_id || item.raw?.invoice_id || item.raw?.invoice?.id;
+      if (rentId) {
+        Promise.all([
+          api.get(`/rentals/${rentId}`),
+          financeiroService.buscarFaturasLocacao(rentId).catch(() => []),
+        ])
+          .then(([resRental, billsList]) => {
+            const rentalData = resRental.data;
+            if (rentalData?.notes && !snap.fatura_notes && !defaultNotes) {
+              setFaturaNotes(rentalData.notes);
+            }
+            const resolved = resolveBillPeriodAndEquipments(item, rentalData, billsList);
+            if (!snap.period_start && resolved.periodStart) {
+              setFaturaPeriodStart(resolved.periodStart);
+            }
+            if (!snap.period_end && resolved.periodEnd) {
+              setFaturaPeriodEnd(resolved.periodEnd);
+            }
+          })
+          .catch(() => {
+            if (!snap.fatura_notes && !defaultNotes) {
+              setFaturaNotes('PROPOSTA ASSINADA');
+            }
+          });
+      } else {
+        if (!snap.fatura_notes && !defaultNotes) {
+          setFaturaNotes('PROPOSTA ASSINADA');
+        }
+      }
     }
-  }, [item]);
+  }, [item, defaultNotes]);
 
   if (!isOpen || !currentItem) return null;
 
@@ -160,10 +319,11 @@ const BillDetailsModal: React.FC<BillDetailsModalProps> = ({ isOpen, item, onClo
     setError(null);
     setFaturaSuccessMessage(null);
     try {
-      // 1. Carregar dados completos da locação e contrato/deal
-      const [rentalRes, dealRes] = await Promise.all([
+      // 1. Carregar dados completos da locação, contrato/deal e faturas para desambiguação precisa
+      const [rentalRes, dealRes, billsList] = await Promise.all([
         api.get(`/rentals/${rentalInvoiceId}`),
         api.get(`/rentals/${rentalInvoiceId}/contract-deal`).catch(() => ({ data: null })),
+        financeiroService.buscarFaturasLocacao(rentalInvoiceId).catch(() => []),
       ]);
 
       const rental = rentalRes.data;
@@ -206,82 +366,48 @@ const BillDetailsModal: React.FC<BillDetailsModalProps> = ({ isOpen, item, onClo
         descLower.includes('prorrogacao')
       );
 
-      let targetEquipments: any[] = [];
-      let targetPeriodStart: string = '';
-      let targetPeriodEnd: string = '';
+      const allRentalEquipments: any[] = Array.isArray(rental.equipments) ? rental.equipments : [];
+
+      // Resolver período e equipamentos específicos deste bill (evita agrupar múltiplas prorrogações)
+      const resolved = resolveBillPeriodAndEquipments(currentItem, rental, billsList);
+
+      const targetPeriodStart = faturaPeriodStart || resolved.periodStart;
+      const targetPeriodEnd = faturaPeriodEnd || resolved.periodEnd;
       const targetCostRental: number = Number(currentItem.gross_value || 0);
       const targetCostTotal: number = Number(currentItem.gross_value || 0);
 
-      const allRentalEquipments: any[] = Array.isArray(rental.equipments) ? rental.equipments : [];
-
-      if (isExtension) {
-        // Prorrogação: buscar equipamentos específicos da prorrogação
-        if (Array.isArray(currentRawSnap.extension_items) && currentRawSnap.extension_items.length > 0) {
-          targetEquipments = currentRawSnap.extension_items;
-        } else {
-          // Fallback: itens com notes 'Prorrogação de locação'
-          const extensionItems = allRentalEquipments.filter(
-            (eq: any) => eq.notes === 'Prorrogação de locação' || (eq.notes && eq.notes.toLowerCase().includes('prorroga'))
-          );
-          if (extensionItems.length > 0) {
-            targetEquipments = extensionItems;
-          } else {
-            // Se não encontrou pela nota, pega o último equipamento cadastrado
-            targetEquipments = allRentalEquipments.length > 0 ? [allRentalEquipments[allRentalEquipments.length - 1]] : [];
-          }
+      let targetEquipments = resolved.targetEquipments;
+      // Se tiver período explícito definido, refinar itens que pertencem exatamente a este período
+      if (targetPeriodStart && targetPeriodEnd && allRentalEquipments.length > 0) {
+        const normDate = (d: any) => (d ? String(d).split('T')[0] : '');
+        const pStart = normDate(targetPeriodStart);
+        const pEnd = normDate(targetPeriodEnd);
+        const periodMatched = allRentalEquipments.filter((eq: any) => {
+          const s = normDate(eq.billing_period_start || eq.period_start);
+          const e = normDate(eq.billing_period_end || eq.period_end);
+          return s === pStart && e === pEnd;
+        });
+        if (periodMatched.length > 0) {
+          targetEquipments = periodMatched;
         }
+      }
 
-        targetPeriodStart =
-          currentRawSnap.period_start ||
-          targetEquipments[0]?.billing_period_start ||
-          targetEquipments[0]?.period_start ||
-          rental.billing_period_start ||
-          currentItem.due_date ||
-          '';
-
-        targetPeriodEnd =
-          currentRawSnap.period_end ||
-          targetEquipments[targetEquipments.length - 1]?.billing_period_end ||
-          targetEquipments[targetEquipments.length - 1]?.period_end ||
-          rental.billing_period_end ||
-          currentItem.due_date ||
-          '';
-      } else {
-        // Locação inicial: filtrar e manter apenas itens que NÃO sejam de prorrogação
-        const initialItems = allRentalEquipments.filter(
-          (eq: any) => eq.notes !== 'Prorrogação de locação' && !(eq.notes && eq.notes.toLowerCase().includes('prorroga'))
-        );
-        targetEquipments = initialItems.length > 0 ? initialItems : allRentalEquipments;
-
-        targetPeriodStart =
-          currentRawSnap.period_start ||
-          targetEquipments[0]?.billing_period_start ||
-          targetEquipments[0]?.period_start ||
-          rental.billing_period_start ||
-          currentItem.due_date ||
-          '';
-
-        targetPeriodEnd =
-          currentRawSnap.period_end ||
-          targetEquipments[targetEquipments.length - 1]?.billing_period_end ||
-          targetEquipments[targetEquipments.length - 1]?.period_end ||
-          rental.billing_period_end ||
-          currentItem.due_date ||
-          '';
+      if (targetEquipments.length === 0) {
+        targetEquipments = allRentalEquipments;
       }
 
       // Ajustar cada equipamento da lista para refletir os valores e períodos deste faturamento
       const formattedEquipments = targetEquipments.map((eq: any) => ({
         ...eq,
-        billing_period_start: eq.billing_period_start || eq.period_start || targetPeriodStart,
-        billing_period_end: eq.billing_period_end || eq.period_end || targetPeriodEnd,
+        billing_period_start: targetPeriodStart || eq.billing_period_start || eq.period_start,
+        billing_period_end: targetPeriodEnd || eq.billing_period_end || eq.period_end,
         total_value: targetEquipments.length === 1 ? targetCostTotal : (Number(eq.total_value ?? eq.cost_rental ?? 0) || (targetCostTotal / targetEquipments.length))
       }));
 
       const contractObj: any = {
         contract_number: realContractNumber,
         rental_invoice_id: rental.id,
-        notes: rental.notes,
+        notes: faturaNotes || rental.notes,
         deal: {
           ...deal,
           client: clientObj || {
@@ -295,8 +421,8 @@ const BillDetailsModal: React.FC<BillDetailsModalProps> = ({ isOpen, item, onClo
         },
         contract_form: {
           ...contractForm,
-          notes: rental.notes || contractForm?.notes || '',
-          observations: rental.notes || contractForm?.observations || '',
+          notes: faturaNotes || rental.notes || contractForm?.notes || '',
+          observations: faturaNotes || rental.notes || contractForm?.observations || '',
           locatario_company_name: rental.client_name || currentItem.client_name,
           locatario_cnpj: rental.cnpj || raw.client?.cnpj,
           locatario_state_registration: clientObj?.state_subscription || clientObj?.state_registration || contractForm?.locatario_state_registration || '',
@@ -328,6 +454,7 @@ const BillDetailsModal: React.FC<BillDetailsModalProps> = ({ isOpen, item, onClo
           client_name: clientObj?.company_name || rental.client_name,
           cnpj: clientObj?.cnpj || rental.cnpj,
           equipments: formattedEquipments,
+          notes: faturaNotes,
         }
       });
 
@@ -335,13 +462,16 @@ const BillDetailsModal: React.FC<BillDetailsModalProps> = ({ isOpen, item, onClo
       const dueDateFormatted = currentItem.due_date || rental.due_date || undefined;
       const paymentMethodFormatted = rental.payment_method || (rental.billing_method === 'MANUAL' ? 'Lançamento Manual' : 'Boleto Bancário');
 
-      // 3. Gerar PDF da Fatura de Locação com o número sequencial oficial
+      // 3. Gerar PDF da Fatura de Locação com o número sequencial oficial e período exato
       const blob = await pdf(
         <FaturaLocacaoDocument
           contract={contractObj}
           invoiceNumber={finalInvoiceNum}
           dueDate={dueDateFormatted}
           paymentMethod={paymentMethodFormatted}
+          periodStart={targetPeriodStart}
+          periodEnd={targetPeriodEnd}
+          notes={faturaNotes}
         />
       ).toBlob();
 
@@ -371,6 +501,12 @@ const BillDetailsModal: React.FC<BillDetailsModalProps> = ({ isOpen, item, onClo
               period_start: targetPeriodStart ? String(targetPeriodStart).split('T')[0] : null,
               period_end: targetPeriodEnd ? String(targetPeriodEnd).split('T')[0] : null,
               valor_total: targetCostTotal,
+              dados_fatura: {
+                client_name: clientObj?.company_name || rental.client_name,
+                cnpj: clientObj?.cnpj || rental.cnpj,
+                equipments: formattedEquipments,
+                notes: faturaNotes,
+              }
             }).catch(() => null);
           }
         } else {
@@ -395,13 +531,17 @@ const BillDetailsModal: React.FC<BillDetailsModalProps> = ({ isOpen, item, onClo
       // 6. Atualizar status da locação para 'Faturado'
       await api.put(`/rentals/${rentalInvoiceId}`, { billing_status: 'Faturado' }).catch(() => null);
 
-      // 7. Atualizar status do registro financeiro para 'Pendente' e anexar fatura_pdf_url e fatura_numero
+      // 7. Atualizar status do registro financeiro para 'Pendente' e anexar fatura_pdf_url, fatura_numero e período
       const updatedSnapshot = {
         ...currentRawSnap,
         fatura_pdf_url: faturaPdfUrl || (currentRawSnap.fatura_pdf_url ?? null),
         fatura_numero: finalInvoiceNum,
+        fatura_notes: faturaNotes,
         fatura_gerada_em: new Date().toISOString(),
         is_extension: isExtension,
+        period_start: targetPeriodStart,
+        period_end: targetPeriodEnd,
+        extension_items: isExtension ? targetEquipments : undefined,
       };
 
       if (currentItem.source === 'bill') {
@@ -940,7 +1080,7 @@ const BillDetailsModal: React.FC<BillDetailsModalProps> = ({ isOpen, item, onClo
                             <td className="px-4 py-3 text-slate-600 dark:text-slate-400 whitespace-nowrap font-medium">
                               {formatDate(inst.due_date)}
                             </td>
-                            <td className="px-4 py-3 font-bold text-rose-600 dark:text-rose-400 whitespace-nowrap">
+                            <td className={`px-4 py-3 font-bold ${isReceivable ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-600 dark:text-rose-400'} whitespace-nowrap`}>
                               {formatMoney(inst.gross_value)}
                             </td>
                             <td className="px-4 py-3 whitespace-nowrap">
@@ -1266,6 +1406,63 @@ const BillDetailsModal: React.FC<BillDetailsModalProps> = ({ isOpen, item, onClo
                         Não Gerada
                       </span>
                     )}
+                  </div>
+                </div>
+
+                {/* Período de Referência da Fatura e Observações */}
+                <div className="space-y-3 p-3.5 bg-white dark:bg-slate-900 border border-slate-200/70 dark:border-slate-800 rounded-2xl">
+                  {/* Período da Fatura (Somente Leitura para Consulta) */}
+                  <div>
+                    <div className="flex items-center justify-between mb-1.5">
+                      <label className="text-xs font-bold text-slate-700 dark:text-slate-300 flex items-center gap-1.5">
+                        <span className="material-symbols-outlined text-sm text-emerald-600 dark:text-emerald-400">calendar_month</span>
+                        Período de Referência da Fatura
+                      </label>
+                      <span className="text-[10px] text-slate-400 dark:text-slate-500">
+                        Definido pela locação (somente consulta)
+                      </span>
+                    </div>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                      <div>
+                        <label className="block text-[10px] font-medium text-slate-500 dark:text-slate-400 mb-0.5">
+                          Data Inicial
+                        </label>
+                        <div className="w-full text-xs px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-100/70 dark:bg-slate-800/60 text-slate-800 dark:text-slate-200 font-medium flex items-center justify-between select-none">
+                          <span>{faturaPeriodStart ? formatDate(faturaPeriodStart) : '—'}</span>
+                          <span className="material-symbols-outlined text-[15px] text-slate-400">calendar_today</span>
+                        </div>
+                      </div>
+                      <div>
+                        <label className="block text-[10px] font-medium text-slate-500 dark:text-slate-400 mb-0.5">
+                          Data Final
+                        </label>
+                        <div className="w-full text-xs px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-100/70 dark:bg-slate-800/60 text-slate-800 dark:text-slate-200 font-medium flex items-center justify-between select-none">
+                          <span>{faturaPeriodEnd ? formatDate(faturaPeriodEnd) : '—'}</span>
+                          <span className="material-symbols-outlined text-[15px] text-slate-400">event</span>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Observações da Fatura (Campo 8 do Documento) */}
+                  <div>
+                    <div className="flex items-center justify-between mb-1.5">
+                      <label className="text-xs font-bold text-slate-700 dark:text-slate-300 flex items-center gap-1.5">
+                        <span className="material-symbols-outlined text-sm text-emerald-600 dark:text-emerald-400">notes</span>
+                        Observações da Fatura (Campo 8 do documento)
+                      </label>
+                      <span className="text-[10px] text-slate-400 dark:text-slate-500">
+                        Editável antes de gerar / regerar
+                      </span>
+                    </div>
+                    <textarea
+                      rows={2}
+                      value={faturaNotes}
+                      onChange={(e) => setFaturaNotes(e.target.value)}
+                      disabled={!canEdit}
+                      placeholder="Observações que constarão no corpo da fatura (padrão: PROPOSTA ASSINADA)"
+                      className="w-full text-xs p-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50/50 dark:bg-slate-800/50 text-slate-900 dark:text-white focus:bg-white dark:focus:bg-slate-900 focus:outline-none focus:ring-1 focus:ring-emerald-500 resize-y disabled:opacity-60 disabled:cursor-not-allowed"
+                    />
                   </div>
                 </div>
 

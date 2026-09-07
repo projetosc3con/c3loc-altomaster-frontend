@@ -97,6 +97,7 @@ const LogisticsTriagem: React.FC = () => {
   const [billingMethod, setBillingMethod] = useState<'ASAAS' | 'MANUAL'>('ASAAS');
   const [manualDueDate, setManualDueDate] = useState<string>('');
   const [documentType, setDocumentType] = useState<'FATURA_LOCACAO' | 'NFSE'>('FATURA_LOCACAO');
+  const [faturaNotes, setFaturaNotes] = useState<string>('');
   const [companySettings, setCompanySettings] = useState<any>(null);
 
   // Boleto generation on finish
@@ -264,6 +265,9 @@ const LogisticsTriagem: React.FC = () => {
         setTriagedEquipments([defaultItem]);
         setActiveEquipmentTab(defaultItem.tempId);
       }
+
+      const initialFaturaNotes = form?.notes || (form as any)?.observations || (contractData as any)?.notes || (contractData as any)?.observations || contractData.snapshot?.notes || contractData.snapshot?.observations || 'PROPOSTA ASSINADA';
+      setFaturaNotes(initialFaturaNotes);
 
       // Se o contrato já foi processado, abre diretamente na última etapa (Emissão)
       if (contractData.status === 'Processado') {
@@ -1529,17 +1533,36 @@ const LogisticsTriagem: React.FC = () => {
                       <p className="text-[11px] text-slate-400">Documento oficial com discriminação e valores</p>
                     </div>
                   </div>
+
+                  <div className="space-y-1">
+                    <label className="text-[11px] font-medium text-slate-600 dark:text-slate-400 flex items-center gap-1">
+                      <span className="material-symbols-outlined text-xs">notes</span>
+                      Observações da Fatura (Campo 8 do documento)
+                    </label>
+                    <textarea
+                      rows={2}
+                      value={faturaNotes}
+                      onChange={(e) => setFaturaNotes(e.target.value)}
+                      placeholder="Observações que constarão na fatura (padrão: PROPOSTA ASSINADA)"
+                      className="w-full text-xs p-2.5 rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-900 dark:text-white focus:outline-none focus:ring-1 focus:ring-emerald-500 resize-y"
+                    />
+                  </div>
+
                   <div className="flex flex-wrap gap-2 pt-1">
                     <button
                       type="button"
                       onClick={async () => {
                         try {
+                          const form = contract.contract_form || contract.snapshot || {};
                           const blob = await pdf(
                             <FaturaLocacaoDocument
                               contract={contract}
                               invoiceNumber={contract.rental_invoice_id ? undefined : `ND-${String(contract.contract_number || '1').padStart(6, '0')}`}
-                              dueDate={billingMethod === 'MANUAL' ? manualDueDate : (periodEnd || undefined)}
+                              dueDate={billingMethod === 'MANUAL' ? manualDueDate : (form.period_end || undefined)}
                               paymentMethod={billingMethod === 'MANUAL' ? 'Lançamento Manual' : 'Boleto Bancário'}
+                              periodStart={form.period_start || undefined}
+                              periodEnd={form.period_end || undefined}
+                              notes={faturaNotes}
                               companySettings={companySettings}
                             />
                           ).toBlob();
@@ -1559,12 +1582,16 @@ const LogisticsTriagem: React.FC = () => {
                       type="button"
                       onClick={async () => {
                         try {
+                          const form = contract.contract_form || contract.snapshot || {};
                           const blob = await pdf(
                             <FaturaLocacaoDocument
                               contract={contract}
                               invoiceNumber={contract.rental_invoice_id ? undefined : `ND-${String(contract.contract_number || '1').padStart(6, '0')}`}
-                              dueDate={billingMethod === 'MANUAL' ? manualDueDate : (periodEnd || undefined)}
+                              dueDate={billingMethod === 'MANUAL' ? manualDueDate : (form.period_end || undefined)}
                               paymentMethod={billingMethod === 'MANUAL' ? 'Lançamento Manual' : 'Boleto Bancário'}
+                              periodStart={form.period_start || undefined}
+                              periodEnd={form.period_end || undefined}
+                              notes={faturaNotes}
                               companySettings={companySettings}
                             />
                           ).toBlob();

@@ -56,11 +56,18 @@ const Inventory: React.FC = () => {
       if (valueMin > 0 && (eq.value ?? 0) < valueMin) return false;
       if (valueMax > 0 && (eq.value ?? 0) > valueMax) return false;
       if (search) {
-        const q = search.toLowerCase();
-        const match = eq.name.toLowerCase().includes(q)
-          || eq.asset_number.toLowerCase().includes(q)
+        const q = search.trim().toLowerCase();
+        const qNumeric = q.replace(/[m\s]+$/i, '').trim();
+
+        const match = (eq.name || '').toLowerCase().includes(q)
+          || (eq.asset_number || '').toLowerCase().includes(q)
+          || (eq.serial_number || '').toLowerCase().includes(q)
           || (eq.model || '').toLowerCase().includes(q)
-          || (eq.serial_number || '').toLowerCase().includes(q);
+          || (eq.height !== undefined && eq.height !== null && (
+              String(eq.height).toLowerCase().includes(q)
+              || `${eq.height}m`.toLowerCase().includes(q)
+              || (qNumeric !== '' && String(eq.height) === qNumeric)
+            ));
         if (!match) return false;
       }
       return true;
@@ -241,56 +248,88 @@ const Inventory: React.FC = () => {
         initial={{ y: 10, opacity: 0 }}
         animate={{ y: 0, opacity: 1 }}
         transition={{ delay: 0.2 }}
-        className="flex flex-wrap items-center gap-3 bg-white dark:bg-slate-900 p-4 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm"
+        className="bg-white dark:bg-slate-900 p-4 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm flex flex-col lg:flex-row items-stretch lg:items-center gap-3"
       >
-        <span className="text-[11px] font-bold text-slate-500 uppercase tracking-widest px-2">Filtros:</span>
-        <button
-          onClick={() => setStatusFilter(null)}
-          className={`px-4 py-1.5 rounded-full text-xs font-bold transition-all ${!statusFilter ? 'bg-mustard-500 text-white shadow-md shadow-mustard-500/20' : 'border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-700'}`}
-        >
-          Todos
-        </button>
-        {(['Disponível', 'Locado', 'Em Manutenção', 'Inativo'] as const).map(s => {
-          const styles: Record<string, { active: string; inactive: string; icon: string }> = {
-            'Disponível': {
-              active: 'bg-emerald-600 text-white shadow-md',
-              inactive: 'border border-emerald-100 dark:border-emerald-500/20 bg-emerald-50 dark:bg-emerald-500/10 text-emerald-800 dark:text-emerald-400 hover:bg-emerald-100 dark:hover:bg-emerald-500/20',
-              icon: 'check_circle'
-            },
-            'Locado': {
-              active: 'bg-slate-800 dark:bg-slate-700 text-white shadow-md',
-              inactive: 'border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-700 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-700',
-              icon: 'schedule'
-            },
-            'Em Manutenção': {
-              active: 'bg-amber-500 text-white shadow-md',
-              inactive: 'border border-amber-100 dark:border-amber-500/20 bg-amber-50 dark:bg-amber-500/10 text-amber-800 dark:text-amber-400 hover:bg-amber-100 dark:hover:bg-amber-500/20',
-              icon: 'build'
-            },
-            'Inativo': {
-              active: 'bg-red-500 text-white shadow-md',
-              inactive: 'border border-red-100 dark:border-red-500/20 bg-red-50 dark:bg-red-500/10 text-red-700 dark:text-red-400 hover:bg-red-100 dark:hover:bg-red-500/20',
-              icon: 'block'
-            },
-          };
-          const st = styles[s];
-          return (
-            <button key={s} onClick={() => setStatusFilter(statusFilter === s ? null : s)} className={`flex items-center gap-1.5 px-4 py-1.5 rounded-full text-xs font-bold transition-all ${statusFilter === s ? st.active : st.inactive}`}>
-              <span className="material-symbols-outlined text-[16px]">{st.icon}</span>
-              {s}
+        {/* Barra de Pesquisa Principal (1/3 da linha) */}
+        <div className="relative w-full lg:w-1/3 min-w-[240px] shrink-0">
+          <span className="material-symbols-outlined absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400 text-xl pointer-events-none">
+            search
+          </span>
+          <input
+            type="text"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            placeholder="Pesquisar equipamento, patrimônio, série, modelo, altura..."
+            className="w-full pl-11 pr-10 py-2 bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700/80 rounded-xl text-xs sm:text-sm text-slate-900 dark:text-white placeholder:text-slate-400 dark:placeholder:text-slate-500 focus:bg-white dark:focus:bg-slate-900 focus:outline-none focus:ring-2 focus:ring-mustard-500/20 focus:border-mustard-500 transition-all shadow-inner"
+          />
+          {search && (
+            <button
+              type="button"
+              onClick={() => setSearch('')}
+              className="absolute right-2.5 top-1/2 -translate-y-1/2 w-6 h-6 rounded-full flex items-center justify-center text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 hover:bg-slate-200/50 dark:hover:bg-slate-700/50 transition-colors"
+              title="Limpar pesquisa"
+            >
+              <span className="material-symbols-outlined text-base">close</span>
             </button>
-          );
-        })}
-        <button
-          onClick={() => setShowFilters(true)}
-          className="relative flex items-center gap-1.5 px-4 py-1.5 rounded-full border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 text-slate-600 dark:text-slate-400 text-xs font-bold hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors ml-auto"
-        >
-          <span className="material-symbols-outlined text-[18px]">filter_list</span>
-          Mais Filtros
-          {activeAdvancedCount > 0 && (
-            <span className="absolute -top-1.5 -right-1.5 w-5 h-5 bg-mustard-500 text-white text-[10px] font-bold rounded-full flex items-center justify-center">{activeAdvancedCount}</span>
           )}
-        </button>
+        </div>
+
+        {/* Divisor Visual no Desktop */}
+        <div className="hidden lg:block w-px h-6 bg-slate-200 dark:bg-slate-800 shrink-0" />
+
+        {/* Filtros de Status e Botão Mais Filtros ao lado na mesma linha */}
+        <div className="flex flex-wrap items-center gap-2 flex-1 min-w-0">
+          <span className="text-[11px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-widest px-1 shrink-0">
+            Status:
+          </span>
+          <button
+            onClick={() => setStatusFilter(null)}
+            className={`px-3.5 py-1.5 rounded-full text-xs font-bold transition-all shrink-0 ${!statusFilter ? 'bg-mustard-500 text-white shadow-md shadow-mustard-500/20' : 'border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-700'}`}
+          >
+            Todos
+          </button>
+          {(['Disponível', 'Locado', 'Em Manutenção', 'Inativo'] as const).map(s => {
+            const styles: Record<string, { active: string; inactive: string; icon: string }> = {
+              'Disponível': {
+                active: 'bg-emerald-600 text-white shadow-md',
+                inactive: 'border border-emerald-100 dark:border-emerald-500/20 bg-emerald-50 dark:bg-emerald-500/10 text-emerald-800 dark:text-emerald-400 hover:bg-emerald-100 dark:hover:bg-emerald-500/20',
+                icon: 'check_circle'
+              },
+              'Locado': {
+                active: 'bg-slate-800 dark:bg-slate-700 text-white shadow-md',
+                inactive: 'border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-700 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-700',
+                icon: 'schedule'
+              },
+              'Em Manutenção': {
+                active: 'bg-amber-500 text-white shadow-md',
+                inactive: 'border border-amber-100 dark:border-amber-500/20 bg-amber-50 dark:bg-amber-500/10 text-amber-800 dark:text-amber-400 hover:bg-amber-100 dark:hover:bg-amber-500/20',
+                icon: 'build'
+              },
+              'Inativo': {
+                active: 'bg-red-500 text-white shadow-md',
+                inactive: 'border border-red-100 dark:border-red-500/20 bg-red-50 dark:bg-red-500/10 text-red-700 dark:text-red-400 hover:bg-red-100 dark:hover:bg-red-500/20',
+                icon: 'block'
+              },
+            };
+            const st = styles[s];
+            return (
+              <button key={s} onClick={() => setStatusFilter(statusFilter === s ? null : s)} className={`flex items-center gap-1.5 px-3.5 py-1.5 rounded-full text-xs font-bold transition-all shrink-0 ${statusFilter === s ? st.active : st.inactive}`}>
+                <span className="material-symbols-outlined text-[15px]">{st.icon}</span>
+                {s}
+              </button>
+            );
+          })}
+          <button
+            onClick={() => setShowFilters(true)}
+            className="relative flex items-center gap-1.5 px-3.5 py-1.5 rounded-full border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 text-slate-600 dark:text-slate-400 text-xs font-bold hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors ml-auto shrink-0"
+          >
+            <span className="material-symbols-outlined text-[17px]">filter_list</span>
+            Mais Filtros
+            {activeAdvancedCount > 0 && (
+              <span className="absolute -top-1.5 -right-1.5 w-5 h-5 bg-mustard-500 text-white text-[10px] font-bold rounded-full flex items-center justify-center">{activeAdvancedCount}</span>
+            )}
+          </button>
+        </div>
       </motion.div>
 
       <AnimatePresence mode="wait">
@@ -1002,14 +1041,16 @@ const Inventory: React.FC = () => {
               <div className="flex-1 overflow-y-auto p-6 space-y-8">
                 {/* Busca */}
                 <div className="space-y-2">
-                  <label className="text-[11px] font-bold text-slate-500 uppercase tracking-widest">Busca por Nome, Patrimônio ou Modelo</label>
+                  <label className="text-[11px] font-bold text-slate-500 uppercase tracking-widest">
+                    Busca por Equipamento, Patrimônio, Nº de Série, Modelo ou Altura
+                  </label>
                   <div className="relative">
                     <span className="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 text-xl">search</span>
                     <input
                       type="text"
                       value={search}
                       onChange={(e) => setSearch(e.target.value)}
-                      placeholder="Digite para buscar..."
+                      placeholder="Buscar por equipamento, patrimônio, nº de série, modelo ou altura..."
                       className="w-full pl-10 pr-4 py-3 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-sm text-slate-900 dark:text-white outline-none focus:ring-2 focus:ring-mustard-500/10 focus:border-mustard-500 transition-all placeholder:text-slate-400 dark:placeholder:text-slate-600"
                     />
                     {search && (
