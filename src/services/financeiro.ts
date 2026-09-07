@@ -116,10 +116,96 @@ export const financeiroService = {
   },
 
   buscarFaturasLocacao: async (rentalInvoiceId: string): Promise<StatementItem[]> => {
-    const { data } = await api.get<any>('/bills', {
+    // 1. Busca os lançamentos em /bills passando rental_invoice_id
+    const billsPromise = api.get<any>('/bills', {
       params: { rental_invoice_id: rentalInvoiceId, group_nfe: false, limit: 100 }
+    }).catch((err) => {
+      console.warn('[buscarFaturasLocacao] Erro ao buscar /bills:', err);
+      return { data: [] };
     });
-    return Array.isArray(data) ? data : (data?.data || []);
+
+    // 2. Busca em paralelo as faturas oficiais registradas em rental_billing_invoices
+    const faturasPromise = api.get<any[]>(`/rentals/${rentalInvoiceId}/faturas`).catch((err) => {
+      console.warn('[buscarFaturasLocacao] Erro ao buscar /rentals/:id/faturas:', err);
+      return { data: [] };
+    });
+
+    const [billsRes, faturasRes] = await Promise.all([billsPromise, faturasPromise]);
+
+    const rawBills = billsRes.data;
+    const items: StatementItem[] = Array.isArray(rawBills) ? rawBills : (rawBills?.data || []);
+    const registeredFaturas: any[] = Array.isArray(faturasRes.data) ? faturasRes.data : [];
+
+    // Mapeia as faturas registradas por bill_id para enriquecimento rápido
+    const faturasByBillId = new Map<string, any>();
+    registeredFaturas.forEach((f) => {
+      if (f.bill_id) {
+        faturasByBillId.set(f.bill_id, f);
+      }
+    });
+
+    // 3. FILTRO ESTRITO: nunca exibir lançamentos que não pertençam a esta locação
+    const filteredBills = items.filter((item) => {
+      if (item.rental_invoice_id === rentalInvoiceId) return true;
+      const rawRentalId = (item.raw as any)?.rental_invoice_id || (item.raw as any)?.invoice_id;
+      if (rawRentalId === rentalInvoiceId) return true;
+      if (faturasByBillId.has(item.id)) return true;
+      return false;
+    });
+
+    // 4. Enriquece os lançamentos com o número oficial e PDF de rental_billing_invoices
+    const enrichedBills: StatementItem[] = filteredBills.map((bill) => {
+      const fatura = faturasByBillId.get(bill.id);
+      const rawSnap = (bill.raw as any)?.bank_raw_snapshot || {};
+      const officialNum = fatura?.numero || fatura?.invoice_number || bill.fatura_numero || rawSnap.fatura_numero || null;
+      const officialPdf = fatura?.pdf_url || bill.invoice_url || rawSnap.fatura_pdf_url || null;
+
+      return {
+        ...bill,
+        fatura_numero: officialNum,
+        invoice_url: officialPdf,
+        raw: {
+          ...(bill.raw || {}),
+          bank_raw_snapshot: {
+            ...rawSnap,
+            fatura_numero: officialNum,
+            fatura_pdf_url: officialPdf,
+          }
+        }
+      };
+    });
+
+    // 5. Se houver alguma fatura oficial em rental_billing_invoices sem bill associado, adiciona como item
+    const presentBillIds = new Set(enrichedBills.map((b) => b.id));
+    registeredFaturas.forEach((f) => {
+      if (f.bill_id && presentBillIds.has(f.bill_id)) return;
+      enrichedBills.push({
+        source: 'bill',
+        id: f.bill_id || f.id,
+        type: 'receivable',
+        status: 'Pendente',
+        origin: 'MANUAL',
+        gross_value: Number(f.total_amount) || 0,
+        net_value: Number(f.total_amount) || 0,
+        due_date: f.period_end || null,
+        rental_invoice_id: rentalInvoiceId,
+        description: f.invoice_type === 'EXTENSION' ? 'Prorrogação de Locação' : 'Fatura de Locação',
+        invoice_url: f.pdf_url || null,
+        fatura_numero: f.numero || f.invoice_number,
+        raw: {
+          bank_raw_snapshot: {
+            is_extension: f.invoice_type === 'EXTENSION',
+            fatura_numero: f.numero || f.invoice_number,
+            fatura_pdf_url: f.pdf_url,
+            period_start: f.period_start,
+            period_end: f.period_end,
+            total_value: Number(f.total_amount) || 0,
+          }
+        }
+      } as StatementItem);
+    });
+
+    return enrichedBills;
   },
 
   gerarFaturaLocacaoRegistro: async (payload: {
