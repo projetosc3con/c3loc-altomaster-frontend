@@ -9,7 +9,7 @@ import { supabase } from '../../lib/supabase';
 import { financeiroService } from '../../services/financeiro';
 import { getApiErrorMessage } from '../../utils/apiError';
 import { FaturaLocacaoDocument } from '../logistics/FaturaLocacaoDocument';
-import type { StatementItem, BillStatus } from '../../types';
+import type { StatementItem, BillStatus, UpdateBillPayload } from '../../types';
 
 interface BillDetailsModalProps {
   isOpen: boolean;
@@ -193,6 +193,7 @@ const BillDetailsModal: React.FC<BillDetailsModalProps> = ({ isOpen, item, onClo
   const [faturaNotes, setFaturaNotes] = useState<string>('');
   const [faturaPeriodStart, setFaturaPeriodStart] = useState<string>('');
   const [faturaPeriodEnd, setFaturaPeriodEnd] = useState<string>('');
+  const [faturaDueDate, setFaturaDueDate] = useState<string>('');
 
   useEffect(() => {
     if (item) {
@@ -217,6 +218,14 @@ const BillDetailsModal: React.FC<BillDetailsModalProps> = ({ isOpen, item, onClo
       if (snap.period_start) setFaturaPeriodStart(snap.period_start);
       if (snap.period_end) setFaturaPeriodEnd(snap.period_end);
 
+      if (snap.fatura_due_date) {
+        setFaturaDueDate(snap.fatura_due_date);
+      } else if (item.due_date) {
+        setFaturaDueDate(String(item.due_date).split('T')[0]);
+      } else {
+        setFaturaDueDate('');
+      }
+
       const rentId = item.rental_invoice_id || item.raw?.rental_invoice_id || item.raw?.invoice_id || item.raw?.invoice?.id;
       if (rentId) {
         Promise.all([
@@ -227,6 +236,9 @@ const BillDetailsModal: React.FC<BillDetailsModalProps> = ({ isOpen, item, onClo
             const rentalData = resRental.data;
             if (rentalData?.notes && !snap.fatura_notes && !defaultNotes) {
               setFaturaNotes(rentalData.notes);
+            }
+            if (!snap.fatura_due_date && !item.due_date && rentalData?.due_date) {
+              setFaturaDueDate(String(rentalData.due_date).split('T')[0]);
             }
             const resolved = resolveBillPeriodAndEquipments(item, rentalData, billsList);
             if (!snap.period_start && resolved.periodStart) {
@@ -459,7 +471,7 @@ const BillDetailsModal: React.FC<BillDetailsModalProps> = ({ isOpen, item, onClo
       });
 
       const finalInvoiceNum = faturaRecord.numero; // Ex: "1/2026"
-      const dueDateFormatted = currentItem.due_date || rental.due_date || undefined;
+      const dueDateFormatted = faturaDueDate || currentItem.due_date || rental.due_date || undefined;
       const paymentMethodFormatted = rental.payment_method || (rental.billing_method === 'MANUAL' ? 'Lançamento Manual' : 'Boleto Bancário');
 
       // 3. Gerar PDF da Fatura de Locação com o número sequencial oficial e período exato
@@ -537,6 +549,7 @@ const BillDetailsModal: React.FC<BillDetailsModalProps> = ({ isOpen, item, onClo
         fatura_pdf_url: faturaPdfUrl || (currentRawSnap.fatura_pdf_url ?? null),
         fatura_numero: finalInvoiceNum,
         fatura_notes: faturaNotes,
+        fatura_due_date: dueDateFormatted,
         fatura_gerada_em: new Date().toISOString(),
         is_extension: isExtension,
         period_start: targetPeriodStart,
@@ -545,12 +558,15 @@ const BillDetailsModal: React.FC<BillDetailsModalProps> = ({ isOpen, item, onClo
       };
 
       if (currentItem.source === 'bill') {
-        const updatedBill = await financeiroService.atualizarLancamento(currentItem.id, {
+        const updatePayload: UpdateBillPayload = {
           status: 'Pendente',
+          due_date: dueDateFormatted || undefined,
           bank_raw_snapshot: updatedSnapshot
-        });
+        };
+        const updatedBill = await financeiroService.atualizarLancamento(currentItem.id, updatePayload);
         const mergedBill = {
           ...updatedBill,
+          due_date: dueDateFormatted || updatedBill.due_date || currentItem.due_date,
           invoice_number: currentItem.invoice_number,
           fatura_numero: finalInvoiceNum,
           invoice_url: faturaPdfUrl || updatedBill.invoice_url,
@@ -563,6 +579,7 @@ const BillDetailsModal: React.FC<BillDetailsModalProps> = ({ isOpen, item, onClo
         const updatedItem = {
           ...currentItem,
           status: 'Pendente' as BillStatus,
+          due_date: dueDateFormatted || currentItem.due_date,
           fatura_numero: finalInvoiceNum,
           invoice_url: faturaPdfUrl || currentItem.invoice_url,
           raw: {
@@ -798,8 +815,8 @@ const BillDetailsModal: React.FC<BillDetailsModalProps> = ({ isOpen, item, onClo
             <div className="flex items-center gap-3">
               <div
                 className={`w-12 h-12 rounded-2xl flex items-center justify-center ${isReceivable
-                    ? 'bg-emerald-50 dark:bg-emerald-500/10 text-emerald-600 dark:text-emerald-400'
-                    : 'bg-rose-50 dark:bg-rose-500/10 text-rose-600 dark:text-rose-400'
+                  ? 'bg-emerald-50 dark:bg-emerald-500/10 text-emerald-600 dark:text-emerald-400'
+                  : 'bg-rose-50 dark:bg-rose-500/10 text-rose-600 dark:text-rose-400'
                   }`}
               >
                 <span className="material-symbols-outlined text-2xl">
@@ -813,8 +830,8 @@ const BillDetailsModal: React.FC<BillDetailsModalProps> = ({ isOpen, item, onClo
                   </h3>
                   <span
                     className={`px-2.5 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider ${isReceivable
-                        ? 'bg-emerald-100 dark:bg-emerald-500/10 text-emerald-800 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-500/20'
-                        : 'bg-rose-100 dark:bg-rose-500/10 text-rose-800 dark:text-rose-400 border border-rose-200 dark:border-rose-500/20'
+                      ? 'bg-emerald-100 dark:bg-emerald-500/10 text-emerald-800 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-500/20'
+                      : 'bg-rose-100 dark:bg-rose-500/10 text-rose-800 dark:text-rose-400 border border-rose-200 dark:border-rose-500/20'
                       }`}
                   >
                     {isReceivable ? 'Conta a Receber' : 'Conta a Pagar'}
@@ -1086,10 +1103,10 @@ const BillDetailsModal: React.FC<BillDetailsModalProps> = ({ isOpen, item, onClo
                             <td className="px-4 py-3 whitespace-nowrap">
                               <span
                                 className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold ${isPaid
-                                    ? 'bg-emerald-100 dark:bg-emerald-500/10 text-emerald-800 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-500/20'
-                                    : isOverdue
-                                      ? 'bg-rose-100 dark:bg-rose-500/10 text-rose-800 dark:text-rose-400 border border-rose-200 dark:border-rose-500/20'
-                                      : 'bg-amber-100 dark:bg-amber-500/10 text-amber-800 dark:text-amber-400 border border-amber-200 dark:border-amber-500/20'
+                                  ? 'bg-emerald-100 dark:bg-emerald-500/10 text-emerald-800 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-500/20'
+                                  : isOverdue
+                                    ? 'bg-rose-100 dark:bg-rose-500/10 text-rose-800 dark:text-rose-400 border border-rose-200 dark:border-rose-500/20'
+                                    : 'bg-amber-100 dark:bg-amber-500/10 text-amber-800 dark:text-amber-400 border border-amber-200 dark:border-amber-500/20'
                                   }`}
                               >
                                 <span className="material-symbols-outlined text-[12px]">
@@ -1117,8 +1134,8 @@ const BillDetailsModal: React.FC<BillDetailsModalProps> = ({ isOpen, item, onClo
                                   disabled={isUpdating}
                                   onClick={() => handleUpdateInstallmentStatus(inst.id, isPaid ? 'Pendente' : 'Recebido', !isPaid)}
                                   className={`px-2.5 py-1 rounded-lg text-[10px] font-bold uppercase tracking-wider transition-all flex items-center gap-1 mx-auto ${isPaid
-                                      ? 'bg-slate-100 dark:bg-slate-800 hover:bg-rose-50 text-slate-600 dark:text-slate-400 hover:text-rose-600 border border-slate-200 dark:border-slate-700'
-                                      : 'bg-emerald-600 hover:bg-emerald-700 text-white shadow-sm'
+                                    ? 'bg-slate-100 dark:bg-slate-800 hover:bg-rose-50 text-slate-600 dark:text-slate-400 hover:text-rose-600 border border-slate-200 dark:border-slate-700'
+                                    : 'bg-emerald-600 hover:bg-emerald-700 text-white shadow-sm'
                                     }`}
                                   title={isPaid ? 'Marcar como Pendente' : 'Marcar como Paga/Recebida'}
                                 >
@@ -1350,8 +1367,8 @@ const BillDetailsModal: React.FC<BillDetailsModalProps> = ({ isOpen, item, onClo
                           {uploadingBoleto
                             ? 'Enviando arquivo(s)...'
                             : boletoUrls.length > 0
-                            ? 'Anexar outro boleto (PDF)'
-                            : 'Anexar Boleto de Pagamento (PDF)'}
+                              ? 'Anexar outro boleto (PDF)'
+                              : 'Anexar Boleto de Pagamento (PDF)'}
                         </span>
                         <span className="text-[11px] text-slate-400 dark:text-slate-500">
                           {boletoUrls.length > 0
@@ -1409,7 +1426,7 @@ const BillDetailsModal: React.FC<BillDetailsModalProps> = ({ isOpen, item, onClo
                   </div>
                 </div>
 
-                {/* Período de Referência da Fatura e Observações */}
+                {/* Período de Referência da Fatura, Vencimento e Observações */}
                 <div className="space-y-3 p-3.5 bg-white dark:bg-slate-900 border border-slate-200/70 dark:border-slate-800 rounded-2xl">
                   {/* Período da Fatura (Somente Leitura para Consulta) */}
                   <div>
@@ -1444,12 +1461,32 @@ const BillDetailsModal: React.FC<BillDetailsModalProps> = ({ isOpen, item, onClo
                     </div>
                   </div>
 
-                  {/* Observações da Fatura (Campo 8 do Documento) */}
+                  {/* Vencimento da Fatura */}
+                  <div>
+                    <div className="flex items-center justify-between mb-1.5">
+                      <label className="text-xs font-bold text-slate-700 dark:text-slate-300 flex items-center gap-1.5">
+                        <span className="material-symbols-outlined text-sm text-emerald-600 dark:text-emerald-400">event_available</span>
+                        Vencimento da Fatura
+                      </label>
+                      <span className="text-[10px] text-slate-400 dark:text-slate-500">
+                        Data de vencimento no documento
+                      </span>
+                    </div>
+                    <input
+                      type="date"
+                      value={faturaDueDate}
+                      onChange={(e) => setFaturaDueDate(e.target.value)}
+                      disabled={!canEdit}
+                      className="w-full text-xs px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50/50 dark:bg-slate-800/50 text-slate-900 dark:text-white focus:bg-white dark:focus:bg-slate-900 focus:outline-none focus:ring-1 focus:ring-emerald-500 font-mono [color-scheme:light] dark:[color-scheme:dark] disabled:opacity-60 disabled:cursor-not-allowed"
+                    />
+                  </div>
+
+                  {/* Observações da Fatura */}
                   <div>
                     <div className="flex items-center justify-between mb-1.5">
                       <label className="text-xs font-bold text-slate-700 dark:text-slate-300 flex items-center gap-1.5">
                         <span className="material-symbols-outlined text-sm text-emerald-600 dark:text-emerald-400">notes</span>
-                        Observações da Fatura (Campo 8 do documento)
+                        Observações da Fatura
                       </label>
                       <span className="text-[10px] text-slate-400 dark:text-slate-500">
                         Editável antes de gerar / regerar

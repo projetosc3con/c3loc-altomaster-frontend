@@ -7,6 +7,7 @@ import type {
   Bill,
   BillType,
   CreateBillPayload,
+  UpdateBillPayload,
   StatementItem,
   InvoiceNfse,
   NfseEmitResult,
@@ -104,12 +105,7 @@ export const financeiroService = {
 
   atualizarLancamento: async (
     billId: string,
-    payload: {
-      status?: string;
-      is_reconciled?: boolean;
-      bank_slip_url?: string[] | string | null;
-      bank_raw_snapshot?: Record<string, any>;
-    }
+    payload: UpdateBillPayload
   ): Promise<StatementItem> => {
     const { data } = await api.patch<StatementItem>(`/bills/${billId}`, payload);
     return data;

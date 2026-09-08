@@ -1574,45 +1574,6 @@ const RentalEdit: React.FC = () => {
                   </button>
                 </div>
 
-                {/* Observações da Fatura de Locação */}
-                <div className="px-6 py-4 bg-emerald-500/[0.03] dark:bg-emerald-500/[0.05] border-b border-slate-100 dark:border-slate-800 space-y-1.5">
-                  <div className="flex items-center justify-between">
-                    <label className="text-xs font-bold text-slate-700 dark:text-slate-300 flex items-center gap-1.5">
-                      <span className="material-symbols-outlined text-sm text-emerald-600 dark:text-emerald-400">notes</span>
-                      Observações para a Fatura de Locação (Campo 8 do documento)
-                    </label>
-                    <span className="text-[10px] text-slate-400 dark:text-slate-500">
-                      Preenchimento antes da emissão
-                    </span>
-                  </div>
-                  <div className="flex gap-2 items-center">
-                    <input
-                      type="text"
-                      name="notes"
-                      value={generalData.notes}
-                      onChange={handleGeneralChange}
-                      placeholder="Observações que constarão nas faturas emitidas (ex: PROPOSTA ASSINADA)..."
-                      className="flex-1 text-xs px-3 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-900 dark:text-white focus:outline-none focus:ring-1 focus:ring-emerald-500"
-                    />
-                    <button
-                      type="button"
-                      onClick={async () => {
-                        if (!id) return;
-                        try {
-                          await api.put(`/rentals/${id}`, { notes: generalData.notes });
-                          showToast('success', 'Observações salvas', 'Observações da locação atualizadas com sucesso.');
-                        } catch (e) {
-                          showToast('error', 'Erro', 'Não foi possível salvar as observações.');
-                        }
-                      }}
-                      className="px-3.5 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold transition-colors shrink-0 shadow-sm"
-                      title="Salvar observações na locação"
-                    >
-                      Salvar
-                    </button>
-                  </div>
-                </div>
-
                 <div className="p-6">
                   {billsLoading ? (
                     <div className="p-8 text-center">

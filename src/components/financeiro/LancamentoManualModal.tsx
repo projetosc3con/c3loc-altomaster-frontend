@@ -649,23 +649,39 @@ const LancamentoManualModal: React.FC<LancamentoManualModalProps> = ({
                 <div className="space-y-3 pt-2">
                   <div className="flex flex-wrap items-center justify-between gap-2">
                     <div className="flex items-center gap-2">
-                      <label className="text-xs font-bold text-slate-700 dark:text-slate-300">
+                      <label className="text-xs font-bold text-slate-700 dark:text-slate-300 whitespace-nowrap">
                         Quantidade de Parcelas:
                       </label>
-                      <select
-                        value={numInstallments}
-                        onChange={(e) => {
-                          const count = parseInt(e.target.value, 10);
-                          generateInstallments(count, grossValue, dueDate);
-                        }}
-                        className="px-3 py-1.5 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-xs font-bold text-slate-900 dark:text-white cursor-pointer"
-                      >
-                        {[2, 3, 4, 5, 6, 7, 8, 9, 10, 12, 18, 24].map((n) => (
-                          <option key={n} value={n}>
-                            {n}x Parcelas
-                          </option>
-                        ))}
-                      </select>
+                      <div className="relative w-20">
+                        <input
+                          type="number"
+                          min={2}
+                          max={360}
+                          value={numInstallments || ''}
+                          onChange={(e) => {
+                            const val = e.target.value;
+                            if (val === '') {
+                              setNumInstallments(0);
+                              return;
+                            }
+                            const count = parseInt(val, 10);
+                            if (!isNaN(count)) {
+                              setNumInstallments(count);
+                              if (count >= 2) {
+                                generateInstallments(count, grossValue, dueDate);
+                              }
+                            }
+                          }}
+                          onBlur={() => {
+                            if (numInstallments < 2) {
+                              generateInstallments(2, grossValue, dueDate);
+                            }
+                          }}
+                          placeholder="2"
+                          className="w-full px-3 py-1.5 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-xs font-bold text-slate-900 dark:text-white text-center font-mono focus:ring-2 focus:ring-mustard-500/10 focus:border-mustard-500 outline-none"
+                        />
+                      </div>
+                      <span className="text-xs font-bold text-slate-500 dark:text-slate-400">x</span>
                     </div>
 
                     <div className="text-xs font-bold">
@@ -703,7 +719,7 @@ const LancamentoManualModal: React.FC<LancamentoManualModalProps> = ({
                         </button>
                         <button
                           type="button"
-                          onClick={() => generateInstallments(numInstallments, grossValue, dueDate)}
+                          onClick={() => generateInstallments(Math.max(2, numInstallments || 2), grossValue, dueDate)}
                           className="px-2.5 py-1 rounded-lg bg-slate-200 dark:bg-slate-700 hover:bg-slate-300 text-slate-800 dark:text-slate-200 font-bold text-[11px] transition-colors"
                         >
                           Dividir igualmente

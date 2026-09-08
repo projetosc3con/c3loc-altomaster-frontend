@@ -613,6 +613,15 @@ export interface CreateBillPayload {
   bank_slip_url?: string[] | string | null;
 }
 
+export interface UpdateBillPayload {
+  status?: string;
+  due_date?: string;
+  is_reconciled?: boolean;
+  bank_slip_url?: string[] | string | null;
+  bank_raw_snapshot?: Record<string, any>;
+  [key: string]: any;
+}
+
 // Item normalizado do extrato bancário: mescla `bills` (já conciliado,
 // automático ou manual) com `payments` ainda sem bill vinculado (cobrança
 // Asaas em aberto). Espelha BillStatementItem do backend.
