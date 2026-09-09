@@ -32,6 +32,7 @@ export interface ExtratoBancarioFilters {
   from?: string;
   to?: string;
   invoice_number?: string;
+  search?: string;
   page?: number;
   limit?: number;
   group_nfe?: boolean;

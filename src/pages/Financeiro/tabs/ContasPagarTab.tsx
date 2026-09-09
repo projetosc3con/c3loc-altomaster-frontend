@@ -57,6 +57,7 @@ const sourceBadge = (item: StatementItem) => {
 const ContasPagarTab: React.FC = () => {
   const [clients, setClients] = useState<Client[]>([]);
   const [selectedClientId, setSelectedClientId] = useState('');
+  const [searchTerm, setSearchTerm] = useState('');
   const [status, setStatus] = useState('');
   const [origin, setOrigin] = useState('');
   const [dateFrom, setDateFrom] = useState('');
@@ -94,6 +95,7 @@ const ContasPagarTab: React.FC = () => {
       const data = await financeiroService.listarExtratoBancario({
         type: 'payable',
         client_id: selectedClientId || undefined,
+        search: searchTerm || undefined,
         status: status || undefined,
         origin: origin || undefined,
         from: dateFrom || undefined,
@@ -111,7 +113,7 @@ const ContasPagarTab: React.FC = () => {
     } finally {
       setLoading(false);
     }
-  }, [selectedClientId, status, origin, dateFrom, dateTo, groupNfe, currentPage]);
+  }, [selectedClientId, searchTerm, status, origin, dateFrom, dateTo, groupNfe, currentPage]);
 
   useEffect(() => {
     fetchContasPagar();
@@ -119,10 +121,11 @@ const ContasPagarTab: React.FC = () => {
 
   useEffect(() => {
     setCurrentPage(1);
-  }, [selectedClientId, status, origin, dateFrom, dateTo]);
+  }, [selectedClientId, searchTerm, status, origin, dateFrom, dateTo, groupNfe]);
 
   const handleClearFilters = () => {
     setSelectedClientId('');
+    setSearchTerm('');
     setStatus('');
     setOrigin('');
     setDateFrom('');
@@ -133,7 +136,7 @@ const ContasPagarTab: React.FC = () => {
     fetchContasPagar();
   };
 
-  const hasActiveFilters = Boolean(selectedClientId || status || origin || dateFrom || dateTo);
+  const hasActiveFilters = Boolean(selectedClientId || searchTerm || status || origin || dateFrom || dateTo);
 
   return (
     <div className="space-y-6">
@@ -169,9 +172,38 @@ const ContasPagarTab: React.FC = () => {
         </div>
 
         <div className="p-8 space-y-6">
-          <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
+          {/* Linha 1: Pesquisa por NF/Favorecido e Fornecedor Cadastrado */}
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div className="space-y-1.5">
+              <label className="text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-widest ml-1">
+                NF ou Favorecido
+              </label>
+              <div className="relative">
+                <input
+                  type="text"
+                  value={searchTerm}
+                  onChange={(e) => setSearchTerm(e.target.value)}
+                  placeholder="Buscar por NF ou favorecido..."
+                  className="w-full pl-9 pr-8 py-2.5 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-slate-900 dark:text-white focus:bg-white dark:focus:bg-slate-900 focus:ring-2 focus:ring-rose-500/10 focus:border-rose-500 transition-all outline-none text-sm placeholder:text-slate-400 dark:placeholder:text-slate-600 font-medium"
+                />
+                <span className="material-symbols-outlined absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400 text-[18px]">
+                  search
+                </span>
+                {searchTerm && (
+                  <button
+                    type="button"
+                    onClick={() => setSearchTerm('')}
+                    className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 p-0.5"
+                    title="Limpar pesquisa"
+                  >
+                    <span className="material-symbols-outlined text-[16px]">close</span>
+                  </button>
+                )}
+              </div>
+            </div>
+
             <SearchableSelect
-              label="Fornecedor / Favorecido"
+              label="Fornecedor Cadastrado"
               placeholder="Todos os fornecedores"
               items={clients}
               selectedId={selectedClientId}
@@ -179,7 +211,10 @@ const ContasPagarTab: React.FC = () => {
               getDisplayValue={(c) => c.company_name}
               getSearchValue={(c) => `${c.company_name} ${c.cnpj}`}
             />
+          </div>
 
+          {/* Linha 2: Demais Filtros (Status, Origem, De, Até) */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
             <div className="space-y-1.5">
               <label className="text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-widest ml-1">Status</label>
               <select
