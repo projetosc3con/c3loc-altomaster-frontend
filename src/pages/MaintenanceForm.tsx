@@ -365,8 +365,11 @@ const MaintenanceForm: React.FC = () => {
       setLoading(true);
       setError(null);
 
+      // Omit relational properties returned by GET /service-orders/:id to avoid schema mismatches
+      const { executor, service_order_parts, service_order_labor, ...cleanFormData } = formData as any;
+
       const payload = {
-        ...formData,
+        ...cleanFormData,
         nfe_invoices: formData.nfe_invoices || [],
         nfe_access_keys: (formData.nfe_invoices || []).map(n => n.access_key),
         parts: partsUsed,
