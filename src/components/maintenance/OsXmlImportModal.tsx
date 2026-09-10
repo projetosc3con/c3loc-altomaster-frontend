@@ -1,4 +1,4 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { motion } from 'framer-motion';
 import api from '../../services/api';
 import { formatDate } from '../../utils/date';
@@ -41,6 +41,35 @@ const OsXmlImportModal: React.FC<OsXmlImportModalProps> = ({ isOpen, onClose, on
   const [installments, setInstallments] = useState<InstallmentItem[]>([]);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const resetState = () => {
+    setStep('upload');
+    setLoading(false);
+    setError(null);
+    setXmlString('');
+    setPdfBase64(null);
+    setFileType(null);
+    setFileName('');
+    setParsedData(null);
+    setItemConfigs({});
+    setPaymentType('nenhum');
+    setInstallmentsCount(1);
+    setInstallments([]);
+    if (fileInputRef.current) {
+      fileInputRef.current.value = '';
+    }
+  };
+
+  const handleClose = () => {
+    resetState();
+    onClose();
+  };
+
+  useEffect(() => {
+    if (!isOpen) {
+      resetState();
+    }
+  }, [isOpen]);
 
   if (!isOpen) return null;
 
@@ -345,7 +374,7 @@ const OsXmlImportModal: React.FC<OsXmlImportModalProps> = ({ isOpen, onClose, on
       };
 
       onSuccess(nfeRef, partsForOs);
-      onClose();
+      handleClose();
     } catch (err: any) {
       console.error('Erro ao efetivar importação da NF-e para a OS:', err);
       setError(err.response?.data?.error || err.message || 'Falha ao salvar itens da NF-e.');
@@ -355,7 +384,12 @@ const OsXmlImportModal: React.FC<OsXmlImportModalProps> = ({ isOpen, onClose, on
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/80 backdrop-blur-sm overflow-y-auto">
+    <div 
+      className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/80 backdrop-blur-sm overflow-y-auto"
+      onClick={(e) => {
+        if (e.target === e.currentTarget) handleClose();
+      }}
+    >
       <motion.div
         initial={{ opacity: 0, scale: 0.95 }}
         animate={{ opacity: 1, scale: 1 }}
@@ -382,7 +416,7 @@ const OsXmlImportModal: React.FC<OsXmlImportModalProps> = ({ isOpen, onClose, on
           </div>
           <button
             type="button"
-            onClick={onClose}
+            onClick={handleClose}
             className="p-2 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 rounded-xl hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
           >
             <span className="material-symbols-outlined text-xl">close</span>
@@ -722,7 +756,11 @@ const OsXmlImportModal: React.FC<OsXmlImportModalProps> = ({ isOpen, onClose, on
         <div className="p-6 border-t border-slate-100 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-800/30 flex items-center justify-between">
           <button
             type="button"
-            onClick={step === 'review' ? () => setStep('upload') : onClose}
+            onClick={step === 'review' ? () => {
+              setStep('upload');
+              setError(null);
+              if (fileInputRef.current) fileInputRef.current.value = '';
+            } : handleClose}
             className="px-5 py-2.5 rounded-xl text-xs font-bold text-slate-600 dark:text-slate-400 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors"
             disabled={loading}
           >

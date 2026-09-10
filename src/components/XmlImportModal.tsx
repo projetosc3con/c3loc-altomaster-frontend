@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { motion } from 'framer-motion';
 import api from '../services/api';
 import type { ParsedNfeData, ParsedNfeItem, NfeItemDestination } from '../types';
@@ -10,7 +10,7 @@ interface XmlImportModalProps {
 }
 
 interface ItemConfigState {
-  item_index: number;
+  item_index?: number;
   destination: NfeItemDestination;
   custom_name?: string;
   custom_model?: string;
@@ -56,6 +56,35 @@ export const XmlImportModal: React.FC<XmlImportModalProps> = ({ isOpen, onClose,
 
   // Success summary
   const [importSummary, setImportSummary] = useState<any>(null);
+
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const handleReset = () => {
+    setStep('upload');
+    setXmlContent('');
+    setPdfBase64('');
+    setFileType(null);
+    setFileName('');
+    setParsedData(null);
+    setItemsConfig({});
+    setInstallments([]);
+    setError(null);
+    setImportSummary(null);
+    if (fileInputRef.current) {
+      fileInputRef.current.value = '';
+    }
+  };
+
+  const handleClose = () => {
+    handleReset();
+    onClose();
+  };
+
+  useEffect(() => {
+    if (!isOpen) {
+      handleReset();
+    }
+  }, [isOpen]);
 
   if (!isOpen) return null;
 
@@ -256,19 +285,6 @@ export const XmlImportModal: React.FC<XmlImportModalProps> = ({ isOpen, onClose,
     }
   };
 
-  const handleReset = () => {
-    setStep('upload');
-    setXmlContent('');
-    setPdfBase64('');
-    setFileType(null);
-    setFileName('');
-    setParsedData(null);
-    setItemsConfig({});
-    setInstallments([]);
-    setError(null);
-    setImportSummary(null);
-  };
-
   // Sum of installments
   const totalInstallmentsAmount = installments.reduce((acc, curr) => acc + (Number(curr.amount) || 0), 0);
   const totalInvoice = parsedData?.totals?.total_invoice || 0;
@@ -281,7 +297,7 @@ export const XmlImportModal: React.FC<XmlImportModalProps> = ({ isOpen, onClose,
         initial={{ opacity: 0 }}
         animate={{ opacity: 1 }}
         exit={{ opacity: 0 }}
-        onClick={onClose}
+        onClick={handleClose}
         className="absolute inset-0 bg-slate-900/60 backdrop-blur-sm"
       />
 
@@ -308,7 +324,7 @@ export const XmlImportModal: React.FC<XmlImportModalProps> = ({ isOpen, onClose,
             </div>
           </div>
           <button
-            onClick={onClose}
+            onClick={handleClose}
             className="w-9 h-9 rounded-full bg-slate-100 dark:bg-slate-800 text-slate-500 flex items-center justify-center hover:bg-slate-200 dark:hover:bg-slate-700 hover:text-slate-900 dark:hover:text-white transition-colors"
           >
             <span className="material-symbols-outlined text-[20px]">close</span>
@@ -368,7 +384,7 @@ export const XmlImportModal: React.FC<XmlImportModalProps> = ({ isOpen, onClose,
                   <label className="cursor-pointer bg-mustard-500 hover:bg-mustard-600 active:scale-[0.98] text-white px-6 py-3 rounded-xl font-bold text-sm transition-all shadow-lg shadow-mustard-500/20 flex items-center gap-2">
                     <span className="material-symbols-outlined text-[20px]">folder_open</span>
                     <span>Escolher Arquivo (XML ou PDF)</span>
-                    <input type="file" accept=".xml,.pdf,application/pdf,text/xml" onChange={handleFileUpload} className="hidden" />
+                    <input ref={fileInputRef} type="file" accept=".xml,.pdf,application/pdf,text/xml" onChange={handleFileUpload} className="hidden" />
                   </label>
                 </div>
 
@@ -470,7 +486,10 @@ export const XmlImportModal: React.FC<XmlImportModalProps> = ({ isOpen, onClose,
 
                 <div className="space-y-3">
                   {parsedData.items.map((item) => {
-                    const cfg = itemsConfig[item.item_index] || { destination: item.suggested_destination };
+                    const cfg: ItemConfigState = itemsConfig[item.item_index] || {
+                      item_index: item.item_index,
+                      destination: item.suggested_destination,
+                    };
                     const currentDest = DESTINATION_OPTIONS.find((d) => d.value === cfg.destination) || DESTINATION_OPTIONS[0];
 
                     return (
@@ -816,7 +835,7 @@ export const XmlImportModal: React.FC<XmlImportModalProps> = ({ isOpen, onClose,
             <>
               <button
                 type="button"
-                onClick={onClose}
+                onClick={handleClose}
                 className="px-6 py-2.5 rounded-xl font-bold text-sm text-slate-600 dark:text-slate-400 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 hover:bg-slate-50"
               >
                 Cancelar
@@ -846,7 +865,10 @@ export const XmlImportModal: React.FC<XmlImportModalProps> = ({ isOpen, onClose,
             <>
               <button
                 type="button"
-                onClick={() => setStep('upload')}
+                onClick={() => {
+                  setStep('upload');
+                  if (fileInputRef.current) fileInputRef.current.value = '';
+                }}
                 className="px-6 py-2.5 rounded-xl font-bold text-sm text-slate-600 dark:text-slate-400 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 hover:bg-slate-50 flex items-center gap-1"
               >
                 <span className="material-symbols-outlined text-[18px]">arrow_back</span>
@@ -905,7 +927,7 @@ export const XmlImportModal: React.FC<XmlImportModalProps> = ({ isOpen, onClose,
               </button>
               <button
                 type="button"
-                onClick={onClose}
+                onClick={handleClose}
                 className="px-8 py-2.5 rounded-xl font-bold text-sm text-white bg-mustard-500 hover:bg-mustard-600"
               >
                 Concluir e Fechar
