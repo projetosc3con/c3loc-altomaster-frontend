@@ -2,6 +2,8 @@ import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { crmService, type CRMPipelineStage } from '../../services/crm';
 import api from '../../services/api';
+import SearchableSelect from '../SearchableSelect';
+import { formatCnpjOrCpf } from '../../utils/formatters';
 import NewTaskModal from './NewTaskModal';
 import { useAuth } from '../../contexts/AuthContext';
 
@@ -207,6 +209,15 @@ const EditDealModal: React.FC<EditDealModalProps> = ({ isOpen, onClose, onSucces
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!formData.title || !formData.stage_id) return;
+
+    if (linkType === 'lead' && !formData.lead_id) {
+      alert('Selecione um Lead para vincular.');
+      return;
+    }
+    if (linkType === 'client' && !formData.client_id) {
+      alert('Selecione um Cliente para vincular.');
+      return;
+    }
 
     try {
       setLoading(true);
@@ -580,24 +591,35 @@ const EditDealModal: React.FC<EditDealModalProps> = ({ isOpen, onClose, onSucces
                       </div>
 
                       <div>
-                        <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-2 uppercase tracking-wider">
-                          {linkType === 'lead' ? 'Selecione o Lead *' : 'Selecione o Cliente *'}
-                        </label>
-                        <select
-                          value={linkType === 'lead' ? formData.lead_id : formData.client_id}
-                          onChange={(e) => {
-                            if (linkType === 'lead') setFormData(prev => ({ ...prev, lead_id: e.target.value, client_id: '' }));
-                            else setFormData(prev => ({ ...prev, client_id: e.target.value, lead_id: '' }));
+                        <SearchableSelect
+                          label={linkType === 'lead' ? 'Selecione o Lead' : 'Selecione o Cliente'}
+                          placeholder={linkType === 'lead' ? 'Pesquisar lead por nome ou CNPJ...' : 'Pesquisar cliente por nome ou CNPJ...'}
+                          searchPlaceholder="Buscar por nome ou CNPJ..."
+                          items={linkType === 'lead' ? leads : clients}
+                          selectedId={linkType === 'lead' ? formData.lead_id : formData.client_id}
+                          onSelect={(id) => {
+                            if (linkType === 'lead') {
+                              setFormData(prev => ({ ...prev, lead_id: id, client_id: '' }));
+                            } else {
+                              setFormData(prev => ({ ...prev, client_id: id, lead_id: '' }));
+                            }
+                          }}
+                          getDisplayValue={(item: any) => item.company_name || 'Sem Razão Social'}
+                          getTriggerDisplayValue={(item: any) => {
+                            const name = item.company_name || 'Sem Razão Social';
+                            const doc = formatCnpjOrCpf(item.cnpj);
+                            return doc ? `${name} • ${doc}` : name;
+                          }}
+                          getSearchValue={(item: any) => `${item.company_name || ''} ${item.trading_name || ''} ${item.cnpj || ''}`}
+                          getSubtext={(item: any) => {
+                            const doc = formatCnpjOrCpf(item.cnpj);
+                            return doc ? `CNPJ: ${doc}` : 'Sem CNPJ cadastrado';
                           }}
                           required
-                          className="w-full px-4 py-3 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-sm focus:ring-2 focus:ring-mustard-500/20 outline-none transition-all dark:text-white"
-                        >
-                          <option value="">Selecione...</option>
-                          {linkType === 'lead'
-                            ? leads.map((l, index) => <option key={l.id || `lead-${index}`} value={l.id}>{l.company_name}</option>)
-                            : clients.map((c, index) => <option key={c.id || `client-${index}`} value={c.id}>{c.company_name}</option>)
-                          }
-                        </select>
+                          clearable
+                          labelClassName="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-2 uppercase tracking-wider"
+                          triggerClassName="w-full px-4 py-3 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-sm outline-none transition-all dark:text-white flex items-center justify-between cursor-pointer"
+                        />
                       </div>
                     </div>
                   </div>
