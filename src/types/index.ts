@@ -328,6 +328,7 @@ export interface RentalInvoice {
   document_type?: 'NFSE' | 'FATURA_LOCACAO';
   manual_due_date?: string;
   fatura_pdf_url?: string;
+  return_checklist_urls?: string[];
   bank_reconciliation_date?: string;
   reconciliation_status: ReconciliationStatus;
   client_score?: number;
