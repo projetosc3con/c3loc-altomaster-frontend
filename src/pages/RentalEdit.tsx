@@ -794,10 +794,22 @@ const RentalEdit: React.FC = () => {
       const selectedClient = clients.find(c => c.id === generalData.client_id);
       if (!selectedClient) throw new Error('Selecione um cliente válido.');
 
+      // Se todos os equipamentos da locação tiverem data de retorno preenchida,
+      // a última (mais posterior) é definida como return_date da locação (rental_invoice)
+      const allHaveReturnDate = equipmentItems.length > 0 && equipmentItems.every(item => Boolean(item.return_date && item.return_date.trim()));
+      let computedReturnDate: string | null = null;
+      if (allHaveReturnDate) {
+        const sortedReturnDates = equipmentItems
+          .map(item => item.return_date.trim().split('T')[0])
+          .sort((a, b) => a.localeCompare(b));
+        computedReturnDate = sortedReturnDates[sortedReturnDates.length - 1];
+      }
+
       const payload = {
         ...generalData,
         client_name: selectedClient.company_name,
         cnpj: selectedClient.cnpj,
+        return_date: computedReturnDate,
         equipments: equipmentItems.map(item => ({
           equipment_id: item.equipment_id,
           equipment_name: item.equipment_name,
@@ -806,7 +818,7 @@ const RentalEdit: React.FC = () => {
           asset_number: item.asset_number,
           billing_period_start: item.billing_period_start,
           billing_period_end: item.billing_period_end,
-          return_date: item.return_date || null,
+          return_date: item.return_date ? item.return_date.trim().split('T')[0] : null,
           cost_rental: Number(item.cost_rental) || 0,
           cost_insurance: Number(item.cost_insurance) || 0,
           cost_freight: Number(item.cost_freight) || 0,

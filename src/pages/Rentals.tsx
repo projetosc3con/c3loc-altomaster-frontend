@@ -18,10 +18,13 @@ const RECONCILIATION_STATUSES: ReconciliationStatus[] = ['Pendente', 'Atrasado',
 export type SortField = 'billing_period_end' | 'client_name' | 'equipment_name' | 'total_value' | 'billing_status';
 export type SortOrder = 'asc' | 'desc';
 
+export type ReturnStatusFilter = 'active' | 'returned' | '';
+
 interface Filters {
   search: string;
   billing_status: BillingStatus | '';
   reconciliation_status: ReconciliationStatus | '';
+  return_status: ReturnStatusFilter;
   date_from: string;
   date_to: string;
   value_min: number;
@@ -31,10 +34,16 @@ interface Filters {
 }
 
 const emptyFilters: Filters = {
-  search: '', billing_status: '', reconciliation_status: '',
-  date_from: '', date_to: '', value_min: 0, value_max: 0,
+  search: '',
+  billing_status: '',
+  reconciliation_status: '',
+  return_status: 'active',
+  date_from: '',
+  date_to: '',
+  value_min: 0,
+  value_max: 0,
   sort_by: 'billing_period_end',
-  sort_order: 'desc'
+  sort_order: 'asc'
 };
 
 const buildParams = (page: number, f: Filters) => {
@@ -42,11 +51,17 @@ const buildParams = (page: number, f: Filters) => {
     page,
     limit: ITEMS_PER_PAGE,
     sort_by: f.sort_by || 'billing_period_end',
-    sort_order: f.sort_order || 'desc'
+    sort_order: f.sort_order || 'asc'
   };
   if (f.search) p.search = f.search;
   if (f.billing_status) p.billing_status = f.billing_status;
   if (f.reconciliation_status) p.reconciliation_status = f.reconciliation_status;
+  if (f.return_status) {
+    p.return_status = f.return_status;
+    if (f.return_status === 'active') {
+      p.hide_returned = 'true';
+    }
+  }
   if (f.date_from) p.date_from = f.date_from;
   if (f.date_to) p.date_to = f.date_to;
   if (f.value_min > 0) p.value_min = f.value_min;
@@ -62,11 +77,13 @@ const getInitialFilters = (): Filters => {
     const saved = localStorage.getItem(STORAGE_KEY);
     if (saved) {
       const parsed = JSON.parse(saved);
+      const isLegacy = parsed.return_status === undefined;
       return {
         ...emptyFilters,
         ...parsed,
+        return_status: isLegacy ? 'active' : parsed.return_status,
         sort_by: parsed.sort_by || 'billing_period_end',
-        sort_order: parsed.sort_order || 'desc'
+        sort_order: isLegacy ? 'asc' : (parsed.sort_order || 'asc')
       };
     }
   } catch (e) {
@@ -203,6 +220,7 @@ const Rentals: React.FC = () => {
   const activeFilterCount = [
     filters.billing_status, filters.reconciliation_status,
     filters.date_from, filters.date_to,
+    filters.return_status,
   ].filter(Boolean).length + (filters.value_min > 0 || filters.value_max > 0 ? 1 : 0);
 
   const fetchRentals = useCallback(async (page: number, f: Filters) => {
@@ -244,7 +262,7 @@ const Rentals: React.FC = () => {
     if (filters.sort_by === field) {
       newOrder = filters.sort_order === 'asc' ? 'desc' : 'asc';
     } else {
-      newOrder = (field === 'billing_period_end' || field === 'total_value') ? 'desc' : 'asc';
+      newOrder = (field === 'total_value') ? 'desc' : 'asc';
     }
 
     const next: Filters = { ...filters, sort_by: field, sort_order: newOrder };
@@ -261,7 +279,12 @@ const Rentals: React.FC = () => {
 
   const clearAllFilters = () => {
     setSearchInput('');
-    const reset: Filters = { ...emptyFilters, sort_by: 'billing_period_end', sort_order: 'desc' };
+    const reset: Filters = {
+      ...emptyFilters,
+      return_status: '',
+      sort_by: 'billing_period_end',
+      sort_order: 'asc'
+    };
     setFilters(reset);
     setCurrentPage(1);
     saveFiltersToStorage(reset, 1);
@@ -467,6 +490,12 @@ const Rentals: React.FC = () => {
                           <span className="material-symbols-outlined text-[16px] text-slate-400 dark:text-slate-500">date_range</span>
                           {formatDate(rental.billing_period_start)} - {formatDate(rental.billing_period_end)}
                         </div>
+                        {rental.return_date && (
+                          <div className="text-[10px] text-emerald-600 dark:text-emerald-400 font-bold flex items-center gap-1 mt-0.5">
+                            <span className="material-symbols-outlined text-[12px]">verified</span>
+                            Devolvido em {formatDate(rental.return_date)}
+                          </div>
+                        )}
                       </td>
                       <td className="px-6 py-4 text-right font-bold text-mustard-500 dark:text-mustard-400">
                         {Number(rental.total_value).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
@@ -559,6 +588,62 @@ const Rentals: React.FC = () => {
 
               {/* Body */}
               <div className="flex-1 overflow-y-auto p-6 space-y-8">
+                {/* Situação do Contrato / Devolução */}
+                <div className="space-y-2">
+                  <div className="flex items-center justify-between">
+                    <label className="text-[11px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-widest">
+                      Situação do Contrato
+                    </label>
+                    {filters.return_status === 'active' && (
+                      <span className="text-[10px] font-bold text-emerald-600 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-950/40 px-2 py-0.5 rounded-md border border-emerald-200 dark:border-emerald-800/50">
+                        Finalizadas Ocultas
+                      </span>
+                    )}
+                  </div>
+                  <div className="grid grid-cols-2 gap-2">
+                    <button
+                      type="button"
+                      onClick={() => setFilters(f => ({ ...f, return_status: f.return_status === 'active' ? '' : 'active' }))}
+                      className={`px-3 py-2.5 rounded-xl text-xs font-bold text-left transition-all flex items-center justify-between ${
+                        filters.return_status === 'active'
+                          ? 'bg-mustard-500 text-white shadow-md'
+                          : 'bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-700'
+                      }`}
+                    >
+                      <div className="flex items-center gap-1.5 min-w-0">
+                        <span className="material-symbols-outlined text-[18px] shrink-0">
+                          {filters.return_status === 'active' ? 'check_box' : 'check_box_outline_blank'}
+                        </span>
+                        <span className="truncate">Ocultar Finalizadas</span>
+                      </div>
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => setFilters(f => ({ ...f, return_status: f.return_status === 'returned' ? '' : 'returned' }))}
+                      className={`px-3 py-2.5 rounded-xl text-xs font-bold text-left transition-all flex items-center justify-between ${
+                        filters.return_status === 'returned'
+                          ? 'bg-mustard-500 text-white shadow-md'
+                          : 'bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-700'
+                      }`}
+                    >
+                      <div className="flex items-center gap-1.5 min-w-0">
+                        <span className="material-symbols-outlined text-[18px] shrink-0">
+                          {filters.return_status === 'returned' ? 'check_box' : 'check_box_outline_blank'}
+                        </span>
+                        <span className="truncate">Apenas Finalizadas</span>
+                      </div>
+                    </button>
+                  </div>
+                  <p className="text-[11px] text-slate-400 dark:text-slate-500">
+                    {filters.return_status === 'active'
+                      ? 'Ocultando contratos que já possuem data de retorno preenchida.'
+                      : filters.return_status === 'returned'
+                      ? 'Exibindo somente contratos já finalizados com data de retorno.'
+                      : 'Exibindo todos os contratos (em andamento e finalizados).'}
+                  </p>
+                </div>
+
                 <div className="space-y-2">
                   <label className="text-[11px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-widest">Status de Faturamento</label>
                   <div className="grid grid-cols-2 gap-2">
@@ -633,17 +718,6 @@ const Rentals: React.FC = () => {
                     <div className="grid grid-cols-2 gap-2">
                       <button
                         type="button"
-                        onClick={() => setFilters(f => ({ ...f, sort_order: 'desc' }))}
-                        className={`px-3 py-2.5 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-1.5 ${filters.sort_order === 'desc'
-                          ? 'bg-mustard-500 text-white shadow-md'
-                          : 'bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-700'
-                          }`}
-                      >
-                        <span className="material-symbols-outlined text-[16px]">keyboard_arrow_down</span>
-                        Mais recente / Maior
-                      </button>
-                      <button
-                        type="button"
                         onClick={() => setFilters(f => ({ ...f, sort_order: 'asc' }))}
                         className={`px-3 py-2.5 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-1.5 ${filters.sort_order === 'asc'
                           ? 'bg-mustard-500 text-white shadow-md'
@@ -651,7 +725,18 @@ const Rentals: React.FC = () => {
                           }`}
                       >
                         <span className="material-symbols-outlined text-[16px]">keyboard_arrow_up</span>
-                        Mais antigo / Menor
+                        {filters.sort_by === 'billing_period_end' ? 'Encerrando primeiro' : 'Crescente / Menor'}
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setFilters(f => ({ ...f, sort_order: 'desc' }))}
+                        className={`px-3 py-2.5 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-1.5 ${filters.sort_order === 'desc'
+                          ? 'bg-mustard-500 text-white shadow-md'
+                          : 'bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-700'
+                          }`}
+                      >
+                        <span className="material-symbols-outlined text-[16px]">keyboard_arrow_down</span>
+                        {filters.sort_by === 'billing_period_end' ? 'Encerrando mais tarde' : 'Decrescente / Maior'}
                       </button>
                     </div>
                   </div>
