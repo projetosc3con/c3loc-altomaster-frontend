@@ -800,9 +800,12 @@ const RentalEdit: React.FC = () => {
       let computedReturnDate: string | null = null;
       if (allHaveReturnDate) {
         const sortedReturnDates = equipmentItems
-          .map(item => item.return_date.trim().split('T')[0])
+          .map(item => (item.return_date ? item.return_date.trim().split('T')[0] : ''))
+          .filter(Boolean)
           .sort((a, b) => a.localeCompare(b));
-        computedReturnDate = sortedReturnDates[sortedReturnDates.length - 1];
+        if (sortedReturnDates.length > 0) {
+          computedReturnDate = sortedReturnDates[sortedReturnDates.length - 1];
+        }
       }
 
       const payload = {

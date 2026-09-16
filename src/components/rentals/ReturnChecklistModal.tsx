@@ -1,7 +1,6 @@
 import React, { useState, useMemo } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { pdf } from '@react-pdf/renderer';
-import { saveAs } from 'file-saver';
 import { supabase } from '../../lib/supabase';
 import api from '../../services/api';
 import { CHECKLIST_ITEMS_CONFIG, ReturnChecklistDocument, type ReturnPhotoItem } from './ReturnChecklistDocument';
