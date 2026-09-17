@@ -11,7 +11,23 @@ import logoLight from '../assets/logo-completo.png';
 import logoDark from '../../config_files/logo-completo-dark.png';
 import type { RentalInvoice, BillingStatus, ReconciliationStatus, AsaasChargeResult, Payment } from '../types';
 
-const ITEMS_PER_PAGE = 15;
+export const LIMIT_OPTIONS = [10, 25, 50, 100] as const;
+export type LimitOption = typeof LIMIT_OPTIONS[number];
+const LIMIT_STORAGE_KEY = 'c3loc_rentals_limit';
+
+const getInitialLimit = (): LimitOption => {
+  try {
+    const saved = localStorage.getItem(LIMIT_STORAGE_KEY);
+    if (saved) {
+      const parsed = parseInt(saved, 10);
+      if (LIMIT_OPTIONS.includes(parsed as any)) return parsed as LimitOption;
+    }
+  } catch (e) {
+    console.warn('Erro ao carregar limite salvo de locações:', e);
+  }
+  return 10;
+};
+
 const BILLING_STATUSES: BillingStatus[] = ['Pendente', 'Faturado', 'Emitida', 'Cancelada'];
 const RECONCILIATION_STATUSES: ReconciliationStatus[] = ['Pendente', 'Atrasado', 'Recebido', 'Divergente', 'No prazo'];
 
@@ -46,10 +62,10 @@ const emptyFilters: Filters = {
   sort_order: 'asc'
 };
 
-const buildParams = (page: number, f: Filters) => {
+const buildParams = (page: number, f: Filters, limit: number = 10) => {
   const p: Record<string, string | number> = {
     page,
-    limit: ITEMS_PER_PAGE,
+    limit,
     sort_by: f.sort_by || 'billing_period_end',
     sort_order: f.sort_order || 'asc'
   };
@@ -125,7 +141,14 @@ const Rentals: React.FC = () => {
   const [currentPage, setCurrentPage] = useState<number>(getInitialPage);
   const [totalPages, setTotalPages] = useState(1);
   const [totalItems, setTotalItems] = useState(0);
-  const [stats, setStats] = useState({ pendingReconciliationCount: 0, totalValue: 0, monthlyReceivedTotal: 0 });
+  const [itemsPerPage, setItemsPerPage] = useState<LimitOption>(getInitialLimit);
+  const [stats, setStats] = useState<{
+    pendingReconciliationCount: number;
+    totalValue: number;
+    currentPeriodTotalValue?: number;
+    accumulatedTotalValue?: number;
+    monthlyReceivedTotal?: number;
+  }>({ pendingReconciliationCount: 0, totalValue: 0, monthlyReceivedTotal: 0 });
   const [filters, setFilters] = useState<Filters>(getInitialFilters);
   const [showFilters, setShowFilters] = useState(false);
   const [searchInput, setSearchInput] = useState<string>(() => getInitialFilters().search || '');
@@ -223,10 +246,10 @@ const Rentals: React.FC = () => {
     filters.return_status,
   ].filter(Boolean).length + (filters.value_min > 0 || filters.value_max > 0 ? 1 : 0);
 
-  const fetchRentals = useCallback(async (page: number, f: Filters) => {
+  const fetchRentals = useCallback(async (page: number, f: Filters, limit: number = itemsPerPage) => {
     try {
       setLoading(true);
-      const { data: res } = await api.get('/rentals', { params: buildParams(page, f) });
+      const { data: res } = await api.get('/rentals', { params: buildParams(page, f, limit) });
       setRentals(res.data);
       setTotalItems(res.total);
       setTotalPages(res.totalPages);
@@ -238,12 +261,24 @@ const Rentals: React.FC = () => {
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [itemsPerPage]);
 
   useEffect(() => {
-    fetchRentals(currentPage, filters);
+    fetchRentals(currentPage, filters, itemsPerPage);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  const handleLimitChange = (newLimit: LimitOption) => {
+    setItemsPerPage(newLimit);
+    setCurrentPage(1);
+    try {
+      localStorage.setItem(LIMIT_STORAGE_KEY, String(newLimit));
+      localStorage.setItem(PAGE_STORAGE_KEY, '1');
+    } catch (e) {
+      console.warn('Erro ao salvar limite no localStorage:', e);
+    }
+    fetchRentals(1, filters, newLimit);
+  };
 
   // Debounced search
   const handleSearchChange = (val: string) => {
@@ -253,7 +288,7 @@ const Rentals: React.FC = () => {
       const next = { ...filters, search: val };
       setFilters(next);
       saveFiltersToStorage(next, 1);
-      fetchRentals(1, next);
+      fetchRentals(1, next, itemsPerPage);
     }, 400);
   };
 
@@ -268,13 +303,13 @@ const Rentals: React.FC = () => {
     const next: Filters = { ...filters, sort_by: field, sort_order: newOrder };
     setFilters(next);
     saveFiltersToStorage(next, 1);
-    fetchRentals(1, next);
+    fetchRentals(1, next, itemsPerPage);
   };
 
   const applyFilters = () => {
     setShowFilters(false);
     saveFiltersToStorage(filters, 1);
-    fetchRentals(1, filters);
+    fetchRentals(1, filters, itemsPerPage);
   };
 
   const clearAllFilters = () => {
@@ -288,20 +323,20 @@ const Rentals: React.FC = () => {
     setFilters(reset);
     setCurrentPage(1);
     saveFiltersToStorage(reset, 1);
-    fetchRentals(1, reset);
+    fetchRentals(1, reset, itemsPerPage);
   };
 
   const handlePageChange = (page: number) => {
     if (page < 1 || page > totalPages || page === currentPage) return;
     saveFiltersToStorage(filters, page);
-    fetchRentals(page, filters);
+    fetchRentals(page, filters, itemsPerPage);
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
   const handleExport = async () => {
     try {
       setExporting(true);
-      const params = buildParams(1, filters);
+      const params = buildParams(1, filters, itemsPerPage);
       delete (params as any).page;
       delete (params as any).limit;
       const { data } = await api.get('/exports/rentals', { params });
@@ -324,8 +359,8 @@ const Rentals: React.FC = () => {
     return pages;
   };
 
-  const rangeStart = totalItems > 0 ? (currentPage - 1) * ITEMS_PER_PAGE + 1 : 0;
-  const rangeEnd = Math.min(currentPage * ITEMS_PER_PAGE, totalItems);
+  const rangeStart = totalItems > 0 ? (currentPage - 1) * itemsPerPage + 1 : 0;
+  const rangeEnd = Math.min(currentPage * itemsPerPage, totalItems);
 
   const renderSortHeader = (label: string, field: SortField, align: 'left' | 'right' | 'center' = 'left', extraClass: string = '') => {
     const isSorted = filters.sort_by === field;
@@ -383,7 +418,15 @@ const Rentals: React.FC = () => {
         {[
           { label: 'Total de Contratos', value: totalItems.toString(), color: 'bg-blue-100 dark:bg-blue-900/20 text-blue-800 dark:text-blue-400', icon: 'sync' },
           { label: 'Aguardando conciliação', value: stats.pendingReconciliationCount.toString(), color: 'bg-amber-100 dark:bg-amber-900/20 text-amber-800 dark:text-amber-400', icon: 'pending_actions' },
-          { label: 'Total Faturado', value: (stats.totalValue ?? stats.monthlyReceivedTotal ?? 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' }), color: 'bg-emerald-100 dark:bg-emerald-900/20 text-emerald-800 dark:text-emerald-400', icon: 'payments' },
+          {
+            label: filters.return_status === 'active' ? 'Total Faturado (Período Atual)' : 'Total Faturado',
+            value: (stats.totalValue ?? stats.monthlyReceivedTotal ?? 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' }),
+            color: 'bg-emerald-100 dark:bg-emerald-900/20 text-emerald-800 dark:text-emerald-400',
+            icon: 'payments',
+            subtext: filters.return_status === 'active' && stats.accumulatedTotalValue && stats.accumulatedTotalValue !== stats.totalValue
+              ? `Acumulado total: ${Number(stats.accumulatedTotalValue).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}`
+              : undefined
+          },
         ].map((stat, i) => (
           <motion.div key={i} initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} transition={{ delay: 0.1 + i * 0.1 }} className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-5 rounded-xl shadow-sm flex items-center gap-4">
             <div className={`w-12 h-12 rounded-full flex items-center justify-center ${stat.color}`}>
@@ -392,6 +435,9 @@ const Rentals: React.FC = () => {
             <div>
               <p className="text-xs font-bold text-slate-500 dark:text-slate-500 uppercase tracking-widest">{stat.label}</p>
               <p className="text-xl font-bold text-slate-900 dark:text-white">{stat.value}</p>
+              {stat.subtext && (
+                <p className="text-[10px] text-slate-400 dark:text-slate-500 font-mono mt-0.5">{stat.subtext}</p>
+              )}
             </div>
           </motion.div>
         ))}
@@ -450,7 +496,7 @@ const Rentals: React.FC = () => {
                 {renderSortHeader('Cliente / Obra', 'client_name')}
                 {renderSortHeader('Equipamento', 'equipment_name')}
                 {renderSortHeader('Período', 'billing_period_end', 'left', 'whitespace-nowrap')}
-                {renderSortHeader('Valor Total', 'total_value', 'right')}
+                {renderSortHeader(filters.return_status === 'active' ? 'Valor (Período Atual)' : 'Valor Total', 'total_value', 'right')}
                 {renderSortHeader('Status', 'billing_status')}
                 <th className="px-6 py-4 text-center">Ações</th>
               </tr>
@@ -476,7 +522,23 @@ const Rentals: React.FC = () => {
                   </motion.tr>
                 ) : (
                   rentals.map((rental, index) => (
-                    <motion.tr key={rental.id} initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.05 + index * 0.03 }} className="hover:bg-slate-50/80 dark:hover:bg-slate-800/80 transition-colors text-sm">
+                    <motion.tr
+                      key={rental.id}
+                      initial={{ opacity: 0 }}
+                      animate={{ opacity: 1 }}
+                      transition={{ delay: 0.05 + index * 0.03 }}
+                      onClick={() => navigate(`/locacoes/editar/${rental.id}`)}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter' || e.key === ' ') {
+                          e.preventDefault();
+                          navigate(`/locacoes/editar/${rental.id}`);
+                        }
+                      }}
+                      tabIndex={0}
+                      role="button"
+                      aria-label={`Editar locação ${rental.invoice_number || rental.client_name}`}
+                      className="hover:bg-slate-50/90 dark:hover:bg-slate-800/90 cursor-pointer transition-colors text-sm focus:outline-none focus:ring-2 focus:ring-inset focus:ring-mustard-500/50"
+                    >
                       <td className="px-6 py-4">
                         <div className="text-xs font-bold text-slate-900 dark:text-white flex items-center gap-2">{rental.client_name}</div>
                         {rental.invoice_number && <span className="px-2 py-0.5 mb-1 bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400 rounded text-[10px] font-mono border border-slate-200 dark:border-slate-700 shrink-0">{rental.invoice_number}</span>}
@@ -497,8 +559,23 @@ const Rentals: React.FC = () => {
                           </div>
                         )}
                       </td>
-                      <td className="px-6 py-4 text-right font-bold text-mustard-500 dark:text-mustard-400">
-                        {Number(rental.total_value).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
+                      <td className="px-6 py-4 text-right">
+                        {filters.return_status === 'active' ? (
+                          <div>
+                            <span className="font-bold text-mustard-500 dark:text-mustard-400 font-mono">
+                              {Number(rental.current_period_value ?? rental.total_value).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
+                            </span>
+                            {Number(rental.accumulated_total_value ?? rental.total_value) > Number(rental.current_period_value ?? rental.total_value) && (
+                              <div className="text-[10px] text-slate-400 dark:text-slate-500 font-mono font-normal mt-0.5" title="Valor total acumulado do contrato">
+                                Acumulado: {Number(rental.accumulated_total_value ?? rental.total_value).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
+                              </div>
+                            )}
+                          </div>
+                        ) : (
+                          <span className="font-bold text-mustard-500 dark:text-mustard-400 font-mono">
+                            {Number(rental.total_value).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
+                          </span>
+                        )}
                       </td>
                       <td className="px-6 py-4">
                         {paidByInvoice[rental.id] ? (
@@ -520,19 +597,28 @@ const Rentals: React.FC = () => {
                           </span>
                         )}
                       </td>
-                      <td className="px-6 py-4 text-center">
+                      <td className="px-6 py-4 text-center" onClick={(e) => e.stopPropagation()}>
                         <div className="flex items-center justify-center gap-2">
                           <button
-                            onClick={() => { setChargeResult(null); setSelectedRental(rental); }}
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setChargeResult(null);
+                              setSelectedRental(rental);
+                            }}
                             className="p-1.5 text-slate-400 hover:text-mustard-500 hover:bg-mustard-50 dark:hover:bg-mustard-500/10 rounded-md transition-all"
                             title="Visualizar Fatura"
+                            aria-label="Visualizar Fatura"
                           >
                             <span className="material-symbols-outlined text-[20px]">visibility</span>
                           </button>
                           <button
-                            onClick={() => navigate(`/locacoes/editar/${rental.id}`)}
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              navigate(`/locacoes/editar/${rental.id}`);
+                            }}
                             className="p-1.5 text-slate-400 dark:text-slate-500 hover:text-blue-600 dark:hover:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-500/10 rounded-md transition-all"
                             title="Editar Locação"
+                            aria-label="Editar Locação"
                           >
                             <span className="material-symbols-outlined text-[20px]">edit</span>
                           </button>
@@ -547,8 +633,28 @@ const Rentals: React.FC = () => {
         </div>
 
         {/* Pagination */}
-        <div className="p-4 border-t border-slate-100 dark:border-slate-800 bg-slate-50/20 dark:bg-slate-800/20 flex justify-between items-center text-xs text-slate-500 dark:text-slate-500 font-medium">
-          <span>{totalItems > 0 ? `Mostrando ${rangeStart}–${rangeEnd} de ${totalItems} locações` : 'Nenhuma locação'}</span>
+        <div className="p-4 border-t border-slate-100 dark:border-slate-800 bg-slate-50/20 dark:bg-slate-800/20 flex flex-col sm:flex-row justify-between items-center gap-4 text-xs text-slate-500 dark:text-slate-500 font-medium">
+          <div className="flex flex-wrap items-center gap-4">
+            <span>{totalItems > 0 ? `Mostrando ${rangeStart}–${rangeEnd} de ${totalItems} locações` : 'Nenhuma locação'}</span>
+            <div className="flex items-center gap-2">
+              <label htmlFor="itemsPerPageSelect" className="text-slate-500 dark:text-slate-400 font-normal">
+                Exibir:
+              </label>
+              <select
+                id="itemsPerPageSelect"
+                value={itemsPerPage}
+                onChange={(e) => handleLimitChange(Number(e.target.value) as LimitOption)}
+                aria-label="Itens por página"
+                className="px-2.5 py-1 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg text-xs font-semibold text-slate-700 dark:text-slate-200 focus:outline-none focus:ring-2 focus:ring-mustard-500/30 cursor-pointer shadow-sm"
+              >
+                {LIMIT_OPTIONS.map((opt) => (
+                  <option key={opt} value={opt}>
+                    {opt} por página
+                  </option>
+                ))}
+              </select>
+            </div>
+          </div>
           {totalPages > 1 && (
             <div className="flex gap-1">
               <button onClick={() => handlePageChange(currentPage - 1)} disabled={currentPage === 1} className={`px-2 py-1 rounded border transition-colors ${currentPage === 1 ? 'border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-400 dark:text-slate-600 cursor-not-allowed' : 'border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 hover:border-slate-300 dark:hover:border-slate-600 text-slate-600 dark:text-slate-300'}`}>Anterior</button>

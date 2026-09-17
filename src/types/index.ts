@@ -322,6 +322,8 @@ export interface RentalInvoice {
   cost_third_party: number;
   cost_training: number;
   total_value: number;
+  current_period_value?: number;
+  accumulated_total_value?: number;
   due_date: string;
   payment_method: string;
   billing_method?: 'ASAAS' | 'MANUAL';

@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useCallback } from 'react';
+import React, { useEffect, useState, useCallback, useRef } from 'react';
 import api from '../../../services/api';
 import { financeiroService } from '../../../services/financeiro';
 import { getApiErrorMessage } from '../../../utils/apiError';
@@ -12,6 +12,65 @@ import type { Client, StatementItem, BillStatus } from '../../../types';
 const STATUS_OPTIONS: BillStatus[] = ['Pendente', 'Atrasado', 'Recebido', 'Divergente', 'No prazo'];
 const ORIGIN_OPTIONS = ['MANUAL', 'NFE', 'ASAAS'];
 const ITEMS_PER_PAGE = 20;
+
+const STORAGE_KEY = 'c3loc_contas_pagar_filters';
+const PAGE_STORAGE_KEY = 'c3loc_contas_pagar_page';
+
+export type ContasPagarSortField = 'is_reconciled' | 'due_date' | 'counterparty_name' | 'origin' | 'gross_value' | 'status';
+export type SortOrder = 'asc' | 'desc';
+
+interface ContasPagarFiltersStorage {
+  selectedClientId: string;
+  searchTerm: string;
+  status: string;
+  origin: string;
+  dateFrom: string;
+  dateTo: string;
+  groupNfe: boolean;
+  sortBy: ContasPagarSortField;
+  sortOrder: SortOrder;
+}
+
+const defaultPagarFilters: ContasPagarFiltersStorage = {
+  selectedClientId: '',
+  searchTerm: '',
+  status: '',
+  origin: '',
+  dateFrom: '',
+  dateTo: '',
+  groupNfe: true,
+  sortBy: 'due_date',
+  sortOrder: 'desc',
+};
+
+const getInitialStoredFilters = (): ContasPagarFiltersStorage => {
+  try {
+    const saved = localStorage.getItem(STORAGE_KEY);
+    if (saved) {
+      const parsed = JSON.parse(saved);
+      return {
+        ...defaultPagarFilters,
+        ...parsed,
+      };
+    }
+  } catch (e) {
+    console.warn('Erro ao carregar filtros de contas a pagar do localStorage:', e);
+  }
+  return defaultPagarFilters;
+};
+
+const getInitialPage = (): number => {
+  try {
+    const saved = localStorage.getItem(PAGE_STORAGE_KEY);
+    if (saved) {
+      const parsed = parseInt(saved, 10);
+      if (!isNaN(parsed) && parsed > 0) return parsed;
+    }
+  } catch (e) {
+    console.warn('Erro ao carregar página de contas a pagar do localStorage:', e);
+  }
+  return 1;
+};
 
 const getBoletoUrls = (urlField: any): string[] => {
   if (!urlField) return [];
@@ -55,26 +114,31 @@ const sourceBadge = (item: StatementItem) => {
 };
 
 const ContasPagarTab: React.FC = () => {
+  const [initialFilters] = useState(getInitialStoredFilters);
   const [clients, setClients] = useState<Client[]>([]);
-  const [selectedClientId, setSelectedClientId] = useState('');
-  const [searchTerm, setSearchTerm] = useState('');
-  const [status, setStatus] = useState('');
-  const [origin, setOrigin] = useState('');
-  const [dateFrom, setDateFrom] = useState('');
-  const [dateTo, setDateTo] = useState('');
-  const [groupNfe, setGroupNfe] = useState<boolean>(true);
+  const [selectedClientId, setSelectedClientId] = useState(initialFilters.selectedClientId);
+  const [searchTerm, setSearchTerm] = useState(initialFilters.searchTerm);
+  const [status, setStatus] = useState(initialFilters.status);
+  const [origin, setOrigin] = useState(initialFilters.origin);
+  const [dateFrom, setDateFrom] = useState(initialFilters.dateFrom);
+  const [dateTo, setDateTo] = useState(initialFilters.dateTo);
+  const [groupNfe, setGroupNfe] = useState<boolean>(initialFilters.groupNfe);
+  const [sortBy, setSortBy] = useState<ContasPagarSortField>(initialFilters.sortBy);
+  const [sortOrder, setSortOrder] = useState<SortOrder>(initialFilters.sortOrder);
 
   const [items, setItems] = useState<StatementItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  const [currentPage, setCurrentPage] = useState(1);
+  const [currentPage, setCurrentPage] = useState<number>(getInitialPage);
   const [totalPages, setTotalPages] = useState(1);
   const [totalItems, setTotalItems] = useState(0);
 
   const [isLancamentoModalOpen, setIsLancamentoModalOpen] = useState(false);
   const [isXmlModalOpen, setIsXmlModalOpen] = useState(false);
   const [selectedBill, setSelectedBill] = useState<StatementItem | null>(null);
+
+  const isMountedRef = useRef(false);
 
   useEffect(() => {
     const fetchClients = async () => {
@@ -103,6 +167,8 @@ const ContasPagarTab: React.FC = () => {
         group_nfe: groupNfe,
         page: currentPage,
         limit: ITEMS_PER_PAGE,
+        sort_by: sortBy,
+        sort_order: sortOrder,
       });
       const itemsList = Array.isArray(data) ? data : (Array.isArray(data?.data) ? data.data : []);
       setItems(itemsList);
@@ -113,15 +179,41 @@ const ContasPagarTab: React.FC = () => {
     } finally {
       setLoading(false);
     }
-  }, [selectedClientId, searchTerm, status, origin, dateFrom, dateTo, groupNfe, currentPage]);
+  }, [selectedClientId, searchTerm, status, origin, dateFrom, dateTo, groupNfe, currentPage, sortBy, sortOrder]);
 
   useEffect(() => {
     fetchContasPagar();
   }, [fetchContasPagar]);
 
   useEffect(() => {
+    if (!isMountedRef.current) {
+      isMountedRef.current = true;
+      return;
+    }
     setCurrentPage(1);
   }, [selectedClientId, searchTerm, status, origin, dateFrom, dateTo, groupNfe]);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem(
+        STORAGE_KEY,
+        JSON.stringify({
+          selectedClientId,
+          searchTerm,
+          status,
+          origin,
+          dateFrom,
+          dateTo,
+          groupNfe,
+          sortBy,
+          sortOrder,
+        })
+      );
+      localStorage.setItem(PAGE_STORAGE_KEY, String(currentPage));
+    } catch (e) {
+      console.warn('Erro ao salvar filtros de contas a pagar no localStorage:', e);
+    }
+  }, [selectedClientId, searchTerm, status, origin, dateFrom, dateTo, groupNfe, sortBy, sortOrder, currentPage]);
 
   const handleClearFilters = () => {
     setSelectedClientId('');
@@ -130,13 +222,69 @@ const ContasPagarTab: React.FC = () => {
     setOrigin('');
     setDateFrom('');
     setDateTo('');
+    setGroupNfe(true);
+    setSortBy('due_date');
+    setSortOrder('desc');
+    setCurrentPage(1);
+  };
+
+  const handleSort = (field: ContasPagarSortField) => {
+    let newOrder: SortOrder = 'desc';
+    if (sortBy === field) {
+      newOrder = sortOrder === 'asc' ? 'desc' : 'asc';
+    } else {
+      newOrder = (field === 'gross_value' || field === 'due_date') ? 'desc' : 'asc';
+    }
+
+    setSortBy(field);
+    setSortOrder(newOrder);
+    setCurrentPage(1);
+  };
+
+  const renderSortHeader = (
+    label: string,
+    field: ContasPagarSortField,
+    align: 'left' | 'right' | 'center' = 'left',
+    extraClass: string = ''
+  ) => {
+    const isSorted = sortBy === field;
+    const isAsc = sortOrder === 'asc';
+
+    return (
+      <th
+        onClick={() => handleSort(field)}
+        className={`px-6 py-3 cursor-pointer select-none group transition-colors text-[11px] font-bold uppercase tracking-widest ${
+          align === 'right' ? 'text-right' : align === 'center' ? 'text-center' : 'text-left'
+        } ${
+          isSorted
+            ? 'text-rose-600 dark:text-rose-400 font-extrabold'
+            : 'text-slate-400 dark:text-slate-500 hover:text-slate-700 dark:hover:text-slate-300'
+        } ${extraClass}`}
+        title={`Clique para ordenar por ${label} (${isSorted && isAsc ? 'decrescente' : 'crescente'})`}
+      >
+        <div className={`inline-flex items-center gap-1.5 ${align === 'right' ? 'justify-end w-full' : align === 'center' ? 'justify-center w-full' : ''}`}>
+          <span>{label}</span>
+          <span
+            className={`material-symbols-outlined text-[16px] transition-all transform ${
+              isSorted
+                ? 'text-rose-500 dark:text-rose-400 opacity-100 scale-110'
+                : 'text-slate-300 dark:text-slate-600 opacity-0 group-hover:opacity-100'
+            }`}
+          >
+            {isSorted
+              ? (isAsc ? 'keyboard_arrow_up' : 'keyboard_arrow_down')
+              : 'unfold_more'}
+          </span>
+        </div>
+      </th>
+    );
   };
 
   const handleBillCreated = () => {
     fetchContasPagar();
   };
 
-  const hasActiveFilters = Boolean(selectedClientId || searchTerm || status || origin || dateFrom || dateTo);
+  const hasActiveFilters = Boolean(selectedClientId || searchTerm || status || origin || dateFrom || dateTo || sortBy !== 'due_date' || sortOrder !== 'desc' || !groupNfe);
 
   return (
     <div className="space-y-6">
@@ -300,13 +448,13 @@ const ContasPagarTab: React.FC = () => {
             <table className="w-full text-sm">
               <thead>
                 <tr className="bg-slate-50 dark:bg-slate-800/50 text-left">
-                  <th className="px-6 py-3 text-[11px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-widest text-center">Conciliado</th>
-                  <th className="px-6 py-3 text-[11px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-widest">Vencimento</th>
-                  <th className="px-6 py-3 text-[11px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-widest">Fornecedor / Documento</th>
-                  <th className="px-6 py-3 text-[11px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-widest">Origem</th>
-                  <th className="px-6 py-3 text-[11px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-widest text-right">Valor</th>
-                  <th className="px-6 py-3 text-[11px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-widest">Status</th>
-                  <th className="px-6 py-3 text-[11px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-widest text-center">Ações</th>
+                  {renderSortHeader('Conciliado', 'is_reconciled', 'center')}
+                  {renderSortHeader('Vencimento', 'due_date', 'left')}
+                  {renderSortHeader('Fornecedor / Documento', 'counterparty_name', 'left')}
+                  {renderSortHeader('Origem', 'origin', 'left')}
+                  {renderSortHeader('Valor', 'gross_value', 'right')}
+                  {renderSortHeader('Status', 'status', 'left')}
+                  <th className="px-6 py-3 text-[11px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-widest text-center select-none">Ações</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100 dark:divide-slate-800">

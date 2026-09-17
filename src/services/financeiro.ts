@@ -36,6 +36,8 @@ export interface ExtratoBancarioFilters {
   page?: number;
   limit?: number;
   group_nfe?: boolean;
+  sort_by?: string;
+  sort_order?: 'asc' | 'desc';
 }
 
 export interface AsaasScoreInfo {
