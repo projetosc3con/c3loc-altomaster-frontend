@@ -21,6 +21,7 @@ import { saveAs } from 'file-saver';
 import { formatDate } from '../utils/date';
 import RentalExtensionModal from '../components/RentalExtensionModal';
 import BillDetailsModal from '../components/financeiro/BillDetailsModal';
+import LancamentoManualModal from '../components/financeiro/LancamentoManualModal';
 import { ReturnChecklistModal } from '../components/rentals/ReturnChecklistModal';
 
 type NfseRecord = any;
@@ -222,7 +223,7 @@ const RentalEdit: React.FC = () => {
   const navigate = useNavigate();
   const { user, profile } = useAuth();
 
-  const [activeTab, setActiveTab] = useState<'equipments' | 'billing' | 'contract' | 'service_orders'>('equipments');
+  const [activeTab, setActiveTab] = useState<'equipments' | 'billing' | 'contract' | 'service_orders' | 'payable_bills'>('equipments');
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -313,6 +314,42 @@ const RentalEdit: React.FC = () => {
     }
   };
 
+  // Contas a Pagar da Locação (Financeiro / Bills - Payables)
+  const [payableBills, setPayableBills] = useState<StatementItem[]>([]);
+  const [payableBillsLoading, setPayableBillsLoading] = useState(false);
+  const [selectedPayableBill, setSelectedPayableBill] = useState<StatementItem | null>(null);
+  const [isPayableDetailsModalOpen, setIsPayableDetailsModalOpen] = useState(false);
+  const [isNewPayableModalOpen, setIsNewPayableModalOpen] = useState(false);
+  const [billToDelete, setBillToDelete] = useState<StatementItem | null>(null);
+  const [deletingBill, setDeletingBill] = useState(false);
+
+  const loadPayableBills = async (rentalId: string) => {
+    try {
+      setPayableBillsLoading(true);
+      const bills = await financeiroService.buscarContasPagarLocacao(rentalId);
+      setPayableBills(bills);
+    } catch (err) {
+      console.error('Erro ao buscar contas a pagar da locação:', err);
+    } finally {
+      setPayableBillsLoading(false);
+    }
+  };
+
+  const handleDeleteBill = async () => {
+    if (!billToDelete) return;
+    try {
+      setDeletingBill(true);
+      await financeiroService.excluirLancamento(billToDelete.id);
+      showToast('success', 'Conta a Pagar Excluída', 'O lançamento foi excluído com sucesso.');
+      setBillToDelete(null);
+      if (id) loadPayableBills(id);
+    } catch (err: any) {
+      showToast('error', 'Erro ao Excluir', getApiErrorMessage(err));
+    } finally {
+      setDeletingBill(false);
+    }
+  };
+
   const userRole = profile?.access_level || (user as any)?.role;
   const canDeleteRental = userRole === 'Administrador' || userRole === 'Diretoria';
 
@@ -398,6 +435,7 @@ const RentalEdit: React.FC = () => {
         if (id) {
           loadRentalDeal(id);
           loadRentalBills(id);
+          loadPayableBills(id);
         }
       } catch (err: any) {
         console.error('Erro ao buscar dados:', err);
@@ -438,6 +476,33 @@ const RentalEdit: React.FC = () => {
       total_value
     };
   }, [equipmentItems]);
+
+  const payableKpis = useMemo(() => {
+    let totalGross = 0;
+    let totalPaid = 0;
+    let totalPending = 0;
+    let paidCount = 0;
+    let pendingCount = 0;
+    for (const b of payableBills) {
+      const val = Number(b.gross_value) || 0;
+      totalGross += val;
+      if (isPaidStatus(b.status || '')) {
+        totalPaid += val;
+        paidCount++;
+      } else {
+        totalPending += val;
+        pendingCount++;
+      }
+    }
+    return {
+      totalGross,
+      totalPaid,
+      totalPending,
+      paidCount,
+      pendingCount,
+      totalCount: payableBills.length
+    };
+  }, [payableBills]);
 
   const canExtend = useMemo(() => {
     // Visível apenas para faturas sem return_date
@@ -515,7 +580,12 @@ const RentalEdit: React.FC = () => {
       }
 
       await loadRentalDeal(id);
-      if (id) await loadRentalBills(id);
+      if (id) {
+        await Promise.all([
+          loadRentalBills(id),
+          loadPayableBills(id)
+        ]);
+      }
     } catch (err: any) {
       console.error('Erro ao recarregar dados da locação:', err);
     }
@@ -1035,6 +1105,23 @@ const RentalEdit: React.FC = () => {
           {serviceOrders.length > 0 && (
             <span className="px-2 py-0.5 text-[10px] font-bold rounded-full bg-mustard-100 dark:bg-mustard-500/20 text-mustard-700 dark:text-mustard-400 font-mono">
               {serviceOrders.length}
+            </span>
+          )}
+        </button>
+
+        <button
+          type="button"
+          onClick={() => setActiveTab('payable_bills')}
+          className={`pb-4 text-sm font-bold flex items-center gap-2 border-b-2 transition-all ${activeTab === 'payable_bills'
+            ? 'border-mustard-500 text-mustard-600 dark:text-mustard-400'
+            : 'border-transparent text-slate-400 hover:text-slate-600 dark:hover:text-slate-300'
+            }`}
+        >
+          <span className="material-symbols-outlined text-lg">trending_down</span>
+          Contas a Pagar
+          {payableBills.length > 0 && (
+            <span className="px-2 py-0.5 text-[10px] font-bold rounded-full bg-rose-100 dark:bg-rose-500/20 text-rose-700 dark:text-rose-400 font-mono">
+              {payableBills.length}
             </span>
           )}
         </button>
@@ -1857,6 +1944,286 @@ const RentalEdit: React.FC = () => {
               )}
             </div>
           )}
+
+          {activeTab === 'payable_bills' && (
+            <div className="space-y-6">
+              {/* Header card da aba */}
+              <div className="flex flex-wrap items-center justify-between gap-4 bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 p-6 shadow-sm">
+                <div className="flex items-center gap-3.5">
+                  <div className="w-12 h-12 rounded-2xl bg-rose-50 dark:bg-rose-500/10 text-rose-600 dark:text-rose-400 flex items-center justify-center shrink-0 border border-rose-100 dark:border-rose-500/20">
+                    <span className="material-symbols-outlined text-2xl">trending_down</span>
+                  </div>
+                  <div>
+                    <h3 className="text-base font-bold text-slate-900 dark:text-white flex items-center gap-2">
+                      <span>Contas a Pagar da Locação</span>
+                      {payableBills.length > 0 && (
+                        <span className="px-2.5 py-0.5 text-[10px] font-bold rounded-full bg-rose-100 dark:bg-rose-500/20 text-rose-700 dark:text-rose-400 font-mono">
+                          {payableBills.length}
+                        </span>
+                      )}
+                    </h3>
+                    <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
+                      Despesas operacionais, fretes, fornecedores e manutenções vinculados a esta locação.
+                    </p>
+                  </div>
+                </div>
+
+                <div className="flex items-center gap-2.5">
+                  <button
+                    type="button"
+                    onClick={() => id && loadPayableBills(id)}
+                    disabled={payableBillsLoading}
+                    className="p-2.5 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 rounded-xl hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors border border-slate-200/80 dark:border-slate-700/80"
+                    title="Atualizar lista de contas a pagar"
+                  >
+                    <span className={`material-symbols-outlined text-[18px] ${payableBillsLoading ? 'animate-spin' : ''}`}>sync</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => setIsNewPayableModalOpen(true)}
+                    className="px-4 py-2.5 bg-rose-600 hover:bg-rose-700 active:scale-95 text-white rounded-xl text-xs font-bold uppercase tracking-wider transition-all flex items-center gap-2 shadow-lg shadow-rose-600/20"
+                  >
+                    <span className="material-symbols-outlined text-[18px]">add_circle</span>
+                    <span>Nova Conta a Pagar</span>
+                  </button>
+                </div>
+              </div>
+
+              {/* Bento KPI Summary Cards */}
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                {/* Total Geral */}
+                <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 p-4 shadow-sm relative overflow-hidden">
+                  <div className="flex items-center justify-between">
+                    <span className="text-[11px] font-bold uppercase tracking-wider text-slate-400 dark:text-slate-500">
+                      Total a Pagar
+                    </span>
+                    <div className="w-8 h-8 rounded-xl bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 flex items-center justify-center">
+                      <span className="material-symbols-outlined text-base">payments</span>
+                    </div>
+                  </div>
+                  <p className="text-2xl font-black text-slate-900 dark:text-white font-mono mt-2">
+                    {formatCurrency(payableKpis.totalGross)}
+                  </p>
+                  <p className="text-xs text-slate-400 dark:text-slate-500 mt-1 font-medium">
+                    {payableKpis.totalCount} {payableKpis.totalCount === 1 ? 'lançamento registrado' : 'lançamentos registrados'}
+                  </p>
+                </div>
+
+                {/* Total Pago / Liquidado */}
+                <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 p-4 shadow-sm relative overflow-hidden">
+                  <div className="flex items-center justify-between">
+                    <span className="text-[11px] font-bold uppercase tracking-wider text-emerald-600 dark:text-emerald-400">
+                      Pago / Liquidado
+                    </span>
+                    <div className="w-8 h-8 rounded-xl bg-emerald-50 dark:bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 flex items-center justify-center">
+                      <span className="material-symbols-outlined text-base">check_circle</span>
+                    </div>
+                  </div>
+                  <p className="text-2xl font-black text-emerald-600 dark:text-emerald-400 font-mono mt-2">
+                    {formatCurrency(payableKpis.totalPaid)}
+                  </p>
+                  <p className="text-xs text-slate-400 dark:text-slate-500 mt-1 font-medium">
+                    {payableKpis.paidCount} {payableKpis.paidCount === 1 ? 'conta quitada' : 'contas quitadas'}
+                  </p>
+                </div>
+
+                {/* Total Pendente */}
+                <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 p-4 shadow-sm relative overflow-hidden">
+                  <div className="flex items-center justify-between">
+                    <span className="text-[11px] font-bold uppercase tracking-wider text-amber-600 dark:text-amber-400">
+                      Em Aberto / Pendente
+                    </span>
+                    <div className="w-8 h-8 rounded-xl bg-amber-50 dark:bg-amber-500/10 text-amber-600 dark:text-amber-400 flex items-center justify-center">
+                      <span className="material-symbols-outlined text-base">schedule</span>
+                    </div>
+                  </div>
+                  <p className="text-2xl font-black text-amber-600 dark:text-amber-400 font-mono mt-2">
+                    {formatCurrency(payableKpis.totalPending)}
+                  </p>
+                  <p className="text-xs text-slate-400 dark:text-slate-500 mt-1 font-medium">
+                    {payableKpis.pendingCount} {payableKpis.pendingCount === 1 ? 'pendência' : 'pendências'}
+                  </p>
+                </div>
+              </div>
+
+              {/* Tabela ou Estado Vazio */}
+              {payableBillsLoading ? (
+                <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 p-12 text-center shadow-sm">
+                  <div className="w-7 h-7 border-2 border-rose-500 border-t-transparent rounded-full animate-spin mx-auto mb-2" />
+                  <span className="text-xs text-slate-500">Carregando contas a pagar da locação...</span>
+                </div>
+              ) : payableBills.length === 0 ? (
+                <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 p-12 text-center space-y-3 shadow-sm">
+                  <div className="w-14 h-14 rounded-2xl bg-rose-50 dark:bg-rose-500/10 text-rose-600 dark:text-rose-400 flex items-center justify-center mx-auto">
+                    <span className="material-symbols-outlined text-3xl">trending_down</span>
+                  </div>
+                  <h4 className="text-base font-bold text-slate-800 dark:text-slate-200">
+                    Nenhuma conta a pagar vinculada
+                  </h4>
+                  <p className="text-xs text-slate-400 dark:text-slate-500 max-w-md mx-auto">
+                    Você pode lançar despesas de transporte, fornecedores de peças, terceiros ou manutenções vinculadas a esta locação.
+                  </p>
+                  <div className="pt-2">
+                    <button
+                      type="button"
+                      onClick={() => setIsNewPayableModalOpen(true)}
+                      className="px-5 py-2.5 bg-rose-600 hover:bg-rose-700 active:scale-95 text-white rounded-xl text-xs font-bold uppercase tracking-wider transition-all inline-flex items-center gap-2 shadow-lg shadow-rose-600/20"
+                    >
+                      <span className="material-symbols-outlined text-[18px]">add</span>
+                      Registrar Primeira Conta a Pagar
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 overflow-hidden shadow-sm">
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-left text-xs">
+                      <thead>
+                        <tr className="bg-slate-50 dark:bg-slate-800/60 border-b border-slate-200 dark:border-slate-800">
+                          <th className="px-6 py-3.5 font-bold text-slate-400 dark:text-slate-500 uppercase tracking-widest text-[10px]">Fornecedor / Favorecido</th>
+                          <th className="px-6 py-3.5 font-bold text-slate-400 dark:text-slate-500 uppercase tracking-widest text-[10px]">Descrição / Doc</th>
+                          <th className="px-6 py-3.5 font-bold text-slate-400 dark:text-slate-500 uppercase tracking-widest text-[10px]">Vencimento</th>
+                          <th className="px-6 py-3.5 font-bold text-slate-400 dark:text-slate-500 uppercase tracking-widest text-[10px]">Valor</th>
+                          <th className="px-6 py-3.5 font-bold text-slate-400 dark:text-slate-500 uppercase tracking-widest text-[10px]">Status</th>
+                          <th className="px-6 py-3.5 font-bold text-slate-400 dark:text-slate-500 uppercase tracking-widest text-[10px]">Anexo</th>
+                          <th className="px-6 py-3.5 font-bold text-slate-400 dark:text-slate-500 uppercase tracking-widest text-[10px] text-right">Ações</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
+                        {payableBills.map((bill) => {
+                          const isPaid = isPaidStatus(bill.status || '');
+                          const rawSnap = (bill.raw as any)?.bank_raw_snapshot || {};
+                          const rawSlip = bill.bank_slip_url || rawSnap.bank_slip_url;
+                          const slipUrls = Array.isArray(rawSlip)
+                            ? rawSlip.filter(Boolean)
+                            : (typeof rawSlip === 'string' && rawSlip.trim() ? [rawSlip.trim()] : []);
+                          const firstSlip = slipUrls[0] || null;
+                          const counterparty = bill.counterparty_name || bill.client_name || bill.raw?.client?.company_name || 'Fornecedor não especificado';
+                          const clientCnpj = bill.raw?.client?.cnpj;
+                          const hasBarcode = Boolean(bill.raw?.barcode);
+
+                          return (
+                            <tr key={bill.id} className="hover:bg-slate-50/50 dark:hover:bg-slate-800/40 transition-colors">
+                              {/* Fornecedor */}
+                              <td className="px-6 py-4">
+                                <div className="flex items-center gap-2">
+                                  <div className="w-8 h-8 rounded-xl bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 flex items-center justify-center shrink-0">
+                                    <span className="material-symbols-outlined text-[18px]">business</span>
+                                  </div>
+                                  <div>
+                                    <span className="font-bold text-slate-800 dark:text-slate-200 block">
+                                      {counterparty}
+                                    </span>
+                                    {clientCnpj && (
+                                      <span className="text-[10px] text-slate-400 font-mono">
+                                        CNPJ: {clientCnpj}
+                                      </span>
+                                    )}
+                                  </div>
+                                </div>
+                              </td>
+
+                              {/* Descrição / Doc */}
+                              <td className="px-6 py-4 max-w-[200px]">
+                                <span className="font-medium text-slate-700 dark:text-slate-300 block truncate" title={bill.description || ''}>
+                                  {bill.description || 'Lançamento avulso'}
+                                </span>
+                                {bill.invoice_number ? (
+                                  <span className="inline-flex items-center gap-1 text-[10px] font-mono text-slate-400 dark:text-slate-500 mt-0.5">
+                                    <span className="material-symbols-outlined text-[11px]">tag</span>
+                                    Doc: {bill.invoice_number}
+                                  </span>
+                                ) : hasBarcode ? (
+                                  <span className="inline-flex items-center gap-1 text-[10px] font-mono text-slate-400 dark:text-slate-500 mt-0.5">
+                                    <span className="material-symbols-outlined text-[11px]">barcode</span>
+                                    Boleto com código
+                                  </span>
+                                ) : null}
+                              </td>
+
+                              {/* Vencimento */}
+                              <td className="px-6 py-4 text-slate-600 dark:text-slate-400 font-medium whitespace-nowrap">
+                                {bill.due_date ? formatDate(bill.due_date) : '-'}
+                              </td>
+
+                              {/* Valor */}
+                              <td className="px-6 py-4 whitespace-nowrap">
+                                <span className="font-mono font-bold text-rose-600 dark:text-rose-400 text-sm">
+                                  {formatCurrency(bill.gross_value)}
+                                </span>
+                              </td>
+
+                              {/* Status */}
+                              <td className="px-6 py-4 whitespace-nowrap">
+                                <span
+                                  className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-bold ${isPaid
+                                    ? 'bg-emerald-100 dark:bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-500/20'
+                                    : bill.status === 'Atrasado'
+                                      ? 'bg-rose-100 dark:bg-rose-500/10 text-rose-700 dark:text-rose-400 border border-rose-200 dark:border-rose-500/20'
+                                      : 'bg-amber-100 dark:bg-amber-500/10 text-amber-700 dark:text-amber-400 border border-amber-200 dark:border-amber-500/20'
+                                    }`}
+                                >
+                                  <span className="material-symbols-outlined text-[12px]">
+                                    {isPaid ? 'check_circle' : bill.status === 'Atrasado' ? 'warning' : 'schedule'}
+                                  </span>
+                                  {bill.status || 'Pendente'}
+                                </span>
+                              </td>
+
+                              {/* Anexo Boleto / Doc */}
+                              <td className="px-6 py-4 whitespace-nowrap">
+                                {firstSlip ? (
+                                  <a
+                                    href={firstSlip}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    className="inline-flex items-center gap-1 px-2.5 py-1 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 rounded-lg text-[11px] font-semibold transition-all border border-slate-200 dark:border-slate-700"
+                                    title="Abrir anexo em nova aba"
+                                  >
+                                    <span className="material-symbols-outlined text-[14px] text-rose-500">picture_as_pdf</span>
+                                    <span>{slipUrls.length > 1 ? `${slipUrls.length} anexos` : 'Boleto'}</span>
+                                  </a>
+                                ) : (
+                                  <span className="text-slate-300 dark:text-slate-600 text-xs">-</span>
+                                )}
+                              </td>
+
+                              {/* Ações */}
+                              <td className="px-6 py-4 whitespace-nowrap text-right">
+                                <div className="inline-flex items-center gap-1.5 justify-end">
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      setSelectedPayableBill(bill);
+                                      setIsPayableDetailsModalOpen(true);
+                                    }}
+                                    className="p-1.5 text-slate-500 dark:text-slate-400 hover:text-mustard-600 dark:hover:text-mustard-400 hover:bg-mustard-50 dark:hover:bg-mustard-500/10 rounded-xl transition-all border border-slate-200/80 dark:border-slate-700"
+                                    title="Ver detalhes da conta a pagar"
+                                  >
+                                    <span className="material-symbols-outlined text-[16px]">visibility</span>
+                                  </button>
+
+                                  <button
+                                    type="button"
+                                    onClick={() => setBillToDelete(bill)}
+                                    className="p-1.5 text-slate-500 dark:text-slate-400 hover:text-rose-600 dark:hover:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-500/10 rounded-xl transition-all border border-slate-200/80 dark:border-slate-700"
+                                    title="Excluir conta a pagar"
+                                  >
+                                    <span className="material-symbols-outlined text-[16px]">delete</span>
+                                  </button>
+                                </div>
+                              </td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
         </div>
 
         {/* Right Column: Invoicing Summary & Actions */}
@@ -2555,6 +2922,120 @@ const RentalEdit: React.FC = () => {
           }
         }}
       />
+
+      {/* Modal de Detalhes da Conta a Pagar */}
+      <BillDetailsModal
+        isOpen={isPayableDetailsModalOpen}
+        item={selectedPayableBill}
+        defaultNotes={generalData.notes}
+        onClose={() => {
+          setIsPayableDetailsModalOpen(false);
+          setSelectedPayableBill(null);
+        }}
+        onUpdated={(updated) => {
+          setPayableBills((prev) => prev.map((b) => (b.id === updated.id ? updated : b)));
+          if (id) loadPayableBills(id);
+        }}
+      />
+
+      {/* Modal de Cadastro de Nova Conta a Pagar Vinculada à Locação */}
+      <LancamentoManualModal
+        isOpen={isNewPayableModalOpen}
+        type="payable"
+        rentalInvoiceId={id}
+        onClose={() => setIsNewPayableModalOpen(false)}
+        onCreated={(_newBill) => {
+          showToast('success', 'Conta a Pagar Registrada', 'Lançamento de despesa vinculado à locação com sucesso!');
+          if (id) loadPayableBills(id);
+        }}
+      />
+
+      {/* Modal de Confirmação de Exclusão de Conta a Pagar */}
+      <AnimatePresence>
+        {billToDelete && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              onClick={() => !deletingBill && setBillToDelete(null)}
+              className="absolute inset-0 bg-slate-900/60 backdrop-blur-sm"
+            />
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95, y: 10 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.95, y: 10 }}
+              className="relative w-full max-w-md bg-white dark:bg-slate-900 rounded-3xl shadow-2xl border border-rose-200 dark:border-rose-900/40 overflow-hidden z-10 p-6 space-y-4"
+            >
+              <div className="flex items-center gap-3 pb-3 border-b border-slate-100 dark:border-slate-800">
+                <div className="w-11 h-11 rounded-2xl bg-rose-50 dark:bg-rose-500/10 text-rose-600 dark:text-rose-400 flex items-center justify-center shrink-0">
+                  <span className="material-symbols-outlined text-2xl">delete_forever</span>
+                </div>
+                <div>
+                  <h3 className="text-base font-bold text-slate-900 dark:text-white">
+                    Excluir Conta a Pagar
+                  </h3>
+                  <p className="text-xs text-slate-500 dark:text-slate-400">
+                    Esta ação removerá o lançamento financeiro.
+                  </p>
+                </div>
+              </div>
+
+              <div className="p-3.5 bg-slate-50 dark:bg-slate-800/40 rounded-2xl space-y-1.5 text-xs text-slate-600 dark:text-slate-400 border border-slate-100 dark:border-slate-800">
+                <div className="flex justify-between items-center">
+                  <span>Favorecido:</span>
+                  <span className="font-bold text-slate-900 dark:text-white truncate max-w-[200px]">
+                    {billToDelete.counterparty_name || billToDelete.client_name || billToDelete.raw?.client?.company_name || 'Não informado'}
+                  </span>
+                </div>
+                <div className="flex justify-between items-center">
+                  <span>Valor:</span>
+                  <span className="font-mono font-bold text-rose-600 dark:text-rose-400">
+                    {formatCurrency(billToDelete.gross_value)}
+                  </span>
+                </div>
+                {billToDelete.due_date && (
+                  <div className="flex justify-between items-center">
+                    <span>Vencimento:</span>
+                    <span className="font-semibold text-slate-800 dark:text-slate-200">
+                      {formatDate(billToDelete.due_date)}
+                    </span>
+                  </div>
+                )}
+              </div>
+
+              <div className="flex justify-end gap-3 pt-2">
+                <button
+                  type="button"
+                  disabled={deletingBill}
+                  onClick={() => setBillToDelete(null)}
+                  className="px-4 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 text-xs font-bold transition-all disabled:opacity-50"
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="button"
+                  disabled={deletingBill}
+                  onClick={handleDeleteBill}
+                  className="px-5 py-2.5 bg-rose-600 hover:bg-rose-700 text-white rounded-xl text-xs font-bold uppercase tracking-wider transition-all flex items-center gap-2 shadow-lg shadow-rose-600/20 disabled:opacity-50"
+                >
+                  {deletingBill ? (
+                    <>
+                      <div className="w-3.5 h-3.5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                      <span>Excluindo...</span>
+                    </>
+                  ) : (
+                    <>
+                      <span className="material-symbols-outlined text-[16px]">delete</span>
+                      <span>Sim, Excluir</span>
+                    </>
+                  )}
+                </button>
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
 
       {/* Modal de Checklist de Retorno de Equipamentos */}
       <ReturnChecklistModal

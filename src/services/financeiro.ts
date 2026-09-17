@@ -205,6 +205,17 @@ export const financeiroService = {
     return enrichedBills;
   },
 
+  buscarContasPagarLocacao: async (rentalInvoiceId: string): Promise<StatementItem[]> => {
+    const { data } = await api.get<any>('/bills', {
+      params: { rental_invoice_id: rentalInvoiceId, type: 'payable', group_nfe: false, limit: 100 }
+    });
+    const items: StatementItem[] = Array.isArray(data) ? data : (data?.data || []);
+    return items.filter((item) => {
+      const isRental = item.rental_invoice_id === rentalInvoiceId || (item.raw as any)?.rental_invoice_id === rentalInvoiceId;
+      return isRental && item.type === 'payable';
+    });
+  },
+
   gerarFaturaLocacaoRegistro: async (payload: {
     rental_invoice_id: string;
     bill_id?: string | null;

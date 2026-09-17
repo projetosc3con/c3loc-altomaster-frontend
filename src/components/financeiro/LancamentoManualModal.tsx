@@ -30,6 +30,7 @@ interface LancamentoManualModalProps {
   onCreated: (bill: Bill) => void;
   initialValues?: LancamentoManualModalInitialValues;
   presetSettlement?: LancamentoManualModalPresetSettlement;
+  rentalInvoiceId?: string;
 }
 
 interface InstallmentRow {
@@ -47,6 +48,7 @@ const LancamentoManualModal: React.FC<LancamentoManualModalProps> = ({
   onCreated,
   initialValues,
   presetSettlement,
+  rentalInvoiceId,
 }) => {
   const { user } = useAuth();
   const [counterpartyName, setCounterpartyName] = useState('');
@@ -313,6 +315,7 @@ const LancamentoManualModal: React.FC<LancamentoManualModalProps> = ({
       const isParcelado = paymentType === 'parcelado' && installments.length > 1;
       const bill = await financeiroService.criarLancamentoManual({
         type,
+        rental_invoice_id: rentalInvoiceId || undefined,
         counterparty_name: counterpartyName.trim() || undefined,
         description: description.trim() || undefined,
         invoice_number: invoiceNumber.trim() || undefined,

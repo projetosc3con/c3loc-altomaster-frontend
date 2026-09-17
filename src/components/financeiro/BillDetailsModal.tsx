@@ -227,7 +227,7 @@ const BillDetailsModal: React.FC<BillDetailsModalProps> = ({ isOpen, item, onClo
       }
 
       const rentId = item.rental_invoice_id || item.raw?.rental_invoice_id || item.raw?.invoice_id || item.raw?.invoice?.id;
-      if (rentId) {
+      if (item.type === 'receivable' && rentId) {
         Promise.all([
           api.get(`/rentals/${rentId}`),
           financeiroService.buscarFaturasLocacao(rentId).catch(() => []),
@@ -274,7 +274,7 @@ const BillDetailsModal: React.FC<BillDetailsModalProps> = ({ isOpen, item, onClo
 
   const isManual = currentItem.origin === 'MANUAL';
   const canEdit = Boolean(profile && ['Administrador', 'Gerente', 'Diretoria', 'Financeiro'].includes(profile.access_level));
-  const canDelete = isManual && profile?.access_level === 'Administrador';
+  const canDelete = isManual && Boolean(profile && ['Administrador', 'Gerente', 'Diretoria'].includes(profile.access_level));
 
   const rentalInvoiceId = currentItem.rental_invoice_id || raw.rental_invoice_id || raw.invoice_id || raw.invoice?.id;
   const rawSnap = (currentItem.raw as any)?.bank_raw_snapshot || {};
@@ -1398,8 +1398,8 @@ const BillDetailsModal: React.FC<BillDetailsModalProps> = ({ isOpen, item, onClo
               </div>
             )}
 
-            {/* Fatura de Locação (PDF com Sequencial Dedicado) */}
-            {(rentalInvoiceId || hasFatura) && (
+            {/* Fatura de Locação (PDF com Sequencial Dedicado) - exclusivo para contas a receber */}
+            {isReceivable && (rentalInvoiceId || hasFatura) && (
               <div className="bg-slate-50/70 dark:bg-slate-800/30 border border-slate-200/80 dark:border-slate-800 rounded-3xl p-5 space-y-3 shadow-sm">
                 <div className="flex items-center justify-between">
                   <span className="text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 flex items-center gap-2">

@@ -83,6 +83,24 @@ const Inventory: React.FC = () => {
     return list;
   }, [equipments, statusFilter, typeFilter, yearMin, yearMax, search, valueMin, valueMax, assetSortOrder]);
 
+  const statusCounts = useMemo(() => {
+    const counts: Record<string, number> = {
+      total: equipments.length,
+      'Disponível': 0,
+      'Locado': 0,
+      'Em Manutenção': 0,
+      'Inativo': 0
+    };
+    for (const eq of equipments) {
+      if (counts[eq.status] !== undefined) {
+        counts[eq.status]++;
+      } else {
+        counts[eq.status] = 1;
+      }
+    }
+    return counts;
+  }, [equipments]);
+
   const clearAllFilters = () => {
     setStatusFilter(null);
     setSearch('');
@@ -284,38 +302,58 @@ const Inventory: React.FC = () => {
           </span>
           <button
             onClick={() => setStatusFilter(null)}
-            className={`px-3.5 py-1.5 rounded-full text-xs font-bold transition-all shrink-0 ${!statusFilter ? 'bg-mustard-500 text-white shadow-md shadow-mustard-500/20' : 'border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-700'}`}
+            className={`flex items-center gap-1.5 px-3.5 py-1.5 rounded-full text-xs font-bold transition-all shrink-0 ${!statusFilter ? 'bg-mustard-500 text-white shadow-md shadow-mustard-500/20' : 'border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-700'}`}
           >
-            Todos
+            <span>Todos</span>
+            <span className={`px-1.5 py-0.5 rounded-full text-[10px] font-extrabold leading-none transition-colors ${!statusFilter ? 'bg-white/25 text-white' : 'bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-300'}`}>
+              {statusCounts.total}
+            </span>
           </button>
           {(['Disponível', 'Locado', 'Em Manutenção', 'Inativo'] as const).map(s => {
-            const styles: Record<string, { active: string; inactive: string; icon: string }> = {
+            const styles: Record<string, { active: string; inactive: string; badgeActive: string; badgeInactive: string; icon: string }> = {
               'Disponível': {
                 active: 'bg-emerald-600 text-white shadow-md',
                 inactive: 'border border-emerald-100 dark:border-emerald-500/20 bg-emerald-50 dark:bg-emerald-500/10 text-emerald-800 dark:text-emerald-400 hover:bg-emerald-100 dark:hover:bg-emerald-500/20',
+                badgeActive: 'bg-white/25 text-white',
+                badgeInactive: 'bg-emerald-200/80 dark:bg-emerald-500/25 text-emerald-900 dark:text-emerald-300',
                 icon: 'check_circle'
               },
               'Locado': {
                 active: 'bg-slate-800 dark:bg-slate-700 text-white shadow-md',
                 inactive: 'border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-700 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-700',
+                badgeActive: 'bg-white/25 text-white',
+                badgeInactive: 'bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-300',
                 icon: 'schedule'
               },
               'Em Manutenção': {
                 active: 'bg-amber-500 text-white shadow-md',
                 inactive: 'border border-amber-100 dark:border-amber-500/20 bg-amber-50 dark:bg-amber-500/10 text-amber-800 dark:text-amber-400 hover:bg-amber-100 dark:hover:bg-amber-500/20',
+                badgeActive: 'bg-white/25 text-white',
+                badgeInactive: 'bg-amber-200/80 dark:bg-amber-500/25 text-amber-900 dark:text-amber-300',
                 icon: 'build'
               },
               'Inativo': {
                 active: 'bg-red-500 text-white shadow-md',
                 inactive: 'border border-red-100 dark:border-red-500/20 bg-red-50 dark:bg-red-500/10 text-red-700 dark:text-red-400 hover:bg-red-100 dark:hover:bg-red-500/20',
+                badgeActive: 'bg-white/25 text-white',
+                badgeInactive: 'bg-red-200/80 dark:bg-red-500/25 text-red-900 dark:text-red-300',
                 icon: 'block'
               },
             };
             const st = styles[s];
+            const isSelected = statusFilter === s;
+            const count = statusCounts[s] || 0;
             return (
-              <button key={s} onClick={() => setStatusFilter(statusFilter === s ? null : s)} className={`flex items-center gap-1.5 px-3.5 py-1.5 rounded-full text-xs font-bold transition-all shrink-0 ${statusFilter === s ? st.active : st.inactive}`}>
+              <button 
+                key={s} 
+                onClick={() => setStatusFilter(isSelected ? null : s)} 
+                className={`flex items-center gap-1.5 px-3.5 py-1.5 rounded-full text-xs font-bold transition-all shrink-0 ${isSelected ? st.active : st.inactive}`}
+              >
                 <span className="material-symbols-outlined text-[15px]">{st.icon}</span>
-                {s}
+                <span>{s}</span>
+                <span className={`px-1.5 py-0.5 rounded-full text-[10px] font-extrabold leading-none transition-colors ${isSelected ? st.badgeActive : st.badgeInactive}`}>
+                  {count}
+                </span>
               </button>
             );
           })}
@@ -448,12 +486,22 @@ const Inventory: React.FC = () => {
                         </div>
                       </div>
 
-                      {equipment.status === 'Locado' && equipment.rental_period_start && (
-                        <div className="flex items-center gap-1.5 mb-4 text-[11px] text-slate-500 dark:text-slate-400">
-                          <span className="material-symbols-outlined text-[14px] text-mustard-500">date_range</span>
-                          {new Date(equipment.rental_period_start + 'T00:00:00').toLocaleDateString('pt-BR')}
-                          {' — '}
-                          {equipment.rental_period_end ? new Date(equipment.rental_period_end + 'T00:00:00').toLocaleDateString('pt-BR') : '-'}
+                      {equipment.status === 'Locado' && (equipment.rental_client_name || equipment.rental_period_start) && (
+                        <div className="mb-4 text-[11px] text-slate-500 dark:text-slate-400">
+                          {equipment.rental_client_name && (
+                            <div className="font-semibold text-slate-700 dark:text-slate-300 flex items-center gap-1 truncate mb-0.5" title={equipment.rental_client_name}>
+                              <span className="material-symbols-outlined text-[13px] text-mustard-500 shrink-0">business</span>
+                              <span className="truncate">{equipment.rental_client_name}</span>
+                            </div>
+                          )}
+                          {equipment.rental_period_start && (
+                            <div className="flex items-center gap-1 text-[10px]">
+                              <span className="material-symbols-outlined text-[12px] text-mustard-500 shrink-0">date_range</span>
+                              {new Date(equipment.rental_period_start + 'T00:00:00').toLocaleDateString('pt-BR')}
+                              {' — '}
+                              {equipment.rental_period_end ? new Date(equipment.rental_period_end + 'T00:00:00').toLocaleDateString('pt-BR') : '-'}
+                            </div>
+                          )}
                         </div>
                       )}
 
