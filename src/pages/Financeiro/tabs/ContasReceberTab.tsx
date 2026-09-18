@@ -9,10 +9,11 @@ import { formatDate } from '../../../utils/date';
 import type { Client, StatementItem, BillStatus } from '../../../types';
 
 const STATUS_OPTIONS: BillStatus[] = ['Pendente', 'Atrasado', 'Recebido', 'Divergente', 'No prazo'];
-const ITEMS_PER_PAGE = 20;
+const DEFAULT_ITEMS_PER_PAGE = 20;
 
 const STORAGE_KEY = 'c3loc_contas_receber_filters';
 const PAGE_STORAGE_KEY = 'c3loc_contas_receber_page';
+const LIMIT_STORAGE_KEY = 'c3loc_contas_receber_limit';
 
 export type ContasReceberSortField = 'is_reconciled' | 'due_date' | 'client_name' | 'origin' | 'gross_value' | 'net_value' | 'status';
 export type SortOrder = 'asc' | 'desc';
@@ -55,6 +56,19 @@ const getInitialStoredFilters = (): ContasReceberFiltersStorage => {
   return defaultReceberFilters;
 };
 
+const getInitialLimit = (): number => {
+  try {
+    const saved = localStorage.getItem(LIMIT_STORAGE_KEY);
+    if (saved) {
+      const parsed = parseInt(saved, 10);
+      if ([10, 20, 25, 50, 100].includes(parsed)) return parsed;
+    }
+  } catch (e) {
+    console.warn('Erro ao carregar limite de contas a receber do localStorage:', e);
+  }
+  return DEFAULT_ITEMS_PER_PAGE;
+};
+
 const getInitialPage = (): number => {
   try {
     const saved = localStorage.getItem(PAGE_STORAGE_KEY);
@@ -67,6 +81,9 @@ const getInitialPage = (): number => {
   }
   return 1;
 };
+
+const formatCurrency = (val?: number | null) =>
+  (Number(val) || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
 
 const isSettled = (item: StatementItem) =>
   item.source === 'payment'
@@ -139,8 +156,10 @@ const ContasReceberTab: React.FC = () => {
   const [error, setError] = useState<string | null>(null);
 
   const [currentPage, setCurrentPage] = useState<number>(getInitialPage);
+  const [itemsPerPage, setItemsPerPage] = useState<number>(getInitialLimit);
   const [totalPages, setTotalPages] = useState(1);
   const [totalItems, setTotalItems] = useState(0);
+  const [summary, setSummary] = useState<{ total_gross: number; total_net: number; total_pending?: number; total_settled?: number; count: number } | null>(null);
 
   const [isLancamentoModalOpen, setIsLancamentoModalOpen] = useState(false);
   const [selectedBill, setSelectedBill] = useState<StatementItem | null>(null);
@@ -172,7 +191,7 @@ const ContasReceberTab: React.FC = () => {
         to: dateTo || undefined,
         group_nfe: groupNfe,
         page: currentPage,
-        limit: ITEMS_PER_PAGE,
+        limit: itemsPerPage,
         sort_by: sortBy,
         sort_order: sortOrder,
       });
@@ -180,12 +199,13 @@ const ContasReceberTab: React.FC = () => {
       setItems(itemsList);
       setTotalItems(data?.total ?? itemsList.length);
       setTotalPages(data?.totalPages ?? 1);
+      setSummary(data?.summary || null);
     } catch (err) {
       setError(getApiErrorMessage(err));
     } finally {
       setLoading(false);
     }
-  }, [selectedClientId, invoiceNumber, status, dateFrom, dateTo, groupNfe, currentPage, sortBy, sortOrder]);
+  }, [selectedClientId, invoiceNumber, status, dateFrom, dateTo, groupNfe, currentPage, itemsPerPage, sortBy, sortOrder]);
 
   useEffect(() => {
     fetchContasReceber();
@@ -214,11 +234,29 @@ const ContasReceberTab: React.FC = () => {
           sortOrder,
         })
       );
-      localStorage.setItem(PAGE_STORAGE_KEY, String(currentPage));
     } catch (e) {
       console.warn('Erro ao salvar filtros de contas a receber no localStorage:', e);
     }
-  }, [selectedClientId, invoiceNumber, status, dateFrom, dateTo, groupNfe, sortBy, sortOrder, currentPage]);
+  }, [selectedClientId, invoiceNumber, status, dateFrom, dateTo, groupNfe, sortBy, sortOrder]);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem(PAGE_STORAGE_KEY, String(currentPage));
+    } catch (e) {
+      console.warn('Erro ao salvar página de contas a receber no localStorage:', e);
+    }
+  }, [currentPage]);
+
+  const handleItemsPerPageChange = (newLimit: number) => {
+    setItemsPerPage(newLimit);
+    setCurrentPage(1);
+    try {
+      localStorage.setItem(LIMIT_STORAGE_KEY, String(newLimit));
+      localStorage.setItem(PAGE_STORAGE_KEY, '1');
+    } catch (e) {
+      console.warn('Erro ao salvar limite de contas a receber no localStorage:', e);
+    }
+  };
 
   const handleClearFilters = () => {
     setSelectedClientId('');
@@ -257,23 +295,20 @@ const ContasReceberTab: React.FC = () => {
     return (
       <th
         onClick={() => handleSort(field)}
-        className={`px-6 py-3 cursor-pointer select-none group transition-colors text-[11px] font-bold uppercase tracking-widest ${
-          align === 'right' ? 'text-right' : align === 'center' ? 'text-center' : 'text-left'
-        } ${
-          isSorted
+        className={`px-6 py-3 cursor-pointer select-none group transition-colors text-[11px] font-bold uppercase tracking-widest ${align === 'right' ? 'text-right' : align === 'center' ? 'text-center' : 'text-left'
+          } ${isSorted
             ? 'text-mustard-600 dark:text-mustard-400 font-extrabold'
             : 'text-slate-400 dark:text-slate-500 hover:text-slate-700 dark:hover:text-slate-300'
-        } ${extraClass}`}
+          } ${extraClass}`}
         title={`Clique para ordenar por ${label} (${isSorted && isAsc ? 'decrescente' : 'crescente'})`}
       >
         <div className={`inline-flex items-center gap-1.5 ${align === 'right' ? 'justify-end w-full' : align === 'center' ? 'justify-center w-full' : ''}`}>
           <span>{label}</span>
           <span
-            className={`material-symbols-outlined text-[16px] transition-all transform ${
-              isSorted
+            className={`material-symbols-outlined text-[16px] transition-all transform ${isSorted
                 ? 'text-mustard-500 dark:text-mustard-400 opacity-100 scale-110'
                 : 'text-slate-300 dark:text-slate-600 opacity-0 group-hover:opacity-100'
-            }`}
+              }`}
           >
             {isSorted
               ? (isAsc ? 'keyboard_arrow_up' : 'keyboard_arrow_down')
@@ -388,14 +423,37 @@ const ContasReceberTab: React.FC = () => {
             </div>
           </div>
 
-          <div className="flex flex-wrap items-center justify-between gap-4 pt-1">
+          <div className="flex flex-wrap items-center justify-between gap-4 pt-2 border-t border-slate-100 dark:border-slate-800/80">
+            {/* Totalizador no Filtro */}
+            <div className="flex flex-wrap items-center gap-3">
+              <div className="flex flex-wrap items-center gap-2.5 bg-emerald-50/70 dark:bg-emerald-950/30 px-3.5 py-2 rounded-xl border border-emerald-200/70 dark:border-emerald-900/40">
+                <span className="material-symbols-outlined text-emerald-600 dark:text-emerald-400 text-[20px]">calculate</span>
+                <span className="text-xs font-bold text-slate-600 dark:text-slate-300 uppercase tracking-wider">
+                  Total:
+                </span>
+                <div className="flex items-center gap-2 font-mono">
+                  <span className="text-sm font-black text-slate-900 dark:text-white" title="Valor Bruto Total">
+                    {summary ? formatCurrency(summary.total_gross) : 'R$ 0,00'}
+                  </span>
+                  {summary && summary.total_net !== summary.total_gross && (
+                    <span className="text-xs font-bold text-emerald-600 dark:text-emerald-400 border-l border-slate-300 dark:border-slate-700 pl-2" title="Valor Líquido Total">
+                      Líq: {formatCurrency(summary.total_net)}
+                    </span>
+                  )}
+                </div>
+                <span className="text-[11px] text-slate-400 dark:text-slate-500 font-medium">
+                  ({totalItems} {totalItems === 1 ? 'registro' : 'registros'})
+                </span>
+              </div>
+            </div>
+
             <div className="flex items-center gap-3">
               <button
                 type="button"
                 onClick={() => setGroupNfe((prev) => !prev)}
                 className={`px-3.5 py-2 rounded-xl border text-xs font-bold transition-all flex items-center gap-2 shadow-sm ${groupNfe
-                    ? 'bg-emerald-50 dark:bg-emerald-500/10 border-emerald-200 dark:border-emerald-500/30 text-emerald-700 dark:text-emerald-400'
-                    : 'bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-400 hover:bg-slate-50'
+                  ? 'bg-emerald-50 dark:bg-emerald-500/10 border-emerald-200 dark:border-emerald-500/30 text-emerald-700 dark:text-emerald-400'
+                  : 'bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-400 hover:bg-slate-50'
                   }`}
                 title="Alternar entre visualizar o lançamento consolidado ou parcelas avulsas"
               >
@@ -404,17 +462,17 @@ const ContasReceberTab: React.FC = () => {
                 </span>
                 <span>{groupNfe ? 'Agrupar Parcelas' : 'Parcelas Individuais'}</span>
               </button>
-            </div>
 
-            {hasActiveFilters && (
-              <button
-                type="button"
-                onClick={handleClearFilters}
-                className="text-xs font-bold text-mustard-600 dark:text-mustard-400 uppercase tracking-widest hover:underline"
-              >
-                Limpar filtros
-              </button>
-            )}
+              {hasActiveFilters && (
+                <button
+                  type="button"
+                  onClick={handleClearFilters}
+                  className="text-xs font-bold text-mustard-600 dark:text-mustard-400 uppercase tracking-widest hover:underline ml-2"
+                >
+                  Limpar filtros
+                </button>
+              )}
+            </div>
           </div>
 
           {error && (
@@ -539,9 +597,30 @@ const ContasReceberTab: React.FC = () => {
 
           {totalItems > 0 && (
             <div className="flex flex-col md:flex-row justify-between items-center gap-4">
-              <span className="text-xs font-bold text-slate-400 dark:text-slate-500 uppercase tracking-widest">
-                Mostrando {Math.min(totalItems, (currentPage - 1) * ITEMS_PER_PAGE + 1)} - {Math.min(totalItems, currentPage * ITEMS_PER_PAGE)} de {totalItems}
-              </span>
+              <div className="flex flex-wrap items-center gap-4">
+                <span className="text-xs font-bold text-slate-400 dark:text-slate-500 uppercase tracking-widest">
+                  Mostrando {totalItems > 0 ? (currentPage - 1) * itemsPerPage + 1 : 0} - {Math.min(totalItems, currentPage * itemsPerPage)} de {totalItems}
+                </span>
+
+                <div className="flex items-center gap-2 pl-4 border-l border-slate-200 dark:border-slate-800">
+                  <label htmlFor="receber-items-per-page" className="text-xs text-slate-500 dark:text-slate-400 font-medium">
+                    Itens por página:
+                  </label>
+                  <select
+                    id="receber-items-per-page"
+                    aria-label="Quantidade de itens por página"
+                    value={itemsPerPage}
+                    onChange={(e) => handleItemsPerPageChange(Number(e.target.value))}
+                    className="px-2.5 py-1.5 text-xs font-bold bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-slate-700 dark:text-slate-200 focus:outline-none focus:ring-2 focus:ring-mustard-500/20 cursor-pointer"
+                  >
+                    <option value={10}>10</option>
+                    <option value={20}>20</option>
+                    <option value={25}>25</option>
+                    <option value={50}>50</option>
+                    <option value={100}>100</option>
+                  </select>
+                </div>
+              </div>
 
               <div className="flex items-center gap-1">
                 <button

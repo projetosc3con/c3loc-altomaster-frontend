@@ -438,7 +438,17 @@ const Inventory: React.FC = () => {
                     initial={{ opacity: 0, scale: 0.95 }}
                     animate={{ opacity: 1, scale: 1 }}
                     transition={{ delay: index * 0.05 }}
-                    className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 overflow-hidden flex flex-col group hover:shadow-xl transition-all duration-300"
+                    onClick={() => navigate(`/equipamentos/editar/${equipment.id}`)}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter' || e.key === ' ') {
+                        e.preventDefault();
+                        navigate(`/equipamentos/editar/${equipment.id}`);
+                      }
+                    }}
+                    role="button"
+                    tabIndex={0}
+                    aria-label={`Editar equipamento ${equipment.name} (${equipment.asset_number})`}
+                    className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 overflow-hidden flex flex-col group hover:shadow-xl transition-all duration-300 cursor-pointer focus:outline-none focus:ring-2 focus:ring-mustard-500/50"
                   >
                     <div className="h-48 relative overflow-hidden bg-slate-100 dark:bg-slate-800">
                       {equipment.photo_url ? (
@@ -508,24 +518,33 @@ const Inventory: React.FC = () => {
                       <div className="flex items-center gap-2">
                         <button
                           type="button"
-                          onClick={() => navigate(`/equipamentos/editar/${equipment.id}`)}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            navigate(`/equipamentos/editar/${equipment.id}`);
+                          }}
                           title="Editar Equipamento"
-                          className="p-2.5 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 hover:text-mustard-600 dark:hover:text-mustard-400 hover:border-mustard-300 dark:hover:border-mustard-500/30 rounded-xl transition-all flex items-center justify-center shrink-0"
+                          className="p-2.5 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 hover:text-mustard-600 dark:hover:text-mustard-400 hover:border-mustard-300 dark:hover:border-mustard-500/30 rounded-xl transition-all flex items-center justify-center shrink-0 cursor-pointer"
                         >
                           <span className="material-symbols-outlined text-[18px]">edit</span>
                         </button>
                         <button
                           type="button"
-                          onClick={() => handleOpenHistory(equipment)}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleOpenHistory(equipment);
+                          }}
                           title="Histórico de Locações"
-                          className="p-2.5 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 hover:text-mustard-600 dark:hover:text-mustard-400 hover:border-mustard-300 dark:hover:border-mustard-500/30 rounded-xl transition-all flex items-center justify-center shrink-0"
+                          className="p-2.5 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 hover:text-mustard-600 dark:hover:text-mustard-400 hover:border-mustard-300 dark:hover:border-mustard-500/30 rounded-xl transition-all flex items-center justify-center shrink-0 cursor-pointer"
                         >
                           <span className="material-symbols-outlined text-[18px]">quick_reference_all</span>
                         </button>
                         <button
                           type="button"
-                          onClick={() => setSelectedEquipment(equipment)}
-                          className="flex-1 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 py-2.5 rounded-xl font-bold text-[10px] uppercase tracking-widest hover:bg-slate-50 dark:hover:bg-slate-700 transition-colors text-center"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setSelectedEquipment(equipment);
+                          }}
+                          className="flex-1 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 py-2.5 rounded-xl font-bold text-[10px] uppercase tracking-widest hover:bg-slate-50 dark:hover:bg-slate-700 transition-colors text-center cursor-pointer"
                         >
                           Detalhes
                         </button>
@@ -562,7 +581,20 @@ const Inventory: React.FC = () => {
                     </thead>
                     <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
                       {filteredEquipments.map((equipment) => (
-                        <tr key={equipment.id} className="hover:bg-slate-50/50 dark:hover:bg-slate-800/50 transition-colors group">
+                        <tr
+                          key={equipment.id}
+                          onClick={() => navigate(`/equipamentos/editar/${equipment.id}`)}
+                          onKeyDown={(e) => {
+                            if (e.key === 'Enter' || e.key === ' ') {
+                              e.preventDefault();
+                              navigate(`/equipamentos/editar/${equipment.id}`);
+                            }
+                          }}
+                          role="button"
+                          tabIndex={0}
+                          aria-label={`Editar equipamento ${equipment.name} (${equipment.asset_number})`}
+                          className="hover:bg-slate-50/70 dark:hover:bg-slate-800/70 transition-colors group cursor-pointer focus:outline-none focus:bg-slate-50 dark:focus:bg-slate-800"
+                        >
                           <td className="px-6 py-4">
                             <div className="flex items-center gap-3">
                               <div className="w-10 h-10 rounded-lg bg-slate-100 dark:bg-slate-800 overflow-hidden flex-shrink-0">
@@ -617,24 +649,33 @@ const Inventory: React.FC = () => {
                             <div className="flex items-center justify-center gap-2">
                               <button
                                 type="button"
-                                onClick={() => navigate(`/equipamentos/editar/${equipment.id}`)}
-                                className="p-2 text-slate-400 hover:text-mustard-600 hover:bg-mustard-50 dark:hover:bg-mustard-500/10 rounded-lg transition-all"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  navigate(`/equipamentos/editar/${equipment.id}`);
+                                }}
+                                className="p-2 text-slate-400 hover:text-mustard-600 hover:bg-mustard-50 dark:hover:bg-mustard-500/10 rounded-lg transition-all cursor-pointer"
                                 title="Editar Equipamento"
                               >
                                 <span className="material-symbols-outlined text-[20px]">edit</span>
                               </button>
                               <button
                                 type="button"
-                                onClick={() => handleOpenHistory(equipment)}
-                                className="p-2 text-slate-400 hover:text-mustard-600 hover:bg-mustard-50 dark:hover:bg-mustard-500/10 rounded-lg transition-all"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  handleOpenHistory(equipment);
+                                }}
+                                className="p-2 text-slate-400 hover:text-mustard-600 hover:bg-mustard-50 dark:hover:bg-mustard-500/10 rounded-lg transition-all cursor-pointer"
                                 title="Histórico de Locações"
                               >
                                 <span className="material-symbols-outlined text-[20px]">quick_reference_all</span>
                               </button>
                               <button
                                 type="button"
-                                onClick={() => setSelectedEquipment(equipment)}
-                                className="p-2 text-slate-400 hover:text-mustard-600 hover:bg-mustard-50 dark:hover:bg-mustard-500/10 rounded-lg transition-all"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  setSelectedEquipment(equipment);
+                                }}
+                                className="p-2 text-slate-400 hover:text-mustard-600 hover:bg-mustard-50 dark:hover:bg-mustard-500/10 rounded-lg transition-all cursor-pointer"
                                 title="Ver Detalhes"
                               >
                                 <span className="material-symbols-outlined text-[20px]">visibility</span>

@@ -83,7 +83,7 @@ const LancamentoManualModal: React.FC<LancamentoManualModalProps> = ({
     }
     if (presetSettlement) {
       setIsReconciled(true);
-      setStatus('Recebido');
+      setStatus(type === 'payable' ? 'Pago' : 'Recebido');
       setSettledDate(presetSettlement.settled_date);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps

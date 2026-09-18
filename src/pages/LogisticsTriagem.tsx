@@ -873,6 +873,27 @@ const LogisticsTriagem: React.FC = () => {
                             className="w-full px-4 py-2.5 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl text-slate-900 dark:text-white text-sm outline-none focus:ring-2 focus:ring-mustard-500"
                           />
                         </div>
+
+                        {/* Horímetro de Saída */}
+                        <div className="space-y-1.5 md:col-span-2">
+                          <label className="text-xs font-bold text-slate-500 uppercase tracking-widest ml-1 flex items-center gap-1.5">
+                            <span className="material-symbols-outlined text-[16px] text-mustard-500">speed</span>
+                            Horímetro de Saída (h)
+                          </label>
+                          <input
+                            type="number"
+                            step="0.1"
+                            min="0"
+                            value={item.hour_meter != null ? item.hour_meter : ''}
+                            onChange={(e) => handleEquipmentFieldChange(item.tempId, 'hour_meter', e.target.value ? parseFloat(e.target.value) : 0)}
+                            disabled={isProcessed}
+                            placeholder="Ex: 150.5"
+                            className="w-full px-4 py-2.5 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl text-slate-900 dark:text-white text-sm outline-none focus:ring-2 focus:ring-mustard-500 font-mono"
+                          />
+                          <p className="text-[11px] text-slate-400 dark:text-slate-500 ml-1">
+                            Informe o horímetro registrado no painel da máquina no momento da saída para a obra.
+                          </p>
+                        </div>
                       </div>
                     </div>
                   );

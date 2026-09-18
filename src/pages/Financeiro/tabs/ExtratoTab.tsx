@@ -9,14 +9,14 @@ import XmlImportModal from '../../../components/XmlImportModal';
 import { formatDate } from '../../../utils/date';
 import type { Client, StatementItem, BillType, BillStatus } from '../../../types';
 
-const STATUS_OPTIONS: BillStatus[] = ['Pendente', 'Atrasado', 'Recebido', 'Divergente', 'No prazo'];
+const STATUS_OPTIONS: BillStatus[] = ['Pendente', 'Atrasado', 'Recebido', 'Pago', 'Divergente', 'No prazo'];
 const ORIGIN_OPTIONS = ['ASAAS', 'MANUAL', 'NFE'];
 const ITEMS_PER_PAGE = 20;
 
 const isSettled = (item: StatementItem) =>
   item.source === 'payment'
     ? item.status === 'RECEIVED'
-    : item.status === 'Recebido' || item.status === 'No prazo';
+    : item.status === 'Recebido' || item.status === 'Pago' || item.status === 'No prazo';
 
 // Boleto confirmado pelo banco, mas ainda em compensação bancária — o valor
 // ainda não está disponível no saldo Asaas (ver PAYMENT_CONFIRMED vs

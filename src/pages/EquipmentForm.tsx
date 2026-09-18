@@ -26,6 +26,7 @@ const EquipmentForm: React.FC = () => {
     serial_number: '',
     height: '',
     manufacture_year: '',
+    hour_meter: '',
     value: '',
     unit: 'un',
     notes: '',
@@ -83,6 +84,7 @@ const EquipmentForm: React.FC = () => {
         ...formData,
         height: formData.height ? parseFloat(formData.height) : null,
         manufacture_year: formData.manufacture_year ? parseInt(formData.manufacture_year) : null,
+        hour_meter: formData.hour_meter ? parseFloat(formData.hour_meter) : 0,
         value: formData.value ? parseFloat(formData.value) : null,
         photo_url,
       };
@@ -137,7 +139,7 @@ const EquipmentForm: React.FC = () => {
 
               <div
                 onClick={() => fileInputRef.current?.click()}
-                className="relative w-full aspect-square rounded-xl border-2 border-dashed border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-800/50 flex flex-col items-center justify-center cursor-pointer hover:border-mustard-500/30 hover:bg-mustard-50/30 dark:hover:bg-mustard-500/10 transition-all overflow-hidden group"
+                className="relative w-full min-h-[380px] sm:min-h-[440px] rounded-2xl border-2 border-dashed border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-800/50 flex flex-col items-center justify-center cursor-pointer hover:border-mustard-500/30 hover:bg-mustard-50/30 dark:hover:bg-mustard-500/10 transition-all overflow-hidden group"
               >
                 {photoPreview ? (
                   <>
@@ -269,7 +271,7 @@ const EquipmentForm: React.FC = () => {
                 </h3>
               </div>
               <div className="p-6 space-y-6">
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                   <div className="space-y-1.5">
                     <label className="text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-widest ml-1">Nº de Série</label>
                     <input
@@ -303,6 +305,19 @@ const EquipmentForm: React.FC = () => {
                       placeholder="Ex: 2022"
                       min="1990"
                       max={new Date().getFullYear()}
+                      className="w-full px-4 py-2.5 bg-slate-50 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700 rounded-xl text-slate-900 dark:text-white focus:bg-white dark:focus:bg-slate-900 focus:ring-2 focus:ring-mustard-500/10 focus:border-mustard-500 transition-all outline-none text-sm placeholder:text-slate-400 dark:placeholder:text-slate-600"
+                    />
+                  </div>
+                  <div className="space-y-1.5">
+                    <label className="text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-widest ml-1">Horímetro (h)</label>
+                    <input
+                      type="number"
+                      step="0.1"
+                      min="0"
+                      name="hour_meter"
+                      value={formData.hour_meter}
+                      onChange={handleChange}
+                      placeholder="Ex: 1250.5"
                       className="w-full px-4 py-2.5 bg-slate-50 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700 rounded-xl text-slate-900 dark:text-white focus:bg-white dark:focus:bg-slate-900 focus:ring-2 focus:ring-mustard-500/10 focus:border-mustard-500 transition-all outline-none text-sm placeholder:text-slate-400 dark:placeholder:text-slate-600"
                     />
                   </div>

@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo, useRef } from 'react';
-import { useNavigate, useParams } from 'react-router-dom';
+import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import { pdf } from '@react-pdf/renderer';
 import { saveAs } from 'file-saver';
@@ -83,6 +83,7 @@ const SectionCard = ({ title, icon, children }: { title: string; icon: string; c
 
 const MaintenanceForm: React.FC = () => {
   const { id } = useParams();
+  const [searchParams] = useSearchParams();
   const navigate = useNavigate();
   const isEdit = Boolean(id);
 
@@ -166,6 +167,23 @@ const MaintenanceForm: React.FC = () => {
               labor_type: l.labor_type || 'T',
             })));
           }
+        } else {
+          // Se for nova OS e houver equipment_id na query string, pré-seleciona e preenche o horímetro
+          const preselectedEquipmentId = searchParams.get('equipment_id');
+          if (preselectedEquipmentId && eqRes.data) {
+            const foundEq = eqRes.data.find((e: Equipment) => e.id === preselectedEquipmentId);
+            if (foundEq) {
+              setFormData(prev => ({
+                ...prev,
+                equipment_id: foundEq.id,
+                equipment_asset_number: foundEq.asset_number,
+                equipment_name: foundEq.name,
+                equipment_model: foundEq.model,
+                equipment_serial_number: foundEq.serial_number,
+                hour_meter_before: foundEq.hour_meter != null ? Number(foundEq.hour_meter) : null,
+              }));
+            }
+          }
         }
       } catch (err: any) {
         console.error('Erro ao carregar dados:', err);
@@ -210,7 +228,8 @@ const MaintenanceForm: React.FC = () => {
       equipment_asset_number: eq.asset_number,
       equipment_name: eq.name,
       equipment_model: eq.model,
-      equipment_serial_number: eq.serial_number
+      equipment_serial_number: eq.serial_number,
+      hour_meter_before: eq.hour_meter != null ? Number(eq.hour_meter) : null,
     }));
   };
 

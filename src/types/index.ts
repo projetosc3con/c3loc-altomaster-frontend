@@ -14,6 +14,7 @@ export interface Equipment {
   unit: string;
   photo_url?: string;
   technical_specs_url?: string | null;
+  hour_meter?: number | null;
   notes?: string;
   invoice_number?: string;
   nfe_access_key?: string;
@@ -33,6 +34,47 @@ export interface Equipment {
   rental_period_end?: string | null;
   rental_work_site?: string | null;
   rental_contract_number?: number | null;
+}
+
+export interface EquipmentDocument {
+  id: string;
+  equipment_id: string;
+  document_name: string;
+  file_url: string;
+  file_name?: string | null;
+  file_size?: number | null;
+  created_at: string;
+  updated_at: string;
+  created_by?: string | null;
+  updated_by?: string | null;
+  created_by_profile?: {
+    id: string;
+    full_name: string;
+    email?: string;
+  } | null;
+  updated_by_profile?: {
+    id: string;
+    full_name: string;
+    email?: string;
+  } | null;
+}
+
+export interface EquipmentHourMeterLog {
+  id: string;
+  equipment_id: string;
+  hour_meter: number;
+  previous_hour_meter?: number | null;
+  source_type: 'service_order' | 'rental_dispatch' | 'rental_return' | 'manual';
+  reference_id?: string | null;
+  reference_number?: string | null;
+  notes?: string | null;
+  created_by?: string | null;
+  created_at: string;
+  created_by_profile?: {
+    id: string;
+    full_name: string;
+    email?: string;
+  } | null;
 }
 
 export type MaterialCategory = 'Peça' | 'Consumo' | 'EPI' | 'Outros';
@@ -163,8 +205,8 @@ export interface ServiceOrder {
   description?: string;
   notes?: string;
   // Horímetro
-  hour_meter_before?: number;
-  hour_meter_after?: number;
+  hour_meter_before?: number | null;
+  hour_meter_after?: number | null;
   // Dados do cliente
   client_name?: string;
   client_address?: string;
@@ -564,7 +606,7 @@ export interface Payment {
 
 export type BillOrigin = 'ASAAS' | 'MANUAL' | 'NFE';
 export type BillType = 'receivable' | 'payable';
-export type BillStatus = 'Pendente' | 'Atrasado' | 'Recebido' | 'Divergente' | 'No prazo';
+export type BillStatus = 'Pendente' | 'Atrasado' | 'Recebido' | 'Pago' | 'Divergente' | 'No prazo';
 
 export interface Bill {
   id: string;
@@ -697,6 +739,13 @@ export interface PaginatedBillStatement {
   page: number;
   limit: number;
   totalPages: number;
+  summary?: {
+    total_gross: number;
+    total_net: number;
+    total_pending?: number;
+    total_settled?: number;
+    count: number;
+  };
 }
 
 export type NfseStatus =

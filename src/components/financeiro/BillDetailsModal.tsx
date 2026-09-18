@@ -19,7 +19,8 @@ interface BillDetailsModalProps {
   defaultNotes?: string;
 }
 
-const STATUS_OPTIONS: BillStatus[] = ['Pendente', 'Atrasado', 'Recebido', 'Divergente', 'No prazo'];
+const RECEIVABLE_STATUS_OPTIONS: BillStatus[] = ['Pendente', 'Atrasado', 'Recebido', 'Divergente', 'No prazo'];
+const PAYABLE_STATUS_OPTIONS: BillStatus[] = ['Pendente', 'Atrasado', 'Pago', 'Divergente', 'No prazo'];
 
 const formatMoney = (val?: number | null): string => {
   const num = typeof val === 'number' && !isNaN(val) ? val : 0;
@@ -733,20 +734,20 @@ const BillDetailsModal: React.FC<BillDetailsModalProps> = ({ isOpen, item, onClo
           return {
             ...i,
             status: nextStatus,
-            is_reconciled: nextReconciled !== undefined ? nextReconciled : (nextStatus === 'Recebido' || nextStatus === 'No prazo'),
-            settled_date: (nextStatus === 'Recebido' || nextStatus === 'No prazo') ? new Date().toISOString() : null,
+            is_reconciled: nextReconciled !== undefined ? nextReconciled : (nextStatus === 'Recebido' || nextStatus === 'Pago' || nextStatus === 'No prazo'),
+            settled_date: (nextStatus === 'Recebido' || nextStatus === 'Pago' || nextStatus === 'No prazo') ? new Date().toISOString() : null,
           };
         }
         return i;
       });
 
       const totalCount = updatedInstallments.length;
-      const paidCount = updatedInstallments.filter((i) => i.status === 'Recebido' || i.status === 'No prazo').length;
+      const paidCount = updatedInstallments.filter((i) => i.status === 'Recebido' || i.status === 'Pago' || i.status === 'No prazo').length;
       const allReconciled = updatedInstallments.every((i) => i.is_reconciled);
 
       let consolidatedStatus = 'Pendente';
       if (paidCount === totalCount) {
-        consolidatedStatus = 'Recebido';
+        consolidatedStatus = isReceivable ? 'Recebido' : 'Pago';
       } else if (paidCount > 0) {
         consolidatedStatus = `Parcial (${paidCount}/${totalCount})`;
       } else {
@@ -754,7 +755,7 @@ const BillDetailsModal: React.FC<BillDetailsModalProps> = ({ isOpen, item, onClo
         if (anyOverdue) consolidatedStatus = 'Atrasado';
       }
 
-      const pendingInst = updatedInstallments.find((i) => i.status !== 'Recebido' && i.status !== 'No prazo');
+      const pendingInst = updatedInstallments.find((i) => i.status !== 'Recebido' && i.status !== 'Pago' && i.status !== 'No prazo');
       const targetDueDate = pendingInst?.due_date || updatedInstallments[updatedInstallments.length - 1]?.due_date || currentItem.due_date;
 
       const newCurrentItem: StatementItem = {
@@ -969,7 +970,7 @@ const BillDetailsModal: React.FC<BillDetailsModalProps> = ({ isOpen, item, onClo
                       onChange={(e) => setStatusValue(e.target.value)}
                       className="mt-1 w-full px-3 py-1.5 bg-white dark:bg-slate-800 border border-mustard-500/50 rounded-xl text-xs font-bold text-slate-900 dark:text-white outline-none focus:ring-2 focus:ring-mustard-500/20"
                     >
-                      {STATUS_OPTIONS.map((opt) => (
+                      {(isReceivable ? RECEIVABLE_STATUS_OPTIONS : PAYABLE_STATUS_OPTIONS).map((opt) => (
                         <option key={opt} value={opt}>
                           {opt}
                         </option>
@@ -1080,7 +1081,7 @@ const BillDetailsModal: React.FC<BillDetailsModalProps> = ({ isOpen, item, onClo
                       {currentItem.installments.map((inst, index) => {
                         const rawInst = (inst.raw as any)?.bank_raw_snapshot || {};
                         const instNum = rawInst.installment_number || (index + 1);
-                        const isPaid = inst.status === 'Recebido' || inst.status === 'No prazo';
+                        const isPaid = inst.status === 'Recebido' || inst.status === 'Pago' || inst.status === 'No prazo';
                         const isOverdue = inst.status === 'Atrasado';
                         const isUpdating = updatingInstallmentId === inst.id;
 
@@ -1132,12 +1133,12 @@ const BillDetailsModal: React.FC<BillDetailsModalProps> = ({ isOpen, item, onClo
                                 <button
                                   type="button"
                                   disabled={isUpdating}
-                                  onClick={() => handleUpdateInstallmentStatus(inst.id, isPaid ? 'Pendente' : 'Recebido', !isPaid)}
+                                  onClick={() => handleUpdateInstallmentStatus(inst.id, isPaid ? 'Pendente' : (isReceivable ? 'Recebido' : 'Pago'), !isPaid)}
                                   className={`px-2.5 py-1 rounded-lg text-[10px] font-bold uppercase tracking-wider transition-all flex items-center gap-1 mx-auto ${isPaid
                                     ? 'bg-slate-100 dark:bg-slate-800 hover:bg-rose-50 text-slate-600 dark:text-slate-400 hover:text-rose-600 border border-slate-200 dark:border-slate-700'
                                     : 'bg-emerald-600 hover:bg-emerald-700 text-white shadow-sm'
                                     }`}
-                                  title={isPaid ? 'Marcar como Pendente' : 'Marcar como Paga/Recebida'}
+                                  title={isPaid ? 'Marcar como Pendente' : (isReceivable ? 'Marcar como Recebida' : 'Marcar como Paga')}
                                 >
                                   {isUpdating ? (
                                     <div className="w-3 h-3 border-2 border-slate-400 border-t-white rounded-full animate-spin" />

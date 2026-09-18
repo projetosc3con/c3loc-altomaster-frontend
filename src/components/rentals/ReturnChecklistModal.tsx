@@ -291,11 +291,20 @@ export const ReturnChecklistModal: React.FC<ReturnChecklistModalProps> = ({
       const existingUrls: string[] = Array.isArray(rental?.return_checklist_urls) ? rental.return_checklist_urls : [];
       const updatedChecklistUrls = Array.from(new Set([...existingUrls, ...generatedPdfUrls]));
 
-      // Atualizar também o return_date de todos os equipamentos da locação
-      const updatedEquipments = equipmentItems.map((item) => ({
-        ...item,
-        return_date: todayStr,
-      }));
+      // Atualizar também o return_date e o hour_meter de cada equipamento da locação
+      const updatedEquipments = equipmentItems.map((item) => {
+        const key = item.equipment_id || item.asset_number || (item as any).tempId || 'unknown';
+        const machineState = inspectionData[key];
+        const returnHourMeter = machineState?.hourMeter && machineState.hourMeter.trim() !== ''
+          ? parseFloat(machineState.hourMeter)
+          : undefined;
+
+        return {
+          ...item,
+          return_date: todayStr,
+          hour_meter: returnHourMeter,
+        };
+      });
 
       const payload = {
         ...rental,
