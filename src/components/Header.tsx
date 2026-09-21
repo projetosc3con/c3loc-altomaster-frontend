@@ -3,12 +3,14 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { Link } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import { useTheme } from '../context/ThemeContext';
+import { TicketModal } from './TicketModal';
 
 import logoLight from '../../config_files/logo-completo.png';
 import logoDark from '../../config_files/logo-completo-dark.png';
 
 const Header: React.FC = () => {
   const [isMenuOpen, setIsMenuOpen] = useState(false);
+  const [isTicketModalOpen, setIsTicketModalOpen] = useState(false);
   const { user, profile, signOut } = useAuth();
   const { theme, toggleTheme } = useTheme();
   const menuRef = useRef<HTMLDivElement>(null);
@@ -87,6 +89,16 @@ const Header: React.FC = () => {
           className="p-2 text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-full transition-colors relative"
         >
           <span className="material-symbols-outlined">notifications</span>
+        </motion.button>
+
+        <motion.button
+          whileHover={{ scale: 1.1 }}
+          whileTap={{ scale: 0.9 }}
+          onClick={() => setIsTicketModalOpen(true)}
+          className="p-2 text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-full transition-colors relative"
+          title="Ajuda e Suporte"
+        >
+          <span className="material-symbols-outlined">help</span>
         </motion.button>
 
         <div className="h-8 w-[1px] bg-slate-200 dark:bg-slate-800 mx-1 hidden md:block"></div>
@@ -178,6 +190,11 @@ const Header: React.FC = () => {
           </AnimatePresence>
         </div>
       </div>
+
+      <TicketModal
+        isOpen={isTicketModalOpen}
+        onClose={() => setIsTicketModalOpen(false)}
+      />
     </motion.header>
   );
 };
