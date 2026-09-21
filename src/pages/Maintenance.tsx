@@ -567,9 +567,22 @@ const Maintenance: React.FC = () => {
                         </div>
                       </td>
                       <td className="px-6 py-4">
-                        <span className={`inline-flex items-center px-2.5 py-1 rounded-full text-[11px] font-bold uppercase tracking-wider border transition-colors ${getStatusColor(os.status)}`}>
-                          {os.status}
-                        </span>
+                        <div className="flex flex-col gap-1 items-start">
+                          <span className={`inline-flex items-center px-2.5 py-1 rounded-full text-[11px] font-bold uppercase tracking-wider border transition-colors ${getStatusColor(os.status)}`}>
+                            {os.status}
+                          </span>
+                          {os.signed_rcd_url ? (
+                            <span className="inline-flex items-center gap-1 text-[10px] font-bold text-emerald-600 dark:text-emerald-400">
+                              <span className="material-symbols-outlined text-[13px]">verified</span>
+                              RCD Assinado
+                            </span>
+                          ) : os.rcd_total_value && os.rcd_total_value > 0 ? (
+                            <span className="inline-flex items-center gap-1 text-[10px] font-bold text-amber-600 dark:text-amber-400">
+                              <span className="material-symbols-outlined text-[13px]">receipt_long</span>
+                              RCD: R$ {os.rcd_total_value.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                            </span>
+                          ) : null}
+                        </div>
                       </td>
                       <td className="px-6 py-4 text-right">
                         {(() => {
@@ -591,6 +604,24 @@ const Maintenance: React.FC = () => {
                       </td>
                       <td className="px-6 py-4 text-right">
                         <div className="flex items-center justify-end gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                          <button
+                            onClick={() => navigate(`/manutencoes/editar/${os.id}?tab=rcd`)}
+                            className="p-1.5 text-slate-400 hover:text-amber-600 dark:hover:text-amber-400 hover:bg-amber-50 dark:hover:bg-amber-500/10 rounded transition-colors"
+                            title="RCD (Ressarcimento de Danos)"
+                          >
+                            <span className="material-symbols-outlined text-[20px]">receipt_long</span>
+                          </button>
+                          {os.signed_rcd_url && (
+                            <a
+                              href={os.signed_rcd_url}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="p-1.5 text-emerald-500 hover:text-emerald-700 hover:bg-emerald-50 dark:hover:bg-emerald-500/10 rounded transition-colors"
+                              title="Visualizar RCD Assinado"
+                            >
+                              <span className="material-symbols-outlined text-[20px]">verified</span>
+                            </a>
+                          )}
                           <button
                             onClick={() => handleViewPdf(os)}
                             disabled={viewingPdfId === os.id}

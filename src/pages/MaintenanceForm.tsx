@@ -10,6 +10,7 @@ import SearchableSelect from '../components/SearchableSelect';
 import ServiceOrderDocument from '../components/maintenance/ServiceOrderDocument';
 import OsXmlImportModal from '../components/maintenance/OsXmlImportModal';
 import { PartCreateModal } from '../components/maintenance/PartCreateModal';
+import RcdTabContent from '../components/maintenance/RcdTabContent';
 
 interface OSPartItem {
   part_id: string;
@@ -21,15 +22,16 @@ interface OSPartItem {
   was_used: boolean;
 }
 
-type TabKey = 'geral' | 'diagnostico' | 'pecas' | 'mao_de_obra' | 'observacoes' | 'analise';
+type TabKey = 'geral' | 'diagnostico' | 'pecas' | 'mao_de_obra' | 'observacoes' | 'analise' | 'rcd';
 
 const TABS: { key: TabKey; label: string; icon: string }[] = [
-  { key: 'geral', label: 'Informações Gerais', icon: 'info' },
+  { key: 'geral', label: 'Geral', icon: 'info' },
   { key: 'diagnostico', label: 'Diagnóstico', icon: 'troubleshoot' },
   { key: 'pecas', label: 'Peças', icon: 'inventory_2' },
   { key: 'mao_de_obra', label: 'Mão de Obra', icon: 'engineering' },
   { key: 'observacoes', label: 'Observações', icon: 'checklist' },
   { key: 'analise', label: 'Análise Crítica', icon: 'assessment' },
+  { key: 'rcd', label: 'RCD', icon: 'receipt_long' },
 ];
 
 const InputField = ({ label, ...props }: { label: string } & React.InputHTMLAttributes<HTMLInputElement>) => (
@@ -91,7 +93,8 @@ const MaintenanceForm: React.FC = () => {
   const [fetching, setFetching] = useState(isEdit);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState(false);
-  const [activeTab, setActiveTab] = useState<TabKey>('geral');
+  const initialTab = (searchParams.get('tab') as TabKey) || 'geral';
+  const [activeTab, setActiveTab] = useState<TabKey>(initialTab);
   const [generatingPdf, setGeneratingPdf] = useState(false);
   const [viewingPdf, setViewingPdf] = useState(false);
   const [isNfeModalOpen, setIsNfeModalOpen] = useState(false);
@@ -372,12 +375,12 @@ const MaintenanceForm: React.FC = () => {
     updateField('client_phone', value);
   };
 
-  const handleSubmit = async (e?: React.FormEvent) => {
+  const handleSubmit = async (e?: React.FormEvent, redirect = true): Promise<string | null> => {
     if (e) e.preventDefault();
     if (!formData.equipment_id) {
       setError('Por favor, selecione um equipamento.');
       setActiveTab('geral');
-      return;
+      return null;
     }
 
     try {
@@ -395,17 +398,23 @@ const MaintenanceForm: React.FC = () => {
         labor: laborEntries.filter(l => l.technician_name.trim() !== ''),
       };
 
+      let osId = id;
       if (isEdit) {
         await api.put(`/service-orders/${id}`, payload);
       } else {
-        await api.post('/service-orders', payload);
+        const res = await api.post('/service-orders', payload);
+        osId = res.data?.id;
       }
 
       setSuccess(true);
-      setTimeout(() => navigate('/manutencoes'), 1500);
+      if (redirect) {
+        setTimeout(() => navigate('/manutencoes'), 1500);
+      }
+      return osId || null;
     } catch (err: any) {
       console.error('Erro ao salvar OS:', err);
       setError(err.response?.data?.error || 'Erro ao salvar a ordem de serviço.');
+      return null;
     } finally {
       setLoading(false);
     }
@@ -989,6 +998,22 @@ const MaintenanceForm: React.FC = () => {
                 <TextareaField label="Descrição Detalhada" rows={8} placeholder="Relate aqui todos os procedimentos, problemas e soluções..." value={formData.description || ''} onChange={(e) => updateField('description', e.target.value)} />
                 <TextareaField label="Observações Internas" rows={3} placeholder="Notas para controle interno..." value={formData.notes || ''} onChange={(e) => updateField('notes', e.target.value)} />
               </SectionCard>
+            </motion.div>
+          )}
+
+          {/* TAB 7: RCD (Ressarcimento de Despesas e Danos) */}
+          {activeTab === 'rcd' && (
+            <motion.div key="rcd" initial={{ opacity: 0, x: -20 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: 20 }}>
+              <RcdTabContent
+                serviceOrderId={id}
+                formData={formData}
+                osParts={partsUsed}
+                onUpdateFormData={updateField}
+                onSaveOsFirst={async () => {
+                  const savedId = await handleSubmit(undefined, false);
+                  return savedId;
+                }}
+              />
             </motion.div>
           )}
         </AnimatePresence>
