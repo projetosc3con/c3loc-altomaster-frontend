@@ -498,14 +498,6 @@ export const RcdReportDocument: React.FC<RcdReportDocumentProps> = ({ rcd, compa
               </View>
             </View>
           </View>
-
-          {/* 11. Rodapé das Marcas */}
-          <View style={styles.footerLogosRow}>
-            <Text style={[styles.brandText, { color: '#e11d48' }]}>Haulotte &gt;&gt;</Text>
-            <Text style={[styles.brandText, { color: '#f97316' }]}>JLG</Text>
-            <Text style={[styles.brandText, { color: '#0284c7' }]}>SKYJACK</Text>
-            <Text style={[styles.brandText, { color: '#2563eb' }]}>Genie</Text>
-          </View>
         </View>
       </Page>
     </Document>
