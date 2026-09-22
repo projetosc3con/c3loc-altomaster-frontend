@@ -419,11 +419,15 @@ const Rentals: React.FC = () => {
           { label: 'Total de Contratos', value: totalItems.toString(), color: 'bg-blue-100 dark:bg-blue-900/20 text-blue-800 dark:text-blue-400', icon: 'sync' },
           { label: 'Aguardando conciliação', value: stats.pendingReconciliationCount.toString(), color: 'bg-amber-100 dark:bg-amber-900/20 text-amber-800 dark:text-amber-400', icon: 'pending_actions' },
           {
-            label: filters.return_status === 'active' ? 'Total Faturado (Período Atual)' : 'Total Faturado',
-            value: (stats.totalValue ?? stats.monthlyReceivedTotal ?? 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' }),
+            label: (filters.date_from || filters.date_to)
+              ? 'Total Faturado no Período'
+              : filters.return_status === 'active'
+                ? 'Total Faturado (Ativas no Mês)'
+                : 'Total Faturado no Mês',
+            value: (stats.currentPeriodTotalValue ?? stats.totalValue ?? 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' }),
             color: 'bg-emerald-100 dark:bg-emerald-900/20 text-emerald-800 dark:text-emerald-400',
             icon: 'payments',
-            subtext: filters.return_status === 'active' && stats.accumulatedTotalValue && stats.accumulatedTotalValue !== stats.totalValue
+            subtext: stats.accumulatedTotalValue && stats.accumulatedTotalValue !== (stats.currentPeriodTotalValue ?? stats.totalValue)
               ? `Acumulado total: ${Number(stats.accumulatedTotalValue).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}`
               : undefined
           },
@@ -496,7 +500,13 @@ const Rentals: React.FC = () => {
                 {renderSortHeader('Cliente / Obra', 'client_name')}
                 {renderSortHeader('Equipamento', 'equipment_name')}
                 {renderSortHeader('Período', 'billing_period_end', 'left', 'whitespace-nowrap')}
-                {renderSortHeader(filters.return_status === 'active' ? 'Valor (Período Atual)' : 'Valor Total', 'total_value', 'right')}
+                {renderSortHeader(
+                  (filters.date_from || filters.date_to)
+                    ? 'Valor (Período)'
+                    : 'Valor (Mês Atual)',
+                  'total_value',
+                  'right'
+                )}
                 {renderSortHeader('Status', 'billing_status')}
                 <th className="px-6 py-4 text-center">Ações</th>
               </tr>
@@ -560,22 +570,16 @@ const Rentals: React.FC = () => {
                         )}
                       </td>
                       <td className="px-6 py-4 text-right">
-                        {filters.return_status === 'active' ? (
-                          <div>
-                            <span className="font-bold text-mustard-500 dark:text-mustard-400 font-mono">
-                              {Number(rental.current_period_value ?? rental.total_value).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
-                            </span>
-                            {Number(rental.accumulated_total_value ?? rental.total_value) > Number(rental.current_period_value ?? rental.total_value) && (
-                              <div className="text-[10px] text-slate-400 dark:text-slate-500 font-mono font-normal mt-0.5" title="Valor total acumulado do contrato">
-                                Acumulado: {Number(rental.accumulated_total_value ?? rental.total_value).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
-                              </div>
-                            )}
-                          </div>
-                        ) : (
+                        <div>
                           <span className="font-bold text-mustard-500 dark:text-mustard-400 font-mono">
-                            {Number(rental.total_value).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
+                            {Number(rental.current_period_value ?? rental.total_value).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
                           </span>
-                        )}
+                          {Number(rental.accumulated_total_value ?? rental.total_value) > Number(rental.current_period_value ?? rental.total_value) && (
+                            <div className="text-[10px] text-slate-400 dark:text-slate-500 font-mono font-normal mt-0.5" title="Valor total acumulado de todas as prorrogações do contrato">
+                              Acumulado: {Number(rental.accumulated_total_value ?? rental.total_value).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
+                            </div>
+                          )}
+                        </div>
                       </td>
                       <td className="px-6 py-4">
                         {paidByInvoice[rental.id] ? (
@@ -777,7 +781,36 @@ const Rentals: React.FC = () => {
 
                 {/* Período de Locação */}
                 <div className="space-y-2">
-                  <label className="text-[11px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-widest">Período de Locação</label>
+                  <div className="flex items-center justify-between">
+                    <label className="text-[11px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-widest">Período de Locação</label>
+                    <div className="flex items-center gap-2">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const now = new Date();
+                          const y = now.getFullYear();
+                          const m = String(now.getMonth() + 1).padStart(2, '0');
+                          const lastDay = new Date(y, now.getMonth() + 1, 0).getDate();
+                          setFilters(f => ({ ...f, date_from: `${y}-${m}-01`, date_to: `${y}-${m}-${String(lastDay).padStart(2, '0')}` }));
+                        }}
+                        className="text-[10px] font-bold text-mustard-600 dark:text-mustard-400 hover:underline"
+                      >
+                        Mês Atual
+                      </button>
+                      {(filters.date_from || filters.date_to) && (
+                        <>
+                          <span className="text-slate-300 dark:text-slate-600 text-[10px]">•</span>
+                          <button
+                            type="button"
+                            onClick={() => setFilters(f => ({ ...f, date_from: '', date_to: '' }))}
+                            className="text-[10px] font-bold text-red-500 hover:underline"
+                          >
+                            Limpar
+                          </button>
+                        </>
+                      )}
+                    </div>
+                  </div>
                   <div className="flex items-center gap-3">
                     <input type="date" value={filters.date_from} onChange={e => setFilters(f => ({ ...f, date_from: e.target.value }))}
                       className="min-w-0 w-full px-3 py-3 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-sm text-slate-900 dark:text-white outline-none focus:ring-2 focus:ring-mustard-500/10 focus:border-mustard-500 transition-all" />
@@ -785,6 +818,9 @@ const Rentals: React.FC = () => {
                     <input type="date" value={filters.date_to} onChange={e => setFilters(f => ({ ...f, date_to: e.target.value }))}
                       className="min-w-0 w-full px-3 py-3 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-sm text-slate-900 dark:text-white outline-none focus:ring-2 focus:ring-mustard-500/10 focus:border-mustard-500 transition-all" />
                   </div>
+                  <p className="text-[10px] text-slate-400 dark:text-slate-500">
+                    Filtra contratos e calcula o faturamento proporcional com base nas prorrogações ativas no período selecionado.
+                  </p>
                 </div>
 
                 {/* Faixa de Valor */}
