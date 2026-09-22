@@ -163,6 +163,7 @@ const ContasReceberTab: React.FC = () => {
 
   const [isLancamentoModalOpen, setIsLancamentoModalOpen] = useState(false);
   const [selectedBill, setSelectedBill] = useState<StatementItem | null>(null);
+  const [exporting, setExporting] = useState(false);
 
   const isMountedRef = useRef(false);
 
@@ -323,6 +324,31 @@ const ContasReceberTab: React.FC = () => {
     fetchContasReceber();
   };
 
+  const handleExport = async () => {
+    try {
+      setExporting(true);
+      const params = {
+        type: 'receivable',
+        client_id: selectedClientId || undefined,
+        invoice_number: invoiceNumber || undefined,
+        status: status || undefined,
+        from: dateFrom || undefined,
+        to: dateTo || undefined,
+        group_nfe: groupNfe,
+        sort_by: sortBy,
+        sort_order: sortOrder,
+      };
+      const { data } = await api.get('/exports/bills', { params });
+      if (data.downloadUrl) {
+        window.open(data.downloadUrl, '_blank');
+      }
+    } catch (err: any) {
+      alert(err?.response?.data?.error || 'Erro ao exportar contas a receber.');
+    } finally {
+      setExporting(false);
+    }
+  };
+
   const hasActiveFilters = Boolean(selectedClientId || invoiceNumber || status || dateFrom || dateTo || sortBy !== 'due_date' || sortOrder !== 'desc' || !groupNfe);
 
   return (
@@ -339,6 +365,20 @@ const ContasReceberTab: React.FC = () => {
             </p>
           </div>
           <div className="flex flex-wrap gap-3">
+            <button
+              type="button"
+              onClick={handleExport}
+              disabled={exporting}
+              className="px-4 py-2.5 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-200 rounded-xl text-xs font-bold uppercase tracking-widest hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors flex items-center gap-2 shadow-sm disabled:opacity-50 disabled:cursor-not-allowed"
+              title="Exportar dados filtrados para planilha Excel (.xlsx)"
+            >
+              {exporting ? (
+                <div className="w-4 h-4 border-2 border-slate-400 border-t-slate-700 dark:border-t-slate-200 rounded-full animate-spin" />
+              ) : (
+                <span className="material-symbols-outlined text-[18px]">download</span>
+              )}
+              {exporting ? 'Exportando...' : 'Exportar'}
+            </button>
             <button
               type="button"
               onClick={() => setIsLancamentoModalOpen(true)}

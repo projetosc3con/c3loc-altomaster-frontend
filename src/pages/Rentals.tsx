@@ -422,8 +422,8 @@ const Rentals: React.FC = () => {
             label: (filters.date_from || filters.date_to)
               ? 'Total Faturado no Período'
               : filters.return_status === 'active'
-                ? 'Total Faturado (Ativas no Mês)'
-                : 'Total Faturado no Mês',
+                ? 'Total Faturado (Período Vigente)'
+                : 'Total Faturado',
             value: (stats.currentPeriodTotalValue ?? stats.totalValue ?? 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' }),
             color: 'bg-emerald-100 dark:bg-emerald-900/20 text-emerald-800 dark:text-emerald-400',
             icon: 'payments',
@@ -503,7 +503,7 @@ const Rentals: React.FC = () => {
                 {renderSortHeader(
                   (filters.date_from || filters.date_to)
                     ? 'Valor (Período)'
-                    : 'Valor (Mês Atual)',
+                    : 'Valor (Período Vigente)',
                   'total_value',
                   'right'
                 )}
@@ -819,7 +819,7 @@ const Rentals: React.FC = () => {
                       className="min-w-0 w-full px-3 py-3 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-sm text-slate-900 dark:text-white outline-none focus:ring-2 focus:ring-mustard-500/10 focus:border-mustard-500 transition-all" />
                   </div>
                   <p className="text-[10px] text-slate-400 dark:text-slate-500">
-                    Filtra contratos e calcula o faturamento proporcional com base nas prorrogações ativas no período selecionado.
+                    Filtra e totaliza o faturamento das locações e prorrogações que iniciam (billing_period_start) dentro do período selecionado.
                   </p>
                 </div>
 
