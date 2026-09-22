@@ -884,6 +884,7 @@ const RentalEdit: React.FC = () => {
         cnpj: selectedClient.cnpj,
         return_date: computedReturnDate,
         equipments: equipmentItems.map(item => ({
+          id: item.id,
           equipment_id: item.equipment_id,
           equipment_name: item.equipment_name,
           equipment_type: item.equipment_type,
@@ -1166,6 +1167,17 @@ const RentalEdit: React.FC = () => {
                             <span>{item.serial_number}</span>
                           </span>
                         )}
+                        {item.notes?.includes('Prorrogação') ? (
+                          <span className="px-2 py-0.5 rounded-full bg-amber-100 dark:bg-amber-500/20 text-amber-700 dark:text-amber-400 text-xs font-bold border border-amber-200 dark:border-amber-500/30 flex items-center gap-1">
+                            <span className="material-symbols-outlined text-[14px]">more_time</span>
+                            <span>Prorrogação</span>
+                          </span>
+                        ) : equipmentItems.some((e, i) => i !== index && (e.equipment_id === item.equipment_id || (e.asset_number && e.asset_number === item.asset_number))) ? (
+                          <span className="px-2 py-0.5 rounded-full bg-blue-100 dark:bg-blue-500/20 text-blue-700 dark:text-blue-400 text-xs font-bold border border-blue-200 dark:border-blue-500/30 flex items-center gap-1">
+                            <span className="material-symbols-outlined text-[14px]">schedule</span>
+                            <span>Período Inicial</span>
+                          </span>
+                        ) : null}
                       </div>
 
                       <div className="flex items-center gap-3">
