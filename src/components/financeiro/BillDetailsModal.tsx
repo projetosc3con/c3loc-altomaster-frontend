@@ -196,6 +196,14 @@ const BillDetailsModal: React.FC<BillDetailsModalProps> = ({ isOpen, item, onClo
   const [faturaPeriodEnd, setFaturaPeriodEnd] = useState<string>('');
   const [faturaDueDate, setFaturaDueDate] = useState<string>('');
 
+  // Estado para divisão em parcelas (condições de pagamento da fatura)
+  const [showSplitPanel, setShowSplitPanel] = useState(false);
+  const [splitInstallments, setSplitInstallments] = useState<Array<{ amount: number | ''; due_date: string }>>([]);
+  const [splitting, setSplitting] = useState(false);
+  const [splitErrorMessage, setSplitErrorMessage] = useState<string | null>(null);
+  const [splitSuccessMessage, setSplitSuccessMessage] = useState<string | null>(null);
+  const [updateFaturaNotesWithSplit, setUpdateFaturaNotesWithSplit] = useState(true);
+
   useEffect(() => {
     if (item) {
       setCurrentItem(item);
@@ -208,6 +216,9 @@ const BillDetailsModal: React.FC<BillDetailsModalProps> = ({ isOpen, item, onClo
       setError(null);
       setFaturaSuccessMessage(null);
       setBoletoSuccessMessage(null);
+      setShowSplitPanel(false);
+      setSplitErrorMessage(null);
+      setSplitSuccessMessage(null);
 
       const snap = (item.raw as any)?.bank_raw_snapshot || {};
       if (snap.fatura_notes) {
@@ -789,6 +800,188 @@ const BillDetailsModal: React.FC<BillDetailsModalProps> = ({ isOpen, item, onClo
       setConfirmDelete(false);
     } finally {
       setDeleting(false);
+    }
+  };
+
+  // Cálculos e helpers para parcelamento da fatura
+  const faturaTotalAmount = Math.round((
+    Number(rawSnap.total_value) ||
+    (currentItem.installments && currentItem.installments.length > 1
+      ? (currentItem.total_value || currentItem.installments.reduce((acc, i) => acc + (Number(i.gross_value) || 0), 0))
+      : (Number(currentItem.gross_value) || Number(currentItem.total_value) || 0)
+    )
+  ) * 100) / 100;
+
+  const isAlreadySplit = Boolean(currentItem.installments && currentItem.installments.length > 1);
+  const anyInstallmentPaid = Boolean(currentItem.installments && currentItem.installments.some(i => i.status === 'Recebido' || i.status === 'Pago'));
+
+  const addDaysToDate = (baseDateStr: string, days: number): string => {
+    try {
+      const [y, m, d] = (baseDateStr || '').split('-').map(Number);
+      if (!y || !m || !d) {
+        const now = new Date();
+        now.setDate(now.getDate() + days);
+        return now.toISOString().split('T')[0];
+      }
+      const date = new Date(y, m - 1, d);
+      date.setDate(date.getDate() + days);
+      const ny = date.getFullYear();
+      const nm = String(date.getMonth() + 1).padStart(2, '0');
+      const nd = String(date.getDate()).padStart(2, '0');
+      return `${ny}-${nm}-${nd}`;
+    } catch {
+      return '';
+    }
+  };
+
+  const handleOpenSplitPanel = () => {
+    setSplitErrorMessage(null);
+    setSplitSuccessMessage(null);
+    if (isAlreadySplit && currentItem.installments && currentItem.installments.length > 1) {
+      setSplitInstallments(
+        currentItem.installments.map(inst => ({
+          amount: Number(inst.gross_value) || 0,
+          due_date: inst.due_date ? String(inst.due_date).split('T')[0] : ''
+        }))
+      );
+    } else {
+      const total = faturaTotalAmount;
+      const half1 = Math.floor((total / 2) * 100) / 100;
+      const half2 = Math.round((total - half1) * 100) / 100;
+      const baseDue = faturaDueDate || (currentItem.due_date ? String(currentItem.due_date).split('T')[0] : new Date().toISOString().split('T')[0]);
+      const due2 = addDaysToDate(baseDue, 30);
+      setSplitInstallments([
+        { amount: half1 > 0 ? half1 : '', due_date: baseDue },
+        { amount: half2 > 0 ? half2 : '', due_date: due2 }
+      ]);
+    }
+    setShowSplitPanel(true);
+  };
+
+  const handleAddSplitInstallment = () => {
+    setSplitErrorMessage(null);
+    const lastDue = splitInstallments[splitInstallments.length - 1]?.due_date || new Date().toISOString().split('T')[0];
+    const nextDue = addDaysToDate(lastDue, 30);
+    const currentSum = splitInstallments.reduce((sum, item) => sum + (Number(item.amount) || 0), 0);
+    const diff = Math.round((faturaTotalAmount - currentSum) * 100) / 100;
+    const newAmount = diff > 0 ? diff : '';
+    setSplitInstallments(prev => [...prev, { amount: newAmount, due_date: nextDue }]);
+  };
+
+  const handleRemoveSplitInstallment = (indexToRemove: number) => {
+    if (splitInstallments.length <= 2) {
+      setSplitErrorMessage('O parcelamento deve conter no mínimo 2 parcelas.');
+      return;
+    }
+    setSplitErrorMessage(null);
+    setSplitInstallments(prev => prev.filter((_, idx) => idx !== indexToRemove));
+  };
+
+  const handleChangeSplitAmount = (index: number, val: string) => {
+    setSplitErrorMessage(null);
+    const clean = val.replace(',', '.');
+    const num = clean === '' ? '' : Number(clean);
+    setSplitInstallments(prev => {
+      const next = [...prev];
+      next[index] = { ...next[index], amount: isNaN(num as number) ? '' : num };
+      return next;
+    });
+  };
+
+  const handleChangeSplitDueDate = (index: number, val: string) => {
+    setSplitErrorMessage(null);
+    setSplitInstallments(prev => {
+      const next = [...prev];
+      next[index] = { ...next[index], due_date: val };
+      return next;
+    });
+  };
+
+  const handleDistributeEqually = () => {
+    setSplitErrorMessage(null);
+    const count = splitInstallments.length;
+    if (count === 0) return;
+    const total = faturaTotalAmount;
+    const basePerItem = Math.floor((total / count) * 100) / 100;
+    const remainder = Math.round((total - (basePerItem * count)) * 100) / 100;
+
+    setSplitInstallments(prev =>
+      prev.map((inst, idx) => ({
+        ...inst,
+        amount: idx === 0 ? Math.round((basePerItem + remainder) * 100) / 100 : basePerItem
+      }))
+    );
+  };
+
+  const currentSplitSum = Math.round(splitInstallments.reduce((acc, it) => acc + (Number(it.amount) || 0), 0) * 100) / 100;
+  const splitDifference = Math.round((faturaTotalAmount - currentSplitSum) * 100) / 100;
+  const isSplitBalanced = Math.abs(splitDifference) < 0.01;
+
+  const handleConfirmSplit = async () => {
+    setSplitErrorMessage(null);
+    setSplitSuccessMessage(null);
+
+    if (splitInstallments.length < 2) {
+      setSplitErrorMessage('Defina pelo menos 2 parcelas para prosseguir.');
+      return;
+    }
+
+    for (let i = 0; i < splitInstallments.length; i++) {
+      const it = splitInstallments[i];
+      const amt = Number(it.amount);
+      if (!amt || amt <= 0) {
+        setSplitErrorMessage(`Informe um valor maior que zero para a parcela ${i + 1}.`);
+        return;
+      }
+      if (!it.due_date) {
+        setSplitErrorMessage(`Informe a data de vencimento da parcela ${i + 1}.`);
+        return;
+      }
+    }
+
+    if (!isSplitBalanced) {
+      setSplitErrorMessage(`A soma das parcelas (R$ ${currentSplitSum.toFixed(2)}) deve ser exatamente igual ao total da fatura (R$ ${faturaTotalAmount.toFixed(2)}). Diferença: R$ ${splitDifference.toFixed(2)}.`);
+      return;
+    }
+
+    setSplitting(true);
+    try {
+      const payload = {
+        installments: splitInstallments.map(it => ({
+          amount: Number(it.amount),
+          due_date: it.due_date
+        }))
+      };
+
+      const res = await financeiroService.parcelarContaReceber(currentItem.id, payload);
+
+      if (updateFaturaNotesWithSplit) {
+        const notesLines = splitInstallments.map((it, idx) =>
+          `${idx + 1}ª Parcela: ${formatMoney(Number(it.amount))} - Venc: ${formatDate(it.due_date)}`
+        ).join(' | ');
+        const prefix = 'Condições de Pagamento: ';
+        const newNotes = faturaNotes
+          ? `${faturaNotes.replace(/Condições de Pagamento:.*$/, '').trim()}\n${prefix}${notesLines}`.trim()
+          : `${prefix}${notesLines}`;
+        setFaturaNotes(newNotes);
+      }
+
+      setSplitSuccessMessage(res.message || 'Parcelamento realizado com sucesso!');
+      setCurrentItem(res.item);
+      onUpdated?.(res.item);
+
+      if (splitInstallments[0]?.due_date) {
+        setFaturaDueDate(splitInstallments[0].due_date);
+      }
+
+      setTimeout(() => {
+        setShowSplitPanel(false);
+        setSplitSuccessMessage(null);
+      }, 2000);
+    } catch (err: any) {
+      setSplitErrorMessage(getApiErrorMessage(err));
+    } finally {
+      setSplitting(false);
     }
   };
 
@@ -1596,6 +1789,265 @@ const BillDetailsModal: React.FC<BillDetailsModalProps> = ({ isOpen, item, onClo
                     {faturaSuccessMessage}
                   </div>
                 )}
+
+                {/* Condições de Pagamento & Parcelamento da Fatura */}
+                <div className="mt-4 pt-4 border-t border-slate-200/70 dark:border-slate-800">
+                  <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 p-4 bg-white dark:bg-slate-900 border border-slate-200/70 dark:border-slate-800 rounded-2xl">
+                    <div className="flex items-center gap-3">
+                      <div className="w-10 h-10 rounded-2xl bg-indigo-50 dark:bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 flex items-center justify-center shrink-0">
+                        <span className="material-symbols-outlined text-[22px]">payments</span>
+                      </div>
+                      <div>
+                        <div className="flex items-center gap-2">
+                          <h4 className="text-xs font-bold text-slate-900 dark:text-white uppercase tracking-wider">
+                            Condições de Pagamento / Parcelamento
+                          </h4>
+                          {isAlreadySplit && (
+                            <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-indigo-50 dark:bg-indigo-500/10 text-indigo-700 dark:text-indigo-400 border border-indigo-200 dark:border-indigo-500/20">
+                              {currentItem.installments?.length} parcelas
+                            </span>
+                          )}
+                        </div>
+                        <p className="text-[11px] text-slate-400 dark:text-slate-500">
+                          {isAlreadySplit
+                            ? 'Fatura parcelada. Você pode reconfigurar ou gerenciar as datas e valores.'
+                            : 'Divida esta fatura em múltiplos vencimentos e valores personalizados.'}
+                        </p>
+                      </div>
+                    </div>
+
+                    {canEdit && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          if (showSplitPanel) {
+                            setShowSplitPanel(false);
+                          } else {
+                            handleOpenSplitPanel();
+                          }
+                        }}
+                        disabled={anyInstallmentPaid || currentItem.status === 'Recebido' || currentItem.status === 'Pago'}
+                        className={`px-4 py-2 rounded-xl text-xs font-bold uppercase tracking-wider transition-all flex items-center gap-1.5 shadow-sm ${
+                          showSplitPanel
+                            ? 'bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-slate-700'
+                            : 'bg-indigo-600 hover:bg-indigo-700 text-white shadow-indigo-600/20'
+                        } disabled:opacity-50 disabled:cursor-not-allowed`}
+                        title={
+                          anyInstallmentPaid || currentItem.status === 'Recebido' || currentItem.status === 'Pago'
+                            ? 'Não é possível alterar parcelamento com parcelas já recebidas/pagas'
+                            : ''
+                        }
+                      >
+                        <span className="material-symbols-outlined text-[16px]">
+                          {showSplitPanel ? 'expand_less' : isAlreadySplit ? 'edit_calendar' : 'splitscreen'}
+                        </span>
+                        {showSplitPanel ? 'Recolher' : isAlreadySplit ? 'Editar Parcelamento' : 'Parcelar Fatura'}
+                      </button>
+                    )}
+                  </div>
+
+                  {/* Painel expansível de configuração das parcelas */}
+                  {showSplitPanel && (
+                    <div className="mt-3 p-4 bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 rounded-2xl space-y-4 shadow-sm">
+                      {/* Barra de resumo dos valores */}
+                      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 p-3 bg-slate-50 dark:bg-slate-800/50 rounded-xl border border-slate-200/70 dark:border-slate-700/60">
+                        <div>
+                          <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 dark:text-slate-500 block">
+                            Total da Fatura
+                          </span>
+                          <span className="text-sm font-bold text-slate-900 dark:text-white font-mono">
+                            {formatMoney(faturaTotalAmount)}
+                          </span>
+                        </div>
+                        <div>
+                          <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 dark:text-slate-500 block">
+                            Soma das Parcelas
+                          </span>
+                          <span className="text-sm font-bold text-indigo-600 dark:text-indigo-400 font-mono">
+                            {formatMoney(currentSplitSum)}
+                          </span>
+                        </div>
+                        <div className="flex items-center justify-between">
+                          <div>
+                            <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 dark:text-slate-500 block">
+                              Diferença
+                            </span>
+                            <span
+                              className={`text-sm font-bold font-mono inline-flex items-center gap-1 ${
+                                isSplitBalanced
+                                  ? 'text-emerald-600 dark:text-emerald-400'
+                                  : 'text-amber-600 dark:text-amber-400'
+                              }`}
+                            >
+                              <span className="material-symbols-outlined text-[16px]">
+                                {isSplitBalanced ? 'check_circle' : 'warning'}
+                              </span>
+                              {isSplitBalanced ? 'R$ 0,00' : formatMoney(splitDifference)}
+                            </span>
+                          </div>
+                          <button
+                            type="button"
+                            onClick={handleDistributeEqually}
+                            className="px-2.5 py-1.5 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 rounded-lg text-[11px] font-semibold transition-colors flex items-center gap-1 shadow-xs"
+                            title="Distribuir o valor igualmente entre todas as parcelas"
+                          >
+                            <span className="material-symbols-outlined text-[14px]">balance</span>
+                            Dividir Igual
+                          </button>
+                        </div>
+                      </div>
+
+                      {/* Lista de Parcelas */}
+                      <div className="space-y-2.5">
+                        <div className="flex items-center justify-between">
+                          <span className="text-xs font-bold text-slate-700 dark:text-slate-300">
+                            Parcelas ({splitInstallments.length})
+                          </span>
+                          <span className="text-[11px] text-slate-400 dark:text-slate-500">
+                            A 1ª parcela atualiza este lançamento; as demais geram novas contas a receber.
+                          </span>
+                        </div>
+
+                        <div className="space-y-2">
+                          {splitInstallments.map((inst, index) => {
+                            const isFirst = index === 0;
+                            return (
+                              <div
+                                key={index}
+                                className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 p-3 bg-slate-50/60 dark:bg-slate-800/40 border border-slate-200/70 dark:border-slate-800 rounded-xl"
+                              >
+                                <div className="flex items-center gap-2 sm:w-32 shrink-0">
+                                  <span className="w-6 h-6 rounded-full bg-indigo-100 dark:bg-indigo-900/40 text-indigo-700 dark:text-indigo-300 text-xs font-bold flex items-center justify-center">
+                                    {index + 1}
+                                  </span>
+                                  <div>
+                                    <span className="text-xs font-bold text-slate-800 dark:text-slate-200 block">
+                                      {isFirst ? '1ª Parcela' : `${index + 1}ª Parcela`}
+                                    </span>
+                                    {isFirst && (
+                                      <span className="text-[9px] text-emerald-600 dark:text-emerald-400 font-medium block">
+                                        Registro atual
+                                      </span>
+                                    )}
+                                  </div>
+                                </div>
+
+                                <div className="flex-1 grid grid-cols-1 sm:grid-cols-2 gap-2">
+                                  <div>
+                                    <label className="block text-[10px] font-medium text-slate-500 dark:text-slate-400 mb-0.5">
+                                      Valor (R$)
+                                    </label>
+                                    <input
+                                      type="number"
+                                      step="0.01"
+                                      min="0.01"
+                                      value={inst.amount}
+                                      onChange={(e) => handleChangeSplitAmount(index, e.target.value)}
+                                      placeholder="0,00"
+                                      className="w-full text-xs px-3 py-1.5 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-900 dark:text-white font-mono focus:ring-1 focus:ring-indigo-500 focus:outline-none"
+                                    />
+                                  </div>
+
+                                  <div>
+                                    <label className="block text-[10px] font-medium text-slate-500 dark:text-slate-400 mb-0.5">
+                                      Vencimento
+                                    </label>
+                                    <input
+                                      type="date"
+                                      value={inst.due_date}
+                                      onChange={(e) => handleChangeSplitDueDate(index, e.target.value)}
+                                      className="w-full text-xs px-3 py-1.5 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-900 dark:text-white font-mono focus:ring-1 focus:ring-indigo-500 focus:outline-none [color-scheme:light] dark:[color-scheme:dark]"
+                                    />
+                                  </div>
+                                </div>
+
+                                {!isFirst && (
+                                  <div className="flex items-end sm:items-center justify-end sm:justify-center pt-1 sm:pt-4">
+                                    <button
+                                      type="button"
+                                      onClick={() => handleRemoveSplitInstallment(index)}
+                                      className="p-1.5 text-slate-400 hover:text-rose-600 dark:hover:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-500/10 rounded-lg transition-colors"
+                                      title="Remover parcela"
+                                    >
+                                      <span className="material-symbols-outlined text-[18px]">delete</span>
+                                    </button>
+                                  </div>
+                                )}
+                              </div>
+                            );
+                          })}
+                        </div>
+
+                        <div className="flex items-center justify-between pt-1">
+                          <button
+                            type="button"
+                            onClick={handleAddSplitInstallment}
+                            className="px-3 py-1.5 bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 rounded-xl text-xs font-semibold transition-colors inline-flex items-center gap-1.5"
+                          >
+                            <span className="material-symbols-outlined text-[16px]">add</span>
+                            Adicionar Parcela
+                          </button>
+
+                          <label className="flex items-center gap-2 text-xs text-slate-600 dark:text-slate-400 cursor-pointer select-none">
+                            <input
+                              type="checkbox"
+                              checked={updateFaturaNotesWithSplit}
+                              onChange={(e) => setUpdateFaturaNotesWithSplit(e.target.checked)}
+                              className="rounded border-slate-300 text-indigo-600 focus:ring-indigo-500"
+                            />
+                            Atualizar observações da fatura com as parcelas
+                          </label>
+                        </div>
+                      </div>
+
+                      {/* Mensagens de erro/sucesso */}
+                      {splitErrorMessage && (
+                        <div className="p-3 bg-rose-50 dark:bg-rose-500/10 border border-rose-200 dark:border-rose-500/20 rounded-xl text-xs font-semibold text-rose-700 dark:text-rose-400 flex items-center gap-2">
+                          <span className="material-symbols-outlined text-[18px]">error</span>
+                          {splitErrorMessage}
+                        </div>
+                      )}
+
+                      {splitSuccessMessage && (
+                        <div className="p-3 bg-emerald-50 dark:bg-emerald-500/10 border border-emerald-200 dark:border-emerald-500/20 rounded-xl text-xs font-semibold text-emerald-700 dark:text-emerald-400 flex items-center gap-2">
+                          <span className="material-symbols-outlined text-[18px]">check_circle</span>
+                          {splitSuccessMessage}
+                        </div>
+                      )}
+
+                      {/* Ações do Parcelamento */}
+                      <div className="flex items-center justify-end gap-2 pt-2 border-t border-slate-100 dark:border-slate-800">
+                        <button
+                          type="button"
+                          onClick={() => setShowSplitPanel(false)}
+                          disabled={splitting}
+                          className="px-4 py-2 border border-slate-200 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-800 text-slate-600 dark:text-slate-400 rounded-xl text-xs font-bold uppercase tracking-wider transition-colors disabled:opacity-50"
+                        >
+                          Cancelar
+                        </button>
+
+                        <button
+                          type="button"
+                          onClick={handleConfirmSplit}
+                          disabled={splitting || !isSplitBalanced}
+                          className="px-5 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-bold uppercase tracking-wider transition-all flex items-center gap-1.5 shadow-sm shadow-indigo-600/20 disabled:opacity-50 disabled:cursor-not-allowed"
+                        >
+                          {splitting ? (
+                            <>
+                              <div className="w-3.5 h-3.5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                              Salvando...
+                            </>
+                          ) : (
+                            <>
+                              <span className="material-symbols-outlined text-[16px]">check</span>
+                              Confirmar Parcelamento
+                            </>
+                          )}
+                        </button>
+                      </div>
+                    </div>
+                  )}
+                </div>
               </div>
             )}
 

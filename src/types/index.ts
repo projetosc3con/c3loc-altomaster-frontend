@@ -781,6 +781,7 @@ export interface StatementItem {
   installments?: StatementItem[];
   installments_count?: number;
   paid_installments_count?: number;
+  total_value?: number | null;
   raw: Record<string, any> | any;
 }
 

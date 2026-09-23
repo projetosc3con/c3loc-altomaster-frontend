@@ -241,6 +241,17 @@ export const financeiroService = {
     await api.delete(`/bills/${billId}`);
   },
 
+  parcelarContaReceber: async (
+    billId: string,
+    payload: {
+      installments: Array<{ amount: number; due_date: string }>;
+      notes?: string;
+    }
+  ): Promise<{ success: boolean; message: string; item: StatementItem; installments: StatementItem[] }> => {
+    const { data } = await api.post(`/bills/${billId}/split-installments`, payload);
+    return data;
+  },
+
   // Dispara a busca do extrato bancário no BB pro período informado (default
   // últimos 30 dias no backend) e concilia automaticamente contra os `bills`
   // ainda não conciliados. A lista de linhas retornada não é persistida em
