@@ -235,6 +235,7 @@ interface FaturaLocacaoDocumentProps {
     bank_name?: string;
     bank_pix_key?: string;
   };
+  logoUrl?: string;
 }
 
 const formatCurrency = (val: number) => {
@@ -252,6 +253,7 @@ export const FaturaLocacaoDocument: React.FC<FaturaLocacaoDocumentProps> = ({
   notes,
   observations,
   companySettings,
+  logoUrl,
 }) => {
   const form = contract.contract_form || ({} as any);
   const deal = contract.deal || ({} as any);
@@ -384,7 +386,7 @@ export const FaturaLocacaoDocument: React.FC<FaturaLocacaoDocumentProps> = ({
           <View style={styles.headerRow}>
             {/* Logo */}
             <View style={styles.headerLogoCol}>
-              <Image src={logoAltoMaster} style={styles.headerLogo} />
+              <Image src={logoUrl || logoAltoMaster} style={styles.headerLogo} />
             </View>
 
             {/* Dados da Empresa */}

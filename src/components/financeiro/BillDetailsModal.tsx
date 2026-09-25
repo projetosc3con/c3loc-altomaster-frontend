@@ -71,40 +71,55 @@ const resolveBillPeriodAndEquipments = (
   let targetPeriodStart: string = '';
   let targetPeriodEnd: string = '';
 
+  const normDate = (d: any) => (d ? String(d).split('T')[0] : '');
+
   if (isExtension) {
-    if (Array.isArray(currentRawSnap.extension_items) && currentRawSnap.extension_items.length > 0) {
-      targetEquipments = currentRawSnap.extension_items;
-    } else if (currentRawSnap.period_start && currentRawSnap.period_end) {
-      const matched = allRentalEquipments.filter((eq: any) => {
-        const s = eq.billing_period_start || eq.period_start;
-        const e = eq.billing_period_end || eq.period_end;
-        return s === currentRawSnap.period_start && e === currentRawSnap.period_end;
+    const extStart = currentRawSnap.period_start || (Array.isArray(currentRawSnap.extension_items) && currentRawSnap.extension_items[0]?.billing_period_start);
+
+    // 1. Obter todos os itens de prorrogação que iniciam na data de início desta prorrogação
+    if (extStart && allRentalEquipments.length > 0) {
+      const pStart = normDate(extStart);
+      const matchedByStart = allRentalEquipments.filter((eq: any) => {
+        const isEqExt = eq.notes === 'Prorrogação de locação' || (eq.notes && eq.notes.toLowerCase().includes('prorroga'));
+        const s = normDate(eq.billing_period_start || eq.period_start);
+        return isEqExt && s === pStart;
       });
-      if (matched.length > 0) targetEquipments = matched;
+      if (matchedByStart.length > 0) {
+        targetEquipments = matchedByStart;
+        targetPeriodStart = pStart;
+      }
     }
 
+    // 2. Se não encontrou por data de início em allRentalEquipments, usa extension_items do snapshot
+    if (targetEquipments.length === 0 && Array.isArray(currentRawSnap.extension_items) && currentRawSnap.extension_items.length > 0) {
+      targetEquipments = currentRawSnap.extension_items;
+    }
+
+    // 3. Fallback: agrupar prorrogações por data de início apenas
     if (targetEquipments.length === 0) {
       const extensionItems = allRentalEquipments.filter(
         (eq: any) => eq.notes === 'Prorrogação de locação' || (eq.notes && eq.notes.toLowerCase().includes('prorroga'))
       );
 
-      // Agrupar itens de prorrogação por período
+      // Agrupar itens de prorrogação por data de início apenas
       const groupsMap = new Map<string, { start: string; end: string; items: any[]; total: number }>();
       for (const eq of extensionItems) {
-        const s = eq.billing_period_start || eq.period_start || '';
-        const e = eq.billing_period_end || eq.period_end || '';
-        const key = `${s}__${e}`;
+        const s = normDate(eq.billing_period_start || eq.period_start || '');
+        const e = normDate(eq.billing_period_end || eq.period_end || '');
+        const key = s; // Agrupar pela data de início apenas
         if (!groupsMap.has(key)) {
           groupsMap.set(key, { start: s, end: e, items: [], total: 0 });
         }
         const g = groupsMap.get(key)!;
         g.items.push(eq);
         g.total += Number(eq.total_value ?? eq.cost_rental ?? 0);
+        if (e && (!g.end || e > g.end)) {
+          g.end = e;
+        }
       }
 
       const periodGroups = Array.from(groupsMap.values()).sort((a, b) => {
-        if (a.start !== b.start) return (a.start || '').localeCompare(b.start || '');
-        return (a.end || '').localeCompare(b.end || '');
+        return (a.start || '').localeCompare(b.start || '');
       });
 
       if (periodGroups.length > 0) {
@@ -145,10 +160,11 @@ const resolveBillPeriodAndEquipments = (
     }
 
     if (!targetPeriodStart && targetEquipments.length > 0) {
-      targetPeriodStart = targetEquipments[0].billing_period_start || targetEquipments[0].period_start || '';
+      targetPeriodStart = normDate(targetEquipments[0].billing_period_start || targetEquipments[0].period_start || currentRawSnap.period_start || '');
     }
     if (!targetPeriodEnd && targetEquipments.length > 0) {
-      targetPeriodEnd = targetEquipments[targetEquipments.length - 1].billing_period_end || targetEquipments[targetEquipments.length - 1].period_end || '';
+      const ends = targetEquipments.map((eq: any) => normDate(eq.billing_period_end || eq.period_end || '')).filter(Boolean).sort();
+      targetPeriodEnd = ends.length > 0 ? ends[ends.length - 1] : normDate(currentRawSnap.period_end || '');
     }
   } else {
     // Locação inicial
@@ -156,8 +172,9 @@ const resolveBillPeriodAndEquipments = (
       (eq: any) => eq.notes !== 'Prorrogação de locação' && !(eq.notes && eq.notes.toLowerCase().includes('prorroga'))
     );
     targetEquipments = initialItems.length > 0 ? initialItems : allRentalEquipments;
-    targetPeriodStart = currentRawSnap.period_start || targetEquipments[0]?.billing_period_start || targetEquipments[0]?.period_start || rental?.billing_period_start || '';
-    targetPeriodEnd = currentRawSnap.period_end || targetEquipments[targetEquipments.length - 1]?.billing_period_end || targetEquipments[targetEquipments.length - 1]?.period_end || rental?.billing_period_end || '';
+    targetPeriodStart = normDate(currentRawSnap.period_start || targetEquipments[0]?.billing_period_start || targetEquipments[0]?.period_start || rental?.billing_period_start || '');
+    const initialEnds = targetEquipments.map((eq: any) => normDate(eq.billing_period_end || eq.period_end || '')).filter(Boolean).sort();
+    targetPeriodEnd = normDate(currentRawSnap.period_end || (initialEnds.length > 0 ? initialEnds[initialEnds.length - 1] : rental?.billing_period_end || ''));
   }
 
   return {
@@ -401,15 +418,18 @@ const BillDetailsModal: React.FC<BillDetailsModalProps> = ({ isOpen, item, onClo
       const targetCostTotal: number = Number(currentItem.gross_value || 0);
 
       let targetEquipments = resolved.targetEquipments;
-      // Se tiver período explícito definido, refinar itens que pertencem exatamente a este período
-      if (targetPeriodStart && targetPeriodEnd && allRentalEquipments.length > 0) {
+      // Obter os itens da locação filtrando apenas pela data de início (billing_period_start)
+      if (targetPeriodStart && allRentalEquipments.length > 0) {
         const normDate = (d: any) => (d ? String(d).split('T')[0] : '');
         const pStart = normDate(targetPeriodStart);
-        const pEnd = normDate(targetPeriodEnd);
         const periodMatched = allRentalEquipments.filter((eq: any) => {
           const s = normDate(eq.billing_period_start || eq.period_start);
-          const e = normDate(eq.billing_period_end || eq.period_end);
-          return s === pStart && e === pEnd;
+          if (isExtension) {
+            const isEqExt = eq.notes === 'Prorrogação de locação' || (eq.notes && eq.notes.toLowerCase().includes('prorroga'));
+            return isEqExt && s === pStart;
+          }
+          const isInitial = eq.notes !== 'Prorrogação de locação' && !(eq.notes && eq.notes.toLowerCase().includes('prorroga'));
+          return isInitial && s === pStart;
         });
         if (periodMatched.length > 0) {
           targetEquipments = periodMatched;
@@ -420,11 +440,11 @@ const BillDetailsModal: React.FC<BillDetailsModalProps> = ({ isOpen, item, onClo
         targetEquipments = allRentalEquipments;
       }
 
-      // Ajustar cada equipamento da lista para refletir os valores e períodos deste faturamento
+      // Ajustar cada equipamento mantendo as datas individuais e valores correspondentes
       const formattedEquipments = targetEquipments.map((eq: any) => ({
         ...eq,
-        billing_period_start: targetPeriodStart || eq.billing_period_start || eq.period_start,
-        billing_period_end: targetPeriodEnd || eq.billing_period_end || eq.period_end,
+        billing_period_start: eq.billing_period_start || eq.period_start || targetPeriodStart,
+        billing_period_end: eq.billing_period_end || eq.period_end || targetPeriodEnd,
         total_value: targetEquipments.length === 1 ? targetCostTotal : (Number(eq.total_value ?? eq.cost_rental ?? 0) || (targetCostTotal / targetEquipments.length))
       }));
 
@@ -566,7 +586,7 @@ const BillDetailsModal: React.FC<BillDetailsModalProps> = ({ isOpen, item, onClo
         is_extension: isExtension,
         period_start: targetPeriodStart,
         period_end: targetPeriodEnd,
-        extension_items: isExtension ? targetEquipments : undefined,
+        extension_items: isExtension ? formattedEquipments : undefined,
       };
 
       if (currentItem.source === 'bill') {
