@@ -792,6 +792,9 @@ export interface BankStatementLine {
   dc_indicator: 'D' | 'C';
   type: BillType;
   description: string | null;
+  counterparty_name?: string | null;
+  counterparty_document?: string | null;
+  complementary_info?: string | null;
   document_number: string | null;
   unique_transaction_id: string | null;
   raw: Record<string, any> | any;

@@ -4,140 +4,151 @@ Este documento descreve a estrutura de tabelas, relacionamentos, chaves primári
 
 ## Sumário das Tabelas
 
-Abaixo estão listadas as 46 tabelas ativas no esquema `public` do banco de dados:
+Abaixo estão listadas as 52 tabelas ativas no esquema `public` do banco de dados:
 
-- [`users_profiles`](#users-profiles)
-- [`clients`](#clients)
-- [`equipments`](#equipments)
-- [`parts`](#parts)
-- [`rental_invoices`](#rental-invoices)
-- [`payments`](#payments)
-- [`bills`](#bills)
-- [`nfe_imports`](#nfe-imports)
 - [`asaas_webhook_logs`](#asaas-webhook-logs)
-- [`service_orders`](#service-orders)
-- [`service_order_parts`](#service-order-parts)
-- [`invoice_year_counters`](#invoice-year-counters)
-- [`hr_job_levels`](#hr-job-levels)
-- [`hr_positions`](#hr-positions)
-- [`hr_salary_ranges`](#hr-salary-ranges)
-- [`hr_employee_positions`](#hr-employee-positions)
-- [`hr_document_types`](#hr-document-types)
-- [`hr_employee_documents`](#hr-employee-documents)
-- [`hr_integration_types`](#hr-integration-types)
-- [`hr_employee_integrations`](#hr-employee-integrations)
-- [`hr_training_catalog`](#hr-training-catalog)
-- [`hr_employee_trainings`](#hr-employee-trainings)
-- [`crm_leads`](#crm-leads)
+- [`bills`](#bills)
+- [`clients`](#clients)
 - [`crm_contacts`](#crm-contacts)
-- [`crm_pipelines`](#crm-pipelines)
-- [`crm_pipeline_stages`](#crm-pipeline-stages)
-- [`crm_deals`](#crm-deals)
 - [`crm_deal_activities`](#crm-deal-activities)
-- [`crm_task_types`](#crm-task-types)
-- [`crm_tasks`](#crm-tasks)
-- [`erp_company_settings`](#erp-company-settings)
 - [`crm_deal_contract_forms`](#crm-deal-contract-forms)
 - [`crm_deal_contracts`](#crm-deal-contracts)
-- [`logistics_triage_photos`](#logistics-triage-photos)
+- [`crm_deals`](#crm-deals)
+- [`crm_leads`](#crm-leads)
+- [`crm_pipeline_stages`](#crm-pipeline-stages)
+- [`crm_pipelines`](#crm-pipelines)
+- [`crm_task_types`](#crm-task-types)
+- [`crm_tasks`](#crm-tasks)
+- [`equipment_documents`](#equipment-documents)
+- [`equipment_hour_meter_logs`](#equipment-hour-meter-logs)
+- [`equipments`](#equipments)
+- [`erp_company_settings`](#erp-company-settings)
+- [`hr_document_types`](#hr-document-types)
+- [`hr_employee_documents`](#hr-employee-documents)
+- [`hr_employee_integrations`](#hr-employee-integrations)
+- [`hr_employee_positions`](#hr-employee-positions)
+- [`hr_employee_trainings`](#hr-employee-trainings)
 - [`hr_epi_catalog`](#hr-epi-catalog)
 - [`hr_epi_record_items`](#hr-epi-record-items)
 - [`hr_epi_records`](#hr-epi-records)
+- [`hr_integration_types`](#hr-integration-types)
+- [`hr_job_levels`](#hr-job-levels)
 - [`hr_position_document_types`](#hr-position-document-types)
+- [`hr_positions`](#hr-positions)
+- [`hr_salary_ranges`](#hr-salary-ranges)
 - [`hr_time_records`](#hr-time-records)
 - [`hr_timesheet_reports`](#hr-timesheet-reports)
+- [`hr_training_catalog`](#hr-training-catalog)
 - [`hr_vacation_approvals`](#hr-vacation-approvals)
 - [`hr_vacation_installments`](#hr-vacation-installments)
 - [`hr_vacation_requests`](#hr-vacation-requests)
-- [`service_order_labor`](#service-order-labor)
 - [`invoice_nfse`](#invoice-nfse)
+- [`invoice_year_counters`](#invoice-year-counters)
+- [`logistics_triage_photos`](#logistics-triage-photos)
+- [`nfe_imports`](#nfe-imports)
+- [`parts`](#parts)
+- [`payments`](#payments)
+- [`rental_billing_invoices`](#rental-billing-invoices)
+- [`rental_invoice_equipments`](#rental-invoice-equipments)
+- [`rental_invoice_sequence`](#rental-invoice-sequence)
+- [`rental_invoices`](#rental-invoices)
+- [`service_order_labor`](#service-order-labor)
+- [`service_order_parts`](#service-order-parts)
+- [`service_order_rcd`](#service-order-rcd)
+- [`service_orders`](#service-orders)
 - [`stock_movements`](#stock-movements)
+- [`users_profiles`](#users-profiles)
 
 ---
 
 ## Detalhes das Tabelas
 
-### users_profiles
+### asaas_webhook_logs
 
 * **Segurança de Nível de Linha (RLS):** Habilitada (Enabled)
+* **Propósito:** Auditoria e resiliência para processamento assíncrono via webhook — evita perder atualizações de pagamento ou transferências enviadas pelo Asaas.
 
 #### Colunas
 
 | Coluna | Tipo | Nulável | Padrão | Restrições / Notas |
 | :--- | :--- | :---: | :--- | :--- |
-| `id` | `uuid` | Não | - | 🔑 PK |
-| `full_name` | `text` | Não | - |  |
-| `cpf` | `text` | Sim | - | ✨ Unique |
-| `birth_date` | `date` | Sim | - |  |
-| `phone` | `text` | Sim | - |  |
-| `email` | `text` | Não | - | ✨ Unique |
-| `address_street` | `text` | Sim | - |  |
-| `address_number` | `text` | Sim | - |  |
-| `address_complement` | `text` | Sim | - |  |
-| `address_city` | `text` | Sim | - |  |
-| `address_state` | `text` | Sim | - |  |
-| `address_zip` | `text` | Sim | - |  |
-| `role_title` | `text` | Sim | - |  |
-| `access_level` | `USER-DEFINED` | Sim | `'Financeiro'::access_level_type` | Valores: ["Administrador", "Diretoria", "Gerente", "Comercial", "Logística", "Manutenção", "Financeiro", "Recursos Humanos", "Usuário"] |
-| `active` | `boolean` | Sim | `true` |  |
-| `created_at` | `timestamp with time zone` | Sim | `now()` |  |
-| `updated_at` | `timestamp with time zone` | Sim | `now()` |  |
-| `photo_url` | `text` | Sim | - |  |
-| `password_set` | `boolean` | Sim | `false` |  |
-
-#### Relacionamentos de Saída (Chaves Estrangeiras Referenciadas)
-
-* A coluna `id` aponta para [`auth.users.id`](#auth.users)`(id)` (Constraint: `users_profiles_id_fkey`)
-
-#### Relacionamentos de Entrada (Tabelas que Referenciam esta)
-
-* [`bills.created_by`](#bills)`(created_by)` aponta para a coluna local `id` (Constraint: `bills_created_by_fkey`)
-* [`service_orders.executed_by`](#service-orders)`(executed_by)` aponta para a coluna local `id` (Constraint: `service_orders_executed_by_fkey`)
-* [`rental_invoices.created_by`](#rental-invoices)`(created_by)` aponta para a coluna local `id` (Constraint: `rental_invoices_created_by_fkey`)
-* [`hr_employee_positions.user_id`](#hr-employee-positions)`(user_id)` aponta para a coluna local `id` (Constraint: `hr_employee_positions_user_id_fkey`)
-* [`hr_employee_positions.registered_by`](#hr-employee-positions)`(registered_by)` aponta para a coluna local `id` (Constraint: `hr_employee_positions_registered_by_fkey`)
-* [`hr_employee_documents.user_id`](#hr-employee-documents)`(user_id)` aponta para a coluna local `id` (Constraint: `hr_employee_documents_user_id_fkey`)
-* [`hr_employee_documents.registered_by`](#hr-employee-documents)`(registered_by)` aponta para a coluna local `id` (Constraint: `hr_employee_documents_registered_by_fkey`)
-* [`hr_employee_integrations.user_id`](#hr-employee-integrations)`(user_id)` aponta para a coluna local `id` (Constraint: `hr_employee_integrations_user_id_fkey`)
-* [`hr_employee_integrations.registered_by`](#hr-employee-integrations)`(registered_by)` aponta para a coluna local `id` (Constraint: `hr_employee_integrations_registered_by_fkey`)
-* [`hr_employee_trainings.user_id`](#hr-employee-trainings)`(user_id)` aponta para a coluna local `id` (Constraint: `hr_employee_trainings_user_id_fkey`)
-* [`hr_employee_trainings.registered_by`](#hr-employee-trainings)`(registered_by)` aponta para a coluna local `id` (Constraint: `hr_employee_trainings_registered_by_fkey`)
-* [`crm_leads.owner_id`](#crm-leads)`(owner_id)` aponta para a coluna local `id` (Constraint: `crm_leads_owner_id_fkey`)
-* [`crm_deals.owner_id`](#crm-deals)`(owner_id)` aponta para a coluna local `id` (Constraint: `crm_deals_owner_id_fkey`)
-* [`crm_deal_activities.performed_by`](#crm-deal-activities)`(performed_by)` aponta para a coluna local `id` (Constraint: `crm_deal_activities_performed_by_fkey`)
-* [`crm_tasks.assigned_to`](#crm-tasks)`(assigned_to)` aponta para a coluna local `id` (Constraint: `crm_tasks_assigned_to_fkey`)
-* [`crm_tasks.created_by`](#crm-tasks)`(created_by)` aponta para a coluna local `id` (Constraint: `crm_tasks_created_by_fkey`)
-* [`crm_deal_contract_forms.created_by`](#crm-deal-contract-forms)`(created_by)` aponta para a coluna local `id` (Constraint: `crm_deal_contract_forms_created_by_fkey`)
-* [`crm_deal_contract_forms.updated_by`](#crm-deal-contract-forms)`(updated_by)` aponta para a coluna local `id` (Constraint: `crm_deal_contract_forms_updated_by_fkey`)
-* [`crm_deal_contracts.generated_by`](#crm-deal-contracts)`(generated_by)` aponta para a coluna local `id` (Constraint: `crm_deal_contracts_generated_by_fkey`)
-* [`crm_deal_contracts.signed_uploaded_by`](#crm-deal-contracts)`(signed_uploaded_by)` aponta para a coluna local `id` (Constraint: `crm_deal_contracts_signed_uploaded_by_fkey`)
-* [`logistics_triage_photos.uploaded_by`](#logistics-triage-photos)`(uploaded_by)` aponta para a coluna local `id` (Constraint: `logistics_triage_photos_uploaded_by_fkey`)
-* [`hr_time_records.user_id`](#hr-time-records)`(user_id)` aponta para a coluna local `id` (Constraint: `hr_time_records_user_id_fkey`)
-* [`hr_time_records.adjusted_by`](#hr-time-records)`(adjusted_by)` aponta para a coluna local `id` (Constraint: `hr_time_records_adjusted_by_fkey`)
-* [`hr_timesheet_reports.user_id`](#hr-timesheet-reports)`(user_id)` aponta para a coluna local `id` (Constraint: `hr_timesheet_reports_user_id_fkey`)
-* [`hr_timesheet_reports.generated_by`](#hr-timesheet-reports)`(generated_by)` aponta para a coluna local `id` (Constraint: `hr_timesheet_reports_generated_by_fkey`)
-* [`hr_timesheet_reports.approved_by`](#hr-timesheet-reports)`(approved_by)` aponta para a coluna local `id` (Constraint: `hr_timesheet_reports_approved_by_fkey`)
-* [`hr_vacation_requests.user_id`](#hr-vacation-requests)`(user_id)` aponta para a coluna local `id` (Constraint: `hr_vacation_requests_user_id_fkey`)
-* [`hr_vacation_approvals.approver_id`](#hr-vacation-approvals)`(approver_id)` aponta para a coluna local `id` (Constraint: `hr_vacation_approvals_approver_id_fkey`)
-* [`hr_epi_records.user_id`](#hr-epi-records)`(user_id)` aponta para a coluna local `id` (Constraint: `hr_epi_records_user_id_fkey`)
-* [`hr_epi_records.uploaded_by`](#hr-epi-records)`(uploaded_by)` aponta para a coluna local `id` (Constraint: `hr_epi_records_uploaded_by_fkey`)
+| `id` | `uuid` | Não | `gen_random_uuid()` | 🔑 PK |
+| `event_id` | `text` | Não | - | ✨ Unique |
+| `event_type` | `text` | Não | - |  |
+| `payment_id` | `text` | Não | - |  |
+| `payload` | `jsonb` | Não | - |  |
+| `processed` | `boolean` | Não | `false` |  |
+| `created_at` | `timestamp with time zone` | Não | `now()` |  |
 
 #### Índices (Indexes)
 
-* **`users_profiles_cpf_key`**
+* **`asaas_webhook_logs_event_id_key`**
   ```sql
-  CREATE UNIQUE INDEX users_profiles_cpf_key ON public.users_profiles USING btree (cpf)
+  CREATE UNIQUE INDEX asaas_webhook_logs_event_id_key ON public.asaas_webhook_logs USING btree (event_id)
   ```
-* **`users_profiles_email_key`**
+* **`asaas_webhook_logs_pkey`**
   ```sql
-  CREATE UNIQUE INDEX users_profiles_email_key ON public.users_profiles USING btree (email)
+  CREATE UNIQUE INDEX asaas_webhook_logs_pkey ON public.asaas_webhook_logs USING btree (id)
+  ```
+* **`idx_asaas_webhook_logs_payment_id`**
+  ```sql
+  CREATE INDEX idx_asaas_webhook_logs_payment_id ON public.asaas_webhook_logs USING btree (payment_id)
+  ```
+* **`idx_asaas_webhook_logs_processed`**
+  ```sql
+  CREATE INDEX idx_asaas_webhook_logs_processed ON public.asaas_webhook_logs USING btree (processed) WHERE (processed = false)
   ```
 
-#### Gatilhos (Triggers)
+---
 
-* **`update_users_profiles_updated_at`**
+### bills
+
+* **Segurança de Nível de Linha (RLS):** Habilitada (Enabled)
+* **Propósito:** Controle financeiro integrado (Contas a Receber e a Pagar), conciliação bancária de extratos (Banco do Brasil), registros de boletos Asaas e faturamento de locações.
+
+#### Colunas
+
+| Coluna | Tipo | Nulável | Padrão | Restrições / Notas |
+| :--- | :--- | :---: | :--- | :--- |
+| `id` | `uuid` | Não | `gen_random_uuid()` | 🔑 PK |
+| `origin` | `text` | Não | - |  |
+| `type` | `text` | Não | `'receivable'::text` |  |
+| `rental_invoice_id` | `uuid` | Sim | - | FK -> `rental_invoices.id` |
+| `payment_id` | `uuid` | Sim | - | FK -> `payments.id` |
+| `client_id` | `uuid` | Sim | - | FK -> `clients.id` |
+| `counterparty_name` | `text` | Sim | - |  |
+| `description` | `text` | Sim | - |  |
+| `gross_value` | `numeric` | Não | - |  |
+| `fee_amount` | `numeric` | Sim | `0` |  |
+| `net_value` | `numeric` | Não | - |  |
+| `due_date` | `date` | Sim | - |  |
+| `pix_end_to_end_id` | `text` | Sim | - |  |
+| `bank_transaction_date` | `date` | Sim | - |  |
+| `bank_raw_snapshot` | `jsonb` | Sim | - |  |
+| `status` | `text` | Não | `'Pendente'::text` |  |
+| `reconciled_at` | `timestamp with time zone` | Sim | - |  |
+| `created_by` | `uuid` | Sim | - | FK -> `users_profiles.id` |
+| `created_at` | `timestamp with time zone` | Não | `now()` |  |
+| `updated_at` | `timestamp with time zone` | Não | `now()` |  |
+| `barcode` | `text` | Sim | - |  |
+| `bank_slip_url` | `ARRAY` | Sim | - |  |
+
+#### Relacionamentos de Saída (Chaves Estrangeiras Referenciadas)
+
+* A coluna `client_id` aponta para [`clients.id`](#clients)`(id)` (Constraint: `bills_client_id_fkey`)
+* A coluna `created_by` aponta para [`users_profiles.id`](#users-profiles)`(id)` (Constraint: `bills_created_by_fkey`)
+* A coluna `payment_id` aponta para [`payments.id`](#payments)`(id)` (Constraint: `bills_payment_id_fkey`)
+* A coluna `rental_invoice_id` aponta para [`rental_invoices.id`](#rental-invoices)`(id)` (Constraint: `bills_rental_invoice_id_fkey`)
+
+#### Relacionamentos de Entrada (Tabelas que Referenciam esta)
+
+* [`rental_billing_invoices.bill_id`](#rental-billing-invoices)`(bill_id)` aponta para a coluna local `id` (Constraint: `rental_billing_invoices_bill_id_fkey`)
+
+#### Índices (Indexes)
+
+* **`bills_pkey`**
   ```sql
-  CREATE TRIGGER update_users_profiles_updated_at BEFORE UPDATE ON public.users_profiles FOR EACH ROW EXECUTE FUNCTION update_updated_at_column()
+  CREATE UNIQUE INDEX bills_pkey ON public.bills USING btree (id)
   ```
 
 ---
@@ -145,6 +156,7 @@ Abaixo estão listadas as 46 tabelas ativas no esquema `public` do banco de dado
 ### clients
 
 * **Segurança de Nível de Linha (RLS):** Habilitada (Enabled)
+* **Propósito:** Cadastro de clientes (pessoas jurídicas e físicas), controle de pontuação média (score), limites, dados fiscais (CNPJ/IE) e endereço.
 
 #### Colunas
 
@@ -172,19 +184,24 @@ Abaixo estão listadas as 46 tabelas ativas no esquema `public` do banco de dado
 
 #### Relacionamentos de Entrada (Tabelas que Referenciam esta)
 
-* [`crm_deals.client_id`](#crm-deals)`(client_id)` aponta para a coluna local `id` (Constraint: `crm_deals_client_id_fkey`)
-* [`crm_contacts.client_id`](#crm-contacts)`(client_id)` aponta para a coluna local `id` (Constraint: `crm_contacts_client_id_fkey`)
-* [`rental_invoices.client_id`](#rental-invoices)`(client_id)` aponta para a coluna local `id` (Constraint: `rental_invoices_client_id_fkey`)
-* [`hr_employee_integrations.client_id`](#hr-employee-integrations)`(client_id)` aponta para a coluna local `id` (Constraint: `hr_employee_integrations_client_id_fkey`)
-* [`crm_leads.converted_client_id`](#crm-leads)`(converted_client_id)` aponta para a coluna local `id` (Constraint: `crm_leads_converted_client_id_fkey`)
 * [`bills.client_id`](#bills)`(client_id)` aponta para a coluna local `id` (Constraint: `bills_client_id_fkey`)
+* [`crm_contacts.client_id`](#crm-contacts)`(client_id)` aponta para a coluna local `id` (Constraint: `crm_contacts_client_id_fkey`)
+* [`crm_deals.client_id`](#crm-deals)`(client_id)` aponta para a coluna local `id` (Constraint: `crm_deals_client_id_fkey`)
+* [`crm_leads.converted_client_id`](#crm-leads)`(converted_client_id)` aponta para a coluna local `id` (Constraint: `crm_leads_converted_client_id_fkey`)
+* [`hr_employee_integrations.client_id`](#hr-employee-integrations)`(client_id)` aponta para a coluna local `id` (Constraint: `hr_employee_integrations_client_id_fkey`)
 * [`payments.client_id`](#payments)`(client_id)` aponta para a coluna local `id` (Constraint: `payments_client_id_fkey`)
+* [`rental_invoices.client_id`](#rental-invoices)`(client_id)` aponta para a coluna local `id` (Constraint: `rental_invoices_client_id_fkey`)
+* [`service_order_rcd.client_id`](#service-order-rcd)`(client_id)` aponta para a coluna local `id` (Constraint: `service_order_rcd_client_id_fkey`)
 
 #### Índices (Indexes)
 
 * **`clients_cnpj_key`**
   ```sql
   CREATE UNIQUE INDEX clients_cnpj_key ON public.clients USING btree (cnpj)
+  ```
+* **`clients_pkey`**
+  ```sql
+  CREATE UNIQUE INDEX clients_pkey ON public.clients USING btree (id)
   ```
 
 #### Gatilhos (Triggers)
@@ -196,9 +213,635 @@ Abaixo estão listadas as 46 tabelas ativas no esquema `public` do banco de dado
 
 ---
 
+### crm_contacts
+
+* **Segurança de Nível de Linha (RLS):** Habilitada (Enabled)
+* **Propósito:** Contatos associados a leads ou clientes do CRM, indicando contato principal, telefone e e-mail.
+
+#### Colunas
+
+| Coluna | Tipo | Nulável | Padrão | Restrições / Notas |
+| :--- | :--- | :---: | :--- | :--- |
+| `id` | `uuid` | Não | `gen_random_uuid()` | 🔑 PK |
+| `lead_id` | `uuid` | Sim | - | FK -> `crm_leads.id` |
+| `client_id` | `uuid` | Sim | - | FK -> `clients.id` |
+| `full_name` | `text` | Não | - |  |
+| `role_title` | `text` | Sim | - |  |
+| `department` | `text` | Sim | - |  |
+| `email` | `text` | Sim | - |  |
+| `phone` | `text` | Sim | - |  |
+| `is_primary` | `boolean` | Não | `false` |  |
+| `notes` | `text` | Sim | - |  |
+| `active` | `boolean` | Não | `true` |  |
+| `created_at` | `timestamp with time zone` | Não | `now()` |  |
+| `updated_at` | `timestamp with time zone` | Não | `now()` |  |
+
+#### Relacionamentos de Saída (Chaves Estrangeiras Referenciadas)
+
+* A coluna `client_id` aponta para [`clients.id`](#clients)`(id)` (Constraint: `crm_contacts_client_id_fkey`)
+* A coluna `lead_id` aponta para [`crm_leads.id`](#crm-leads)`(id)` (Constraint: `crm_contacts_lead_id_fkey`)
+
+#### Relacionamentos de Entrada (Tabelas que Referenciam esta)
+
+* [`crm_deal_activities.contact_id`](#crm-deal-activities)`(contact_id)` aponta para a coluna local `id` (Constraint: `crm_deal_activities_contact_id_fkey`)
+* [`crm_deals.primary_contact_id`](#crm-deals)`(primary_contact_id)` aponta para a coluna local `id` (Constraint: `crm_deals_primary_contact_id_fkey`)
+* [`crm_tasks.contact_id`](#crm-tasks)`(contact_id)` aponta para a coluna local `id` (Constraint: `crm_tasks_contact_id_fkey`)
+
+#### Índices (Indexes)
+
+* **`crm_contacts_pkey`**
+  ```sql
+  CREATE UNIQUE INDEX crm_contacts_pkey ON public.crm_contacts USING btree (id)
+  ```
+* **`idx_crm_contacts_client`**
+  ```sql
+  CREATE INDEX idx_crm_contacts_client ON public.crm_contacts USING btree (client_id) WHERE (client_id IS NOT NULL)
+  ```
+* **`idx_crm_contacts_lead`**
+  ```sql
+  CREATE INDEX idx_crm_contacts_lead ON public.crm_contacts USING btree (lead_id) WHERE (lead_id IS NOT NULL)
+  ```
+
+---
+
+### crm_deal_activities
+
+* **Segurança de Nível de Linha (RLS):** Habilitada (Enabled)
+* **Propósito:** Histórico de atividades, interações e avanços de etapas nas negociações do CRM.
+
+#### Colunas
+
+| Coluna | Tipo | Nulável | Padrão | Restrições / Notas |
+| :--- | :--- | :---: | :--- | :--- |
+| `id` | `uuid` | Não | `gen_random_uuid()` | 🔑 PK |
+| `deal_id` | `uuid` | Não | - | FK -> `crm_deals.id` |
+| `activity_type` | `text` | Não | - |  |
+| `description` | `text` | Não | - |  |
+| `stage_from_id` | `uuid` | Sim | - | FK -> `crm_pipeline_stages.id` |
+| `stage_to_id` | `uuid` | Sim | - | FK -> `crm_pipeline_stages.id` |
+| `contact_id` | `uuid` | Sim | - | FK -> `crm_contacts.id` |
+| `performed_by` | `uuid` | Não | - | FK -> `users_profiles.id` |
+| `activity_date` | `timestamp with time zone` | Não | `now()` |  |
+| `created_at` | `timestamp with time zone` | Não | `now()` |  |
+
+#### Relacionamentos de Saída (Chaves Estrangeiras Referenciadas)
+
+* A coluna `contact_id` aponta para [`crm_contacts.id`](#crm-contacts)`(id)` (Constraint: `crm_deal_activities_contact_id_fkey`)
+* A coluna `deal_id` aponta para [`crm_deals.id`](#crm-deals)`(id)` (Constraint: `crm_deal_activities_deal_id_fkey`)
+* A coluna `performed_by` aponta para [`users_profiles.id`](#users-profiles)`(id)` (Constraint: `crm_deal_activities_performed_by_fkey`)
+* A coluna `stage_from_id` aponta para [`crm_pipeline_stages.id`](#crm-pipeline-stages)`(id)` (Constraint: `crm_deal_activities_stage_from_id_fkey`)
+* A coluna `stage_to_id` aponta para [`crm_pipeline_stages.id`](#crm-pipeline-stages)`(id)` (Constraint: `crm_deal_activities_stage_to_id_fkey`)
+
+#### Índices (Indexes)
+
+* **`crm_deal_activities_pkey`**
+  ```sql
+  CREATE UNIQUE INDEX crm_deal_activities_pkey ON public.crm_deal_activities USING btree (id)
+  ```
+* **`idx_crm_activities_date`**
+  ```sql
+  CREATE INDEX idx_crm_activities_date ON public.crm_deal_activities USING btree (activity_date)
+  ```
+* **`idx_crm_activities_deal`**
+  ```sql
+  CREATE INDEX idx_crm_activities_deal ON public.crm_deal_activities USING btree (deal_id)
+  ```
+
+---
+
+### crm_deal_contract_forms
+
+* **Segurança de Nível de Linha (RLS):** Habilitada (Enabled)
+* **Propósito:** Formulários detalhados de contratação do CRM contendo equipamentos, valores negociados, prazos e condições comerciais antes da geração do contrato.
+
+#### Colunas
+
+| Coluna | Tipo | Nulável | Padrão | Restrições / Notas |
+| :--- | :--- | :---: | :--- | :--- |
+| `id` | `uuid` | Não | `gen_random_uuid()` | 🔑 PK |
+| `deal_id` | `uuid` | Não | - | ✨ Unique; FK -> `crm_deals.id` |
+| `contract_date` | `date` | Não | - |  |
+| `locatario_company_name` | `text` | Não | - |  |
+| `locatario_cnpj` | `text` | Não | - |  |
+| `locatario_state_registration` | `text` | Sim | - |  |
+| `locatario_address_full` | `text` | Não | - |  |
+| `equipment_description` | `text` | Não | - |  |
+| `equipment_model` | `text` | Não | - |  |
+| `contract_duration_days` | `integer` | Não | - |  |
+| `period_start` | `date` | Sim | - |  |
+| `period_end` | `date` | Sim | - |  |
+| `cost_rental` | `numeric` | Não | `0` |  |
+| `cost_insurance` | `numeric` | Não | `0` |  |
+| `cost_freight` | `numeric` | Não | `0` |  |
+| `cost_rcd` | `numeric` | Não | `0` |  |
+| `cost_third_party` | `numeric` | Não | `0` |  |
+| `cost_training` | `numeric` | Não | `0` |  |
+| `cost_total` | `numeric` | Não | - |  |
+| `billing_interval_days` | `text` | Não | - |  |
+| `work_site` | `text` | Não | - |  |
+| `site_contact_name` | `text` | Sim | - |  |
+| `site_contact_phone` | `text` | Sim | - |  |
+| `notes` | `text` | Sim | - |  |
+| `form_status` | `text` | Não | `'Rascunho'::text` |  |
+| `created_by` | `uuid` | Não | - | FK -> `users_profiles.id` |
+| `updated_by` | `uuid` | Sim | - | FK -> `users_profiles.id` |
+| `created_at` | `timestamp with time zone` | Não | `now()` |  |
+| `updated_at` | `timestamp with time zone` | Não | `now()` |  |
+
+#### Relacionamentos de Saída (Chaves Estrangeiras Referenciadas)
+
+* A coluna `created_by` aponta para [`users_profiles.id`](#users-profiles)`(id)` (Constraint: `crm_deal_contract_forms_created_by_fkey`)
+* A coluna `deal_id` aponta para [`crm_deals.id`](#crm-deals)`(id)` (Constraint: `crm_deal_contract_forms_deal_id_fkey`)
+* A coluna `updated_by` aponta para [`users_profiles.id`](#users-profiles)`(id)` (Constraint: `crm_deal_contract_forms_updated_by_fkey`)
+
+#### Relacionamentos de Entrada (Tabelas que Referenciam esta)
+
+* [`crm_deal_contracts.contract_form_id`](#crm-deal-contracts)`(contract_form_id)` aponta para a coluna local `id` (Constraint: `crm_deal_contracts_contract_form_id_fkey`)
+* [`crm_deals.contract_form_id`](#crm-deals)`(contract_form_id)` aponta para a coluna local `id` (Constraint: `crm_deals_contract_form_id_fkey`)
+
+#### Índices (Indexes)
+
+* **`crm_deal_contract_forms_deal_id_key`**
+  ```sql
+  CREATE UNIQUE INDEX crm_deal_contract_forms_deal_id_key ON public.crm_deal_contract_forms USING btree (deal_id)
+  ```
+* **`crm_deal_contract_forms_pkey`**
+  ```sql
+  CREATE UNIQUE INDEX crm_deal_contract_forms_pkey ON public.crm_deal_contract_forms USING btree (id)
+  ```
+* **`idx_deal_contract_forms_deal`**
+  ```sql
+  CREATE INDEX idx_deal_contract_forms_deal ON public.crm_deal_contract_forms USING btree (deal_id)
+  ```
+* **`idx_deal_contract_forms_status`**
+  ```sql
+  CREATE INDEX idx_deal_contract_forms_status ON public.crm_deal_contract_forms USING btree (form_status)
+  ```
+
+---
+
+### crm_deal_contracts
+
+* **Segurança de Nível de Linha (RLS):** Habilitada (Enabled)
+* **Propósito:** Contratos gerados e assinados vinculados aos negócios do CRM, armazenando o snapshot da proposta, numeração oficial e URLs de documentos.
+
+#### Colunas
+
+| Coluna | Tipo | Nulável | Padrão | Restrições / Notas |
+| :--- | :--- | :---: | :--- | :--- |
+| `id` | `uuid` | Não | `gen_random_uuid()` | 🔑 PK |
+| `deal_id` | `uuid` | Não | - | FK -> `crm_deals.id` |
+| `contract_form_id` | `uuid` | Não | - | FK -> `crm_deal_contract_forms.id` |
+| `contract_number` | `text` | Não | - | ✨ Unique |
+| `version` | `integer` | Não | `1` |  |
+| `status` | `text` | Não | `'Gerado'::text` |  |
+| `generated_at` | `timestamp with time zone` | Não | `now()` |  |
+| `generated_by` | `uuid` | Não | - | FK -> `users_profiles.id` |
+| `signed_file_url` | `text` | Sim | - |  |
+| `signed_uploaded_at` | `timestamp with time zone` | Sim | - |  |
+| `signed_uploaded_by` | `uuid` | Sim | - | FK -> `users_profiles.id` |
+| `snapshot` | `jsonb` | Não | - |  |
+| `notes` | `text` | Sim | - |  |
+| `created_at` | `timestamp with time zone` | Não | `now()` |  |
+| `updated_at` | `timestamp with time zone` | Não | `now()` |  |
+| `rental_invoice_id` | `uuid` | Sim | - | FK -> `rental_invoices.id` |
+| `pdf_url` | `text` | Sim | - |  |
+
+#### Relacionamentos de Saída (Chaves Estrangeiras Referenciadas)
+
+* A coluna `contract_form_id` aponta para [`crm_deal_contract_forms.id`](#crm-deal-contract-forms)`(id)` (Constraint: `crm_deal_contracts_contract_form_id_fkey`)
+* A coluna `deal_id` aponta para [`crm_deals.id`](#crm-deals)`(id)` (Constraint: `crm_deal_contracts_deal_id_fkey`)
+* A coluna `generated_by` aponta para [`users_profiles.id`](#users-profiles)`(id)` (Constraint: `crm_deal_contracts_generated_by_fkey`)
+* A coluna `rental_invoice_id` aponta para [`rental_invoices.id`](#rental-invoices)`(id)` (Constraint: `crm_deal_contracts_rental_invoice_id_fkey`)
+* A coluna `signed_uploaded_by` aponta para [`users_profiles.id`](#users-profiles)`(id)` (Constraint: `crm_deal_contracts_signed_uploaded_by_fkey`)
+
+#### Relacionamentos de Entrada (Tabelas que Referenciam esta)
+
+* [`crm_deals.active_contract_id`](#crm-deals)`(active_contract_id)` aponta para a coluna local `id` (Constraint: `crm_deals_active_contract_id_fkey`)
+* [`logistics_triage_photos.contract_id`](#logistics-triage-photos)`(contract_id)` aponta para a coluna local `id` (Constraint: `logistics_triage_photos_contract_id_fkey`)
+* [`rental_invoice_equipments.deal_contract_id`](#rental-invoice-equipments)`(deal_contract_id)` aponta para a coluna local `id` (Constraint: `rental_invoice_equipments_deal_contract_id_fkey`)
+
+#### Índices (Indexes)
+
+* **`crm_deal_contracts_contract_number_key`**
+  ```sql
+  CREATE UNIQUE INDEX crm_deal_contracts_contract_number_key ON public.crm_deal_contracts USING btree (contract_number)
+  ```
+* **`crm_deal_contracts_pkey`**
+  ```sql
+  CREATE UNIQUE INDEX crm_deal_contracts_pkey ON public.crm_deal_contracts USING btree (id)
+  ```
+* **`idx_deal_contracts_deal`**
+  ```sql
+  CREATE INDEX idx_deal_contracts_deal ON public.crm_deal_contracts USING btree (deal_id)
+  ```
+* **`idx_deal_contracts_form`**
+  ```sql
+  CREATE INDEX idx_deal_contracts_form ON public.crm_deal_contracts USING btree (contract_form_id)
+  ```
+* **`idx_deal_contracts_number`**
+  ```sql
+  CREATE INDEX idx_deal_contracts_number ON public.crm_deal_contracts USING btree (contract_number)
+  ```
+* **`idx_deal_contracts_status`**
+  ```sql
+  CREATE INDEX idx_deal_contracts_status ON public.crm_deal_contracts USING btree (status)
+  ```
+
+---
+
+### crm_deals
+
+* **Segurança de Nível de Linha (RLS):** Habilitada (Enabled)
+* **Propósito:** Negócios (deals) do funil comercial, incluindo valores, probabilidade, fase do pipeline e cliente/lead associado.
+
+#### Colunas
+
+| Coluna | Tipo | Nulável | Padrão | Restrições / Notas |
+| :--- | :--- | :---: | :--- | :--- |
+| `id` | `uuid` | Não | `gen_random_uuid()` | 🔑 PK |
+| `title` | `text` | Não | - |  |
+| `pipeline_id` | `uuid` | Não | - | FK -> `crm_pipelines.id` |
+| `stage_id` | `uuid` | Não | - | FK -> `crm_pipeline_stages.id` |
+| `lead_id` | `uuid` | Sim | - | FK -> `crm_leads.id` |
+| `client_id` | `uuid` | Sim | - | FK -> `clients.id` |
+| `primary_contact_id` | `uuid` | Sim | - | FK -> `crm_contacts.id` |
+| `owner_id` | `uuid` | Não | - | FK -> `users_profiles.id` |
+| `value` | `numeric` | Sim | - |  |
+| `probability_pct` | `integer` | Sim | - |  |
+| `expected_close_date` | `date` | Sim | - |  |
+| `closed_at` | `timestamp with time zone` | Sim | - |  |
+| `lost_reason` | `text` | Sim | - |  |
+| `description` | `text` | Sim | - |  |
+| `created_at` | `timestamp with time zone` | Não | `now()` |  |
+| `updated_at` | `timestamp with time zone` | Não | `now()` |  |
+| `active_contract_id` | `uuid` | Sim | - | FK -> `crm_deal_contracts.id` |
+| `contract_form_id` | `uuid` | Sim | - | FK -> `crm_deal_contract_forms.id` |
+| `rental_invoice_id` | `uuid` | Sim | - | FK -> `rental_invoices.id` |
+
+#### Relacionamentos de Saída (Chaves Estrangeiras Referenciadas)
+
+* A coluna `active_contract_id` aponta para [`crm_deal_contracts.id`](#crm-deal-contracts)`(id)` (Constraint: `crm_deals_active_contract_id_fkey`)
+* A coluna `client_id` aponta para [`clients.id`](#clients)`(id)` (Constraint: `crm_deals_client_id_fkey`)
+* A coluna `contract_form_id` aponta para [`crm_deal_contract_forms.id`](#crm-deal-contract-forms)`(id)` (Constraint: `crm_deals_contract_form_id_fkey`)
+* A coluna `lead_id` aponta para [`crm_leads.id`](#crm-leads)`(id)` (Constraint: `crm_deals_lead_id_fkey`)
+* A coluna `owner_id` aponta para [`users_profiles.id`](#users-profiles)`(id)` (Constraint: `crm_deals_owner_id_fkey`)
+* A coluna `pipeline_id` aponta para [`crm_pipelines.id`](#crm-pipelines)`(id)` (Constraint: `crm_deals_pipeline_id_fkey`)
+* A coluna `primary_contact_id` aponta para [`crm_contacts.id`](#crm-contacts)`(id)` (Constraint: `crm_deals_primary_contact_id_fkey`)
+* A coluna `rental_invoice_id` aponta para [`rental_invoices.id`](#rental-invoices)`(id)` (Constraint: `crm_deals_rental_invoice_id_fkey`)
+* A coluna `stage_id` aponta para [`crm_pipeline_stages.id`](#crm-pipeline-stages)`(id)` (Constraint: `crm_deals_stage_id_fkey`)
+
+#### Relacionamentos de Entrada (Tabelas que Referenciam esta)
+
+* [`crm_deal_activities.deal_id`](#crm-deal-activities)`(deal_id)` aponta para a coluna local `id` (Constraint: `crm_deal_activities_deal_id_fkey`)
+* [`crm_deal_contract_forms.deal_id`](#crm-deal-contract-forms)`(deal_id)` aponta para a coluna local `id` (Constraint: `crm_deal_contract_forms_deal_id_fkey`)
+* [`crm_deal_contracts.deal_id`](#crm-deal-contracts)`(deal_id)` aponta para a coluna local `id` (Constraint: `crm_deal_contracts_deal_id_fkey`)
+* [`crm_tasks.deal_id`](#crm-tasks)`(deal_id)` aponta para a coluna local `id` (Constraint: `crm_tasks_deal_id_fkey`)
+* [`rental_invoices.deal_id`](#rental-invoices)`(deal_id)` aponta para a coluna local `id` (Constraint: `rental_invoices_deal_id_fkey`)
+
+#### Índices (Indexes)
+
+* **`crm_deals_pkey`**
+  ```sql
+  CREATE UNIQUE INDEX crm_deals_pkey ON public.crm_deals USING btree (id)
+  ```
+* **`idx_crm_deals_client`**
+  ```sql
+  CREATE INDEX idx_crm_deals_client ON public.crm_deals USING btree (client_id) WHERE (client_id IS NOT NULL)
+  ```
+* **`idx_crm_deals_close_date`**
+  ```sql
+  CREATE INDEX idx_crm_deals_close_date ON public.crm_deals USING btree (expected_close_date)
+  ```
+* **`idx_crm_deals_lead`**
+  ```sql
+  CREATE INDEX idx_crm_deals_lead ON public.crm_deals USING btree (lead_id) WHERE (lead_id IS NOT NULL)
+  ```
+* **`idx_crm_deals_owner`**
+  ```sql
+  CREATE INDEX idx_crm_deals_owner ON public.crm_deals USING btree (owner_id)
+  ```
+* **`idx_crm_deals_pipeline`**
+  ```sql
+  CREATE INDEX idx_crm_deals_pipeline ON public.crm_deals USING btree (pipeline_id)
+  ```
+* **`idx_crm_deals_stage`**
+  ```sql
+  CREATE INDEX idx_crm_deals_stage ON public.crm_deals USING btree (stage_id)
+  ```
+
+---
+
+### crm_leads
+
+* **Segurança de Nível de Linha (RLS):** Habilitada (Enabled)
+* **Propósito:** Leads e oportunidades pré-qualificadas no módulo de CRM.
+
+#### Colunas
+
+| Coluna | Tipo | Nulável | Padrão | Restrições / Notas |
+| :--- | :--- | :---: | :--- | :--- |
+| `id` | `uuid` | Não | `gen_random_uuid()` | 🔑 PK |
+| `company_name` | `text` | Não | - |  |
+| `cnpj` | `text` | Sim | - |  |
+| `segment` | `text` | Sim | - |  |
+| `estimated_potential` | `numeric` | Sim | - |  |
+| `source` | `text` | Sim | - |  |
+| `status` | `text` | Não | `'Novo'::text` |  |
+| `converted_at` | `timestamp with time zone` | Sim | - |  |
+| `converted_client_id` | `uuid` | Sim | - | FK -> `clients.id` |
+| `owner_id` | `uuid` | Não | - | FK -> `users_profiles.id` |
+| `notes` | `text` | Sim | - |  |
+| `created_at` | `timestamp with time zone` | Não | `now()` |  |
+| `updated_at` | `timestamp with time zone` | Não | `now()` |  |
+
+#### Relacionamentos de Saída (Chaves Estrangeiras Referenciadas)
+
+* A coluna `converted_client_id` aponta para [`clients.id`](#clients)`(id)` (Constraint: `crm_leads_converted_client_id_fkey`)
+* A coluna `owner_id` aponta para [`users_profiles.id`](#users-profiles)`(id)` (Constraint: `crm_leads_owner_id_fkey`)
+
+#### Relacionamentos de Entrada (Tabelas que Referenciam esta)
+
+* [`crm_contacts.lead_id`](#crm-contacts)`(lead_id)` aponta para a coluna local `id` (Constraint: `crm_contacts_lead_id_fkey`)
+* [`crm_deals.lead_id`](#crm-deals)`(lead_id)` aponta para a coluna local `id` (Constraint: `crm_deals_lead_id_fkey`)
+* [`crm_tasks.lead_id`](#crm-tasks)`(lead_id)` aponta para a coluna local `id` (Constraint: `crm_tasks_lead_id_fkey`)
+
+#### Índices (Indexes)
+
+* **`crm_leads_pkey`**
+  ```sql
+  CREATE UNIQUE INDEX crm_leads_pkey ON public.crm_leads USING btree (id)
+  ```
+* **`idx_crm_leads_converted`**
+  ```sql
+  CREATE INDEX idx_crm_leads_converted ON public.crm_leads USING btree (converted_client_id) WHERE (converted_client_id IS NOT NULL)
+  ```
+* **`idx_crm_leads_owner`**
+  ```sql
+  CREATE INDEX idx_crm_leads_owner ON public.crm_leads USING btree (owner_id)
+  ```
+* **`idx_crm_leads_status`**
+  ```sql
+  CREATE INDEX idx_crm_leads_status ON public.crm_leads USING btree (status)
+  ```
+
+---
+
+### crm_pipeline_stages
+
+* **Segurança de Nível de Linha (RLS):** Habilitada (Enabled)
+* **Propósito:** Etapas de cada funil comercial (pipeline), com percentual de probabilidade e flags de ganho/perda.
+
+#### Colunas
+
+| Coluna | Tipo | Nulável | Padrão | Restrições / Notas |
+| :--- | :--- | :---: | :--- | :--- |
+| `id` | `uuid` | Não | `gen_random_uuid()` | 🔑 PK |
+| `pipeline_id` | `uuid` | Não | - | FK -> `crm_pipelines.id` |
+| `name` | `text` | Não | - |  |
+| `position` | `integer` | Não | - |  |
+| `is_won` | `boolean` | Não | `false` |  |
+| `is_lost` | `boolean` | Não | `false` |  |
+| `probability_pct` | `integer` | Sim | - |  |
+| `created_at` | `timestamp with time zone` | Não | `now()` |  |
+
+#### Relacionamentos de Saída (Chaves Estrangeiras Referenciadas)
+
+* A coluna `pipeline_id` aponta para [`crm_pipelines.id`](#crm-pipelines)`(id)` (Constraint: `crm_pipeline_stages_pipeline_id_fkey`)
+
+#### Relacionamentos de Entrada (Tabelas que Referenciam esta)
+
+* [`crm_deal_activities.stage_from_id`](#crm-deal-activities)`(stage_from_id)` aponta para a coluna local `id` (Constraint: `crm_deal_activities_stage_from_id_fkey`)
+* [`crm_deal_activities.stage_to_id`](#crm-deal-activities)`(stage_to_id)` aponta para a coluna local `id` (Constraint: `crm_deal_activities_stage_to_id_fkey`)
+* [`crm_deals.stage_id`](#crm-deals)`(stage_id)` aponta para a coluna local `id` (Constraint: `crm_deals_stage_id_fkey`)
+
+#### Índices (Indexes)
+
+* **`crm_pipeline_stages_pkey`**
+  ```sql
+  CREATE UNIQUE INDEX crm_pipeline_stages_pkey ON public.crm_pipeline_stages USING btree (id)
+  ```
+* **`idx_crm_stages_pipeline`**
+  ```sql
+  CREATE INDEX idx_crm_stages_pipeline ON public.crm_pipeline_stages USING btree (pipeline_id)
+  ```
+
+---
+
+### crm_pipelines
+
+* **Segurança de Nível de Linha (RLS):** Habilitada (Enabled)
+* **Propósito:** Funis de vendas (pipelines) configurados no sistema.
+
+#### Colunas
+
+| Coluna | Tipo | Nulável | Padrão | Restrições / Notas |
+| :--- | :--- | :---: | :--- | :--- |
+| `id` | `uuid` | Não | `gen_random_uuid()` | 🔑 PK |
+| `name` | `text` | Não | - | ✨ Unique |
+| `description` | `text` | Sim | - |  |
+| `active` | `boolean` | Não | `true` |  |
+| `created_at` | `timestamp with time zone` | Não | `now()` |  |
+| `updated_at` | `timestamp with time zone` | Não | `now()` |  |
+
+#### Relacionamentos de Entrada (Tabelas que Referenciam esta)
+
+* [`crm_deals.pipeline_id`](#crm-deals)`(pipeline_id)` aponta para a coluna local `id` (Constraint: `crm_deals_pipeline_id_fkey`)
+* [`crm_pipeline_stages.pipeline_id`](#crm-pipeline-stages)`(pipeline_id)` aponta para a coluna local `id` (Constraint: `crm_pipeline_stages_pipeline_id_fkey`)
+
+#### Índices (Indexes)
+
+* **`crm_pipelines_name_key`**
+  ```sql
+  CREATE UNIQUE INDEX crm_pipelines_name_key ON public.crm_pipelines USING btree (name)
+  ```
+* **`crm_pipelines_pkey`**
+  ```sql
+  CREATE UNIQUE INDEX crm_pipelines_pkey ON public.crm_pipelines USING btree (id)
+  ```
+
+---
+
+### crm_task_types
+
+* **Segurança de Nível de Linha (RLS):** Habilitada (Enabled)
+* **Propósito:** Tipos de tarefas e atividades comerciais no CRM (ex: Ligação, Reunião, Visita).
+
+#### Colunas
+
+| Coluna | Tipo | Nulável | Padrão | Restrições / Notas |
+| :--- | :--- | :---: | :--- | :--- |
+| `id` | `uuid` | Não | `gen_random_uuid()` | 🔑 PK |
+| `name` | `text` | Não | - | ✨ Unique |
+| `active` | `boolean` | Não | `true` |  |
+| `created_at` | `timestamp with time zone` | Não | `now()` |  |
+
+#### Relacionamentos de Entrada (Tabelas que Referenciam esta)
+
+* [`crm_tasks.task_type_id`](#crm-tasks)`(task_type_id)` aponta para a coluna local `id` (Constraint: `crm_tasks_task_type_id_fkey`)
+
+#### Índices (Indexes)
+
+* **`crm_task_types_name_key`**
+  ```sql
+  CREATE UNIQUE INDEX crm_task_types_name_key ON public.crm_task_types USING btree (name)
+  ```
+* **`crm_task_types_pkey`**
+  ```sql
+  CREATE UNIQUE INDEX crm_task_types_pkey ON public.crm_task_types USING btree (id)
+  ```
+
+---
+
+### crm_tasks
+
+* **Segurança de Nível de Linha (RLS):** Habilitada (Enabled)
+* **Propósito:** Tarefas agendadas e pendências de acompanhamento comercial atribuídas aos usuários.
+
+#### Colunas
+
+| Coluna | Tipo | Nulável | Padrão | Restrições / Notas |
+| :--- | :--- | :---: | :--- | :--- |
+| `id` | `uuid` | Não | `gen_random_uuid()` | 🔑 PK |
+| `task_type_id` | `uuid` | Não | - | FK -> `crm_task_types.id` |
+| `title` | `text` | Não | - |  |
+| `description` | `text` | Sim | - |  |
+| `deal_id` | `uuid` | Sim | - | FK -> `crm_deals.id` |
+| `lead_id` | `uuid` | Sim | - | FK -> `crm_leads.id` |
+| `contact_id` | `uuid` | Sim | - | FK -> `crm_contacts.id` |
+| `assigned_to` | `uuid` | Não | - | FK -> `users_profiles.id` |
+| `created_by` | `uuid` | Não | - | FK -> `users_profiles.id` |
+| `due_date` | `timestamp with time zone` | Não | - |  |
+| `completed_at` | `timestamp with time zone` | Sim | - |  |
+| `status` | `text` | Não | `'Pendente'::text` |  |
+| `priority` | `text` | Não | `'Normal'::text` |  |
+| `notes` | `text` | Sim | - |  |
+| `created_at` | `timestamp with time zone` | Não | `now()` |  |
+| `updated_at` | `timestamp with time zone` | Não | `now()` |  |
+
+#### Relacionamentos de Saída (Chaves Estrangeiras Referenciadas)
+
+* A coluna `assigned_to` aponta para [`users_profiles.id`](#users-profiles)`(id)` (Constraint: `crm_tasks_assigned_to_fkey`)
+* A coluna `contact_id` aponta para [`crm_contacts.id`](#crm-contacts)`(id)` (Constraint: `crm_tasks_contact_id_fkey`)
+* A coluna `created_by` aponta para [`users_profiles.id`](#users-profiles)`(id)` (Constraint: `crm_tasks_created_by_fkey`)
+* A coluna `deal_id` aponta para [`crm_deals.id`](#crm-deals)`(id)` (Constraint: `crm_tasks_deal_id_fkey`)
+* A coluna `lead_id` aponta para [`crm_leads.id`](#crm-leads)`(id)` (Constraint: `crm_tasks_lead_id_fkey`)
+* A coluna `task_type_id` aponta para [`crm_task_types.id`](#crm-task-types)`(id)` (Constraint: `crm_tasks_task_type_id_fkey`)
+
+#### Índices (Indexes)
+
+* **`crm_tasks_pkey`**
+  ```sql
+  CREATE UNIQUE INDEX crm_tasks_pkey ON public.crm_tasks USING btree (id)
+  ```
+* **`idx_crm_tasks_assigned`**
+  ```sql
+  CREATE INDEX idx_crm_tasks_assigned ON public.crm_tasks USING btree (assigned_to)
+  ```
+* **`idx_crm_tasks_deal`**
+  ```sql
+  CREATE INDEX idx_crm_tasks_deal ON public.crm_tasks USING btree (deal_id) WHERE (deal_id IS NOT NULL)
+  ```
+* **`idx_crm_tasks_due`**
+  ```sql
+  CREATE INDEX idx_crm_tasks_due ON public.crm_tasks USING btree (due_date)
+  ```
+* **`idx_crm_tasks_lead`**
+  ```sql
+  CREATE INDEX idx_crm_tasks_lead ON public.crm_tasks USING btree (lead_id) WHERE (lead_id IS NOT NULL)
+  ```
+* **`idx_crm_tasks_status`**
+  ```sql
+  CREATE INDEX idx_crm_tasks_status ON public.crm_tasks USING btree (status)
+  ```
+
+---
+
+### equipment_documents
+
+* **Segurança de Nível de Linha (RLS):** Habilitada (Enabled)
+* **Propósito:** Armazenamento e controle de documentos técnicos, manuais, certificados e laudos atrelados a cada equipamento cadastrado.
+
+#### Colunas
+
+| Coluna | Tipo | Nulável | Padrão | Restrições / Notas |
+| :--- | :--- | :---: | :--- | :--- |
+| `id` | `uuid` | Não | `gen_random_uuid()` | 🔑 PK |
+| `equipment_id` | `uuid` | Não | - | FK -> `equipments.id` |
+| `document_name` | `text` | Não | - |  |
+| `file_url` | `text` | Não | - |  |
+| `file_name` | `text` | Sim | - |  |
+| `file_size` | `bigint` | Sim | - |  |
+| `created_at` | `timestamp with time zone` | Não | `now()` |  |
+| `updated_at` | `timestamp with time zone` | Não | `now()` |  |
+| `created_by` | `uuid` | Sim | - | FK -> `users_profiles.id` |
+| `updated_by` | `uuid` | Sim | - | FK -> `users_profiles.id` |
+
+#### Relacionamentos de Saída (Chaves Estrangeiras Referenciadas)
+
+* A coluna `created_by` aponta para [`users_profiles.id`](#users-profiles)`(id)` (Constraint: `equipment_documents_created_by_fkey`)
+* A coluna `equipment_id` aponta para [`equipments.id`](#equipments)`(id)` (Constraint: `equipment_documents_equipment_id_fkey`)
+* A coluna `updated_by` aponta para [`users_profiles.id`](#users-profiles)`(id)` (Constraint: `equipment_documents_updated_by_fkey`)
+
+#### Índices (Indexes)
+
+* **`equipment_documents_pkey`**
+  ```sql
+  CREATE UNIQUE INDEX equipment_documents_pkey ON public.equipment_documents USING btree (id)
+  ```
+* **`idx_equipment_documents_equipment_id`**
+  ```sql
+  CREATE INDEX idx_equipment_documents_equipment_id ON public.equipment_documents USING btree (equipment_id)
+  ```
+
+---
+
+### equipment_hour_meter_logs
+
+* **Segurança de Nível de Linha (RLS):** Habilitada (Enabled)
+* **Propósito:** Histórico de medições e atualizações do horímetro dos equipamentos, registrando a evolução das horas de uso, fonte de coleta (OS, vistoria, manual) e usuário responsável.
+
+#### Colunas
+
+| Coluna | Tipo | Nulável | Padrão | Restrições / Notas |
+| :--- | :--- | :---: | :--- | :--- |
+| `id` | `uuid` | Não | `gen_random_uuid()` | 🔑 PK |
+| `equipment_id` | `uuid` | Não | - | FK -> `equipments.id` |
+| `hour_meter` | `numeric` | Não | - |  |
+| `previous_hour_meter` | `numeric` | Sim | - |  |
+| `source_type` | `text` | Não | - |  |
+| `reference_id` | `uuid` | Sim | - |  |
+| `reference_number` | `text` | Sim | - |  |
+| `notes` | `text` | Sim | - |  |
+| `created_by` | `uuid` | Sim | - | FK -> `users_profiles.id` |
+| `created_at` | `timestamp with time zone` | Não | `now()` |  |
+
+#### Relacionamentos de Saída (Chaves Estrangeiras Referenciadas)
+
+* A coluna `created_by` aponta para [`users_profiles.id`](#users-profiles)`(id)` (Constraint: `equipment_hour_meter_logs_created_by_fkey`)
+* A coluna `equipment_id` aponta para [`equipments.id`](#equipments)`(id)` (Constraint: `equipment_hour_meter_logs_equipment_id_fkey`)
+
+#### Índices (Indexes)
+
+* **`equipment_hour_meter_logs_pkey`**
+  ```sql
+  CREATE UNIQUE INDEX equipment_hour_meter_logs_pkey ON public.equipment_hour_meter_logs USING btree (id)
+  ```
+* **`idx_hour_meter_logs_created_at`**
+  ```sql
+  CREATE INDEX idx_hour_meter_logs_created_at ON public.equipment_hour_meter_logs USING btree (created_at DESC)
+  ```
+* **`idx_hour_meter_logs_equipment_id`**
+  ```sql
+  CREATE INDEX idx_hour_meter_logs_equipment_id ON public.equipment_hour_meter_logs USING btree (equipment_id)
+  ```
+
+---
+
 ### equipments
 
 * **Segurança de Nível de Linha (RLS):** Habilitada (Enabled)
+* **Propósito:** Inventário e cadastro de ativos/equipamentos da frota de locação (plataformas pantográficas, articuladas, etc.), com dados patrimoniais, horímetro e status.
 
 #### Colunas
 
@@ -211,29 +854,40 @@ Abaixo estão listadas as 46 tabelas ativas no esquema `public` do banco de dado
 | `model` | `text` | Sim | - |  |
 | `serial_number` | `text` | Sim | - |  |
 | `height` | `numeric` | Sim | - |  |
-| `status` | `USER-DEFINED` | Sim | `'Disponível'::equipment_status_type` | Valores: ["Disponível", "Locado", "Em Manutenção", "Inativo"] |
+| `status` | `USER-DEFINED (equipment_status_type)` | Sim | `'Disponível'::equipment_status_type` | Valores: ["Disponível", "Locado", "Em Manutenção", "Inativo"] |
 | `manufacture_year` | `integer` | Sim | - |  |
 | `value` | `numeric` | Sim | - |  |
 | `unit` | `text` | Sim | `'un'::text` |  |
 | `photo_url` | `text` | Sim | - |  |
 | `notes` | `text` | Sim | - |  |
-| `invoice_number` | `text` | Sim | - | Número da NF-e de aquisição |
-| `nfe_access_key` | `text` | Sim | - | Chave de acesso da NF-e (44 dígitos) |
-| `supplier_name` | `text` | Sim | - | Fornecedor / Emitente da NF-e |
-| `supplier_cnpj` | `text` | Sim | - | CNPJ do fornecedor |
-| `product_code` | `text` | Sim | - | Código do produto no fornecedor |
-| `ncm` | `text` | Sim | - | Código NCM/SH fiscal |
-| `cst` | `text` | Sim | - | CST ICMS |
-| `cfop` | `text` | Sim | - | CFOP da operação |
-| `tax_details` | `jsonb` | Sim | - | Detalhamento de impostos (ICMS, PIS, COFINS, IPI) |
-| `purchase_date` | `date` | Sim | - | Data de emissão/aquisição da NF-e |
-| `created_by` | `uuid` | Sim | - | UID do usuário / criador do registro |
 | `created_at` | `timestamp with time zone` | Sim | `now()` |  |
 | `updated_at` | `timestamp with time zone` | Sim | `now()` |  |
+| `invoice_number` | `text` | Sim | - |  |
+| `nfe_access_key` | `text` | Sim | - |  |
+| `supplier_name` | `text` | Sim | - |  |
+| `supplier_cnpj` | `text` | Sim | - |  |
+| `product_code` | `text` | Sim | - |  |
+| `ncm` | `text` | Sim | - |  |
+| `cst` | `text` | Sim | - |  |
+| `cfop` | `text` | Sim | - |  |
+| `tax_details` | `jsonb` | Sim | - |  |
+| `purchase_date` | `date` | Sim | - |  |
+| `created_by` | `uuid` | Sim | - | FK -> `users_profiles.id` |
+| `technical_specs_url` | `text` | Sim | - |  |
+| `hour_meter` | `numeric` | Sim | `0` | Horímetro atual do equipamento em horas |
+
+#### Relacionamentos de Saída (Chaves Estrangeiras Referenciadas)
+
+* A coluna `created_by` aponta para [`users_profiles.id`](#users-profiles)`(id)` (Constraint: `equipments_created_by_fkey`)
 
 #### Relacionamentos de Entrada (Tabelas que Referenciam esta)
 
+* [`equipment_documents.equipment_id`](#equipment-documents)`(equipment_id)` aponta para a coluna local `id` (Constraint: `equipment_documents_equipment_id_fkey`)
+* [`equipment_hour_meter_logs.equipment_id`](#equipment-hour-meter-logs)`(equipment_id)` aponta para a coluna local `id` (Constraint: `equipment_hour_meter_logs_equipment_id_fkey`)
+* [`logistics_triage_photos.equipment_id`](#logistics-triage-photos)`(equipment_id)` aponta para a coluna local `id` (Constraint: `logistics_triage_photos_equipment_id_fkey`)
+* [`rental_invoice_equipments.equipment_id`](#rental-invoice-equipments)`(equipment_id)` aponta para a coluna local `id` (Constraint: `rental_invoice_equipments_equipment_id_fkey`)
 * [`rental_invoices.equipment_id`](#rental-invoices)`(equipment_id)` aponta para a coluna local `id` (Constraint: `rental_invoices_equipment_id_fkey`)
+* [`service_order_rcd.equipment_id`](#service-order-rcd)`(equipment_id)` aponta para a coluna local `id` (Constraint: `service_order_rcd_equipment_id_fkey`)
 * [`service_orders.equipment_id`](#service-orders)`(equipment_id)` aponta para a coluna local `id` (Constraint: `service_orders_equipment_id_fkey`)
 
 #### Índices (Indexes)
@@ -241,6 +895,10 @@ Abaixo estão listadas as 46 tabelas ativas no esquema `public` do banco de dado
 * **`equipments_asset_number_key`**
   ```sql
   CREATE UNIQUE INDEX equipments_asset_number_key ON public.equipments USING btree (asset_number)
+  ```
+* **`equipments_pkey`**
+  ```sql
+  CREATE UNIQUE INDEX equipments_pkey ON public.equipments USING btree (id)
   ```
 
 #### Gatilhos (Triggers)
@@ -252,43 +910,1033 @@ Abaixo estão listadas as 46 tabelas ativas no esquema `public` do banco de dado
 
 ---
 
-### parts
+### erp_company_settings
 
 * **Segurança de Nível de Linha (RLS):** Habilitada (Enabled)
+* **Propósito:** Configurações corporativas da locadora (razão social, CNPJ, IE, endereço, dados bancários para PIX e boleto).
 
 #### Colunas
 
 | Coluna | Tipo | Nulável | Padrão | Restrições / Notas |
 | :--- | :--- | :---: | :--- | :--- |
 | `id` | `uuid` | Não | `gen_random_uuid()` | 🔑 PK |
-| `internal_code` | `text` | Não | - | ✨ Unique; Prefixo por categoria: P (Peça), C (Consumo), E (EPI), O (Outros) |
-| `description` | `text` | Não | - |  |
-| `category` | `text` | Não | `'Peça'::text` | CHECK: category IN ('Peça', 'Consumo', 'EPI', 'Outros') |
-| `unit` | `text` | Não | `'UN'::text` | Ex: UN, L, KG, M, PAR, CX, RL, JG, PCT |
-| `part_number` | `text` | Sim | - | Referência do fabricante / PN |
-| `quantity` | `numeric` | Sim | `0` | Quantidade em estoque (permite decimais para M, L, KG) |
-| `unit_value` | `numeric` | Sim | `0` |  |
-| `total_value` | `numeric` | Sim | `(quantity * unit_value)` |  |
+| `company_name` | `text` | Não | - |  |
+| `cnpj` | `text` | Não | - |  |
+| `state_registration` | `text` | Sim | - |  |
+| `address_full` | `text` | Não | - |  |
+| `logo_url` | `text` | Sim | - |  |
+| `bank_name` | `text` | Sim | - |  |
+| `bank_code` | `text` | Sim | - |  |
+| `bank_agency` | `text` | Sim | - |  |
+| `bank_account` | `text` | Sim | - |  |
+| `bank_pix_key` | `text` | Sim | - |  |
+| `contract_clauses` | `jsonb` | Não | - |  |
+| `active` | `boolean` | Não | `true` |  |
+| `updated_at` | `timestamp with time zone` | Não | `now()` |  |
+| `asaas_account_id` | `text` | Sim | - |  |
+| `asaas_api_key` | `text` | Sim | - |  |
+| `asaas_boleto_fee_amount` | `numeric` | Sim | - |  |
+| `asaas_pix_fee_percent` | `numeric` | Sim | - |  |
+| `nfse_service_code` | `text` | Sim | - |  |
+| `nfse_iss_regime` | `text` | Não | `'Isento'::text` |  |
+
+#### Índices (Indexes)
+
+* **`erp_company_settings_pkey`**
+  ```sql
+  CREATE UNIQUE INDEX erp_company_settings_pkey ON public.erp_company_settings USING btree (id)
+  ```
+
+---
+
+### hr_document_types
+
+* **Segurança de Nível de Linha (RLS):** Habilitada (Enabled)
+* **Propósito:** Tipos de documentos trabalhistas e de compliance do RH.
+
+#### Colunas
+
+| Coluna | Tipo | Nulável | Padrão | Restrições / Notas |
+| :--- | :--- | :---: | :--- | :--- |
+| `id` | `uuid` | Não | `gen_random_uuid()` | 🔑 PK |
+| `name` | `text` | Não | - | ✨ Unique |
+| `description` | `text` | Sim | - |  |
+| `requires_expiry` | `boolean` | Não | `false` |  |
+| `alert_days_before` | `integer` | Sim | `30` |  |
+| `mandatory` | `boolean` | Não | `true` |  |
+| `active` | `boolean` | Não | `true` |  |
+| `created_at` | `timestamp with time zone` | Não | `now()` |  |
+
+#### Relacionamentos de Entrada (Tabelas que Referenciam esta)
+
+* [`hr_employee_documents.document_type_id`](#hr-employee-documents)`(document_type_id)` aponta para a coluna local `id` (Constraint: `hr_employee_documents_document_type_id_fkey`)
+* [`hr_position_document_types.document_type_id`](#hr-position-document-types)`(document_type_id)` aponta para a coluna local `id` (Constraint: `hr_position_document_types_document_type_id_fkey`)
+
+#### Índices (Indexes)
+
+* **`hr_document_types_name_key`**
+  ```sql
+  CREATE UNIQUE INDEX hr_document_types_name_key ON public.hr_document_types USING btree (name)
+  ```
+* **`hr_document_types_pkey`**
+  ```sql
+  CREATE UNIQUE INDEX hr_document_types_pkey ON public.hr_document_types USING btree (id)
+  ```
+
+---
+
+### hr_employee_documents
+
+* **Segurança de Nível de Linha (RLS):** Habilitada (Enabled)
+* **Propósito:** Documentos anexados aos colaboradores, com controle de validade e status.
+
+#### Colunas
+
+| Coluna | Tipo | Nulável | Padrão | Restrições / Notas |
+| :--- | :--- | :---: | :--- | :--- |
+| `id` | `uuid` | Não | `gen_random_uuid()` | 🔑 PK |
+| `user_id` | `uuid` | Não | - | FK -> `users_profiles.id` |
+| `document_type_id` | `uuid` | Não | - | FK -> `hr_document_types.id` |
+| `document_number` | `text` | Sim | - |  |
+| `issue_date` | `date` | Sim | - |  |
+| `expiry_date` | `date` | Sim | - |  |
+| `status` | `text` | Não | `'Válido'::text` |  |
+| `file_url` | `text` | Sim | - |  |
 | `notes` | `text` | Sim | - |  |
-| `invoice_number` | `text` | Sim | - | Número da NF-e |
-| `nfe_access_key` | `text` | Sim | - | Chave de acesso da NF-e |
-| `supplier_name` | `text` | Sim | - | Razão social do fornecedor |
-| `supplier_cnpj` | `text` | Sim | - | CNPJ do fornecedor |
-| `ncm` | `text` | Sim | - | Código NCM |
-| `cfop` | `text` | Sim | - | CFOP da operação |
-| `created_by` | `uuid` | Sim | - | UID do usuário / criador do registro |
+| `registered_by` | `uuid` | Sim | - | FK -> `users_profiles.id` |
+| `created_at` | `timestamp with time zone` | Não | `now()` |  |
+| `updated_at` | `timestamp with time zone` | Não | `now()` |  |
+
+#### Relacionamentos de Saída (Chaves Estrangeiras Referenciadas)
+
+* A coluna `document_type_id` aponta para [`hr_document_types.id`](#hr-document-types)`(id)` (Constraint: `hr_employee_documents_document_type_id_fkey`)
+* A coluna `registered_by` aponta para [`users_profiles.id`](#users-profiles)`(id)` (Constraint: `hr_employee_documents_registered_by_fkey`)
+* A coluna `user_id` aponta para [`users_profiles.id`](#users-profiles)`(id)` (Constraint: `hr_employee_documents_user_id_fkey`)
+
+#### Índices (Indexes)
+
+* **`hr_employee_documents_pkey`**
+  ```sql
+  CREATE UNIQUE INDEX hr_employee_documents_pkey ON public.hr_employee_documents USING btree (id)
+  ```
+* **`idx_employee_documents_expiry`**
+  ```sql
+  CREATE INDEX idx_employee_documents_expiry ON public.hr_employee_documents USING btree (expiry_date) WHERE (expiry_date IS NOT NULL)
+  ```
+* **`idx_employee_documents_status`**
+  ```sql
+  CREATE INDEX idx_employee_documents_status ON public.hr_employee_documents USING btree (status)
+  ```
+* **`idx_employee_documents_user`**
+  ```sql
+  CREATE INDEX idx_employee_documents_user ON public.hr_employee_documents USING btree (user_id)
+  ```
+
+---
+
+### hr_employee_integrations
+
+* **Segurança de Nível de Linha (RLS):** Habilitada (Enabled)
+* **Propósito:** Controle de integrações de segurança realizadas por funcionários em clientes.
+
+#### Colunas
+
+| Coluna | Tipo | Nulável | Padrão | Restrições / Notas |
+| :--- | :--- | :---: | :--- | :--- |
+| `id` | `uuid` | Não | `gen_random_uuid()` | 🔑 PK |
+| `user_id` | `uuid` | Não | - | FK -> `users_profiles.id` |
+| `integration_type_id` | `uuid` | Não | - | FK -> `hr_integration_types.id` |
+| `client_id` | `uuid` | Sim | - | FK -> `clients.id` |
+| `integration_date` | `date` | Não | - |  |
+| `expiry_date` | `date` | Sim | - |  |
+| `status` | `text` | Não | `'Válida'::text` |  |
+| `location` | `text` | Sim | - |  |
+| `notes` | `text` | Sim | - |  |
+| `file_url` | `text` | Sim | - |  |
+| `registered_by` | `uuid` | Sim | - | FK -> `users_profiles.id` |
+| `created_at` | `timestamp with time zone` | Não | `now()` |  |
+| `updated_at` | `timestamp with time zone` | Não | `now()` |  |
+
+#### Relacionamentos de Saída (Chaves Estrangeiras Referenciadas)
+
+* A coluna `client_id` aponta para [`clients.id`](#clients)`(id)` (Constraint: `hr_employee_integrations_client_id_fkey`)
+* A coluna `integration_type_id` aponta para [`hr_integration_types.id`](#hr-integration-types)`(id)` (Constraint: `hr_employee_integrations_integration_type_id_fkey`)
+* A coluna `registered_by` aponta para [`users_profiles.id`](#users-profiles)`(id)` (Constraint: `hr_employee_integrations_registered_by_fkey`)
+* A coluna `user_id` aponta para [`users_profiles.id`](#users-profiles)`(id)` (Constraint: `hr_employee_integrations_user_id_fkey`)
+
+#### Índices (Indexes)
+
+* **`hr_employee_integrations_pkey`**
+  ```sql
+  CREATE UNIQUE INDEX hr_employee_integrations_pkey ON public.hr_employee_integrations USING btree (id)
+  ```
+* **`idx_employee_integrations_expiry`**
+  ```sql
+  CREATE INDEX idx_employee_integrations_expiry ON public.hr_employee_integrations USING btree (expiry_date) WHERE (expiry_date IS NOT NULL)
+  ```
+* **`idx_employee_integrations_status`**
+  ```sql
+  CREATE INDEX idx_employee_integrations_status ON public.hr_employee_integrations USING btree (status)
+  ```
+* **`idx_employee_integrations_user`**
+  ```sql
+  CREATE INDEX idx_employee_integrations_user ON public.hr_employee_integrations USING btree (user_id)
+  ```
+
+---
+
+### hr_employee_positions
+
+* **Segurança de Nível de Linha (RLS):** Habilitada (Enabled)
+* **Propósito:** Histórico de cargos e níveis salariais ocupados por cada colaborador.
+
+#### Colunas
+
+| Coluna | Tipo | Nulável | Padrão | Restrições / Notas |
+| :--- | :--- | :---: | :--- | :--- |
+| `id` | `uuid` | Não | `gen_random_uuid()` | 🔑 PK |
+| `user_id` | `uuid` | Não | - | FK -> `users_profiles.id` |
+| `position_id` | `uuid` | Não | - | FK -> `hr_positions.id` |
+| `level_id` | `uuid` | Não | - | FK -> `hr_job_levels.id` |
+| `salary` | `numeric` | Não | - |  |
+| `start_date` | `date` | Não | - |  |
+| `end_date` | `date` | Sim | - |  |
+| `change_reason` | `text` | Sim | - |  |
+| `registered_by` | `uuid` | Sim | - | FK -> `users_profiles.id` |
+| `created_at` | `timestamp with time zone` | Não | `now()` |  |
+| `updated_at` | `timestamp with time zone` | Não | `now()` |  |
+
+#### Relacionamentos de Saída (Chaves Estrangeiras Referenciadas)
+
+* A coluna `level_id` aponta para [`hr_job_levels.id`](#hr-job-levels)`(id)` (Constraint: `hr_employee_positions_level_id_fkey`)
+* A coluna `position_id` aponta para [`hr_positions.id`](#hr-positions)`(id)` (Constraint: `hr_employee_positions_position_id_fkey`)
+* A coluna `registered_by` aponta para [`users_profiles.id`](#users-profiles)`(id)` (Constraint: `hr_employee_positions_registered_by_fkey`)
+* A coluna `user_id` aponta para [`users_profiles.id`](#users-profiles)`(id)` (Constraint: `hr_employee_positions_user_id_fkey`)
+
+#### Índices (Indexes)
+
+* **`hr_employee_positions_pkey`**
+  ```sql
+  CREATE UNIQUE INDEX hr_employee_positions_pkey ON public.hr_employee_positions USING btree (id)
+  ```
+* **`idx_employee_positions_current`**
+  ```sql
+  CREATE INDEX idx_employee_positions_current ON public.hr_employee_positions USING btree (user_id) WHERE (end_date IS NULL)
+  ```
+* **`idx_employee_positions_user`**
+  ```sql
+  CREATE INDEX idx_employee_positions_user ON public.hr_employee_positions USING btree (user_id)
+  ```
+
+---
+
+### hr_employee_trainings
+
+* **Segurança de Nível de Linha (RLS):** Habilitada (Enabled)
+* **Propósito:** Treinamentos e certificações obrigatórias de cada colaborador, com validade e status.
+
+#### Colunas
+
+| Coluna | Tipo | Nulável | Padrão | Restrições / Notas |
+| :--- | :--- | :---: | :--- | :--- |
+| `id` | `uuid` | Não | `gen_random_uuid()` | 🔑 PK |
+| `user_id` | `uuid` | Não | - | FK -> `users_profiles.id` |
+| `training_id` | `uuid` | Não | - | FK -> `hr_training_catalog.id` |
+| `provider` | `text` | Sim | - |  |
+| `instructor` | `text` | Sim | - |  |
+| `completion_date` | `date` | Não | - |  |
+| `workload_hours` | `numeric` | Sim | - |  |
+| `expiry_date` | `date` | Sim | - |  |
+| `status` | `text` | Não | `'Válido'::text` |  |
+| `certificate_url` | `text` | Sim | - |  |
+| `cost` | `numeric` | Sim | - |  |
+| `notes` | `text` | Sim | - |  |
+| `registered_by` | `uuid` | Sim | - | FK -> `users_profiles.id` |
+| `created_at` | `timestamp with time zone` | Não | `now()` |  |
+| `updated_at` | `timestamp with time zone` | Não | `now()` |  |
+
+#### Relacionamentos de Saída (Chaves Estrangeiras Referenciadas)
+
+* A coluna `registered_by` aponta para [`users_profiles.id`](#users-profiles)`(id)` (Constraint: `hr_employee_trainings_registered_by_fkey`)
+* A coluna `training_id` aponta para [`hr_training_catalog.id`](#hr-training-catalog)`(id)` (Constraint: `hr_employee_trainings_training_id_fkey`)
+* A coluna `user_id` aponta para [`users_profiles.id`](#users-profiles)`(id)` (Constraint: `hr_employee_trainings_user_id_fkey`)
+
+#### Índices (Indexes)
+
+* **`hr_employee_trainings_pkey`**
+  ```sql
+  CREATE UNIQUE INDEX hr_employee_trainings_pkey ON public.hr_employee_trainings USING btree (id)
+  ```
+* **`idx_employee_trainings_expiry`**
+  ```sql
+  CREATE INDEX idx_employee_trainings_expiry ON public.hr_employee_trainings USING btree (expiry_date) WHERE (expiry_date IS NOT NULL)
+  ```
+* **`idx_employee_trainings_status`**
+  ```sql
+  CREATE INDEX idx_employee_trainings_status ON public.hr_employee_trainings USING btree (status)
+  ```
+* **`idx_employee_trainings_user`**
+  ```sql
+  CREATE INDEX idx_employee_trainings_user ON public.hr_employee_trainings USING btree (user_id)
+  ```
+
+---
+
+### hr_epi_catalog
+
+* **Segurança de Nível de Linha (RLS):** Habilitada (Enabled)
+* **Propósito:** Catálogo de Equipamentos de Proteção Individual (EPIs), com CA e validade.
+
+#### Colunas
+
+| Coluna | Tipo | Nulável | Padrão | Restrições / Notas |
+| :--- | :--- | :---: | :--- | :--- |
+| `id` | `uuid` | Não | `gen_random_uuid()` | 🔑 PK |
+| `name` | `text` | Não | - | ✨ Unique |
+| `ca_number` | `text` | Sim | - |  |
+| `description` | `text` | Sim | - |  |
+| `active` | `boolean` | Não | `true` |  |
+| `created_at` | `timestamp with time zone` | Não | `now()` |  |
+
+#### Relacionamentos de Entrada (Tabelas que Referenciam esta)
+
+* [`hr_epi_record_items.epi_id`](#hr-epi-record-items)`(epi_id)` aponta para a coluna local `id` (Constraint: `hr_epi_record_items_epi_id_fkey`)
+
+#### Índices (Indexes)
+
+* **`hr_epi_catalog_name_key`**
+  ```sql
+  CREATE UNIQUE INDEX hr_epi_catalog_name_key ON public.hr_epi_catalog USING btree (name)
+  ```
+* **`hr_epi_catalog_pkey`**
+  ```sql
+  CREATE UNIQUE INDEX hr_epi_catalog_pkey ON public.hr_epi_catalog USING btree (id)
+  ```
+
+---
+
+### hr_epi_record_items
+
+* **Segurança de Nível de Linha (RLS):** Habilitada (Enabled)
+* **Propósito:** Itens de EPI entregues ao colaborador em cada termo de entrega.
+
+#### Colunas
+
+| Coluna | Tipo | Nulável | Padrão | Restrições / Notas |
+| :--- | :--- | :---: | :--- | :--- |
+| `id` | `uuid` | Não | `gen_random_uuid()` | 🔑 PK |
+| `epi_record_id` | `uuid` | Não | - | ✨ Unique (uq_epi_in_record); FK -> `hr_epi_records.id` |
+| `epi_id` | `uuid` | Não | - | ✨ Unique (uq_epi_in_record); FK -> `hr_epi_catalog.id` |
+| `quantity` | `integer` | Não | `1` |  |
+| `notes` | `text` | Sim | - |  |
+
+#### Relacionamentos de Saída (Chaves Estrangeiras Referenciadas)
+
+* A coluna `epi_id` aponta para [`hr_epi_catalog.id`](#hr-epi-catalog)`(id)` (Constraint: `hr_epi_record_items_epi_id_fkey`)
+* A coluna `epi_record_id` aponta para [`hr_epi_records.id`](#hr-epi-records)`(id)` (Constraint: `hr_epi_record_items_epi_record_id_fkey`)
+
+#### Índices (Indexes)
+
+* **`hr_epi_record_items_pkey`**
+  ```sql
+  CREATE UNIQUE INDEX hr_epi_record_items_pkey ON public.hr_epi_record_items USING btree (id)
+  ```
+* **`idx_epi_record_items_epi`**
+  ```sql
+  CREATE INDEX idx_epi_record_items_epi ON public.hr_epi_record_items USING btree (epi_id)
+  ```
+* **`idx_epi_record_items_record`**
+  ```sql
+  CREATE INDEX idx_epi_record_items_record ON public.hr_epi_record_items USING btree (epi_record_id)
+  ```
+* **`uq_epi_in_record`**
+  ```sql
+  CREATE UNIQUE INDEX uq_epi_in_record ON public.hr_epi_record_items USING btree (epi_record_id, epi_id)
+  ```
+
+---
+
+### hr_epi_records
+
+* **Segurança de Nível de Linha (RLS):** Habilitada (Enabled)
+* **Propósito:** Fichas/termos de entrega de EPI assinados pelos colaboradores.
+
+#### Colunas
+
+| Coluna | Tipo | Nulável | Padrão | Restrições / Notas |
+| :--- | :--- | :---: | :--- | :--- |
+| `id` | `uuid` | Não | `gen_random_uuid()` | 🔑 PK |
+| `user_id` | `uuid` | Não | - | FK -> `users_profiles.id` |
+| `delivery_date` | `date` | Não | - |  |
+| `file_url` | `text` | Não | - |  |
+| `file_uploaded_at` | `timestamp with time zone` | Não | `now()` |  |
+| `uploaded_by` | `uuid` | Não | - | FK -> `users_profiles.id` |
+| `notes` | `text` | Sim | - |  |
+| `created_at` | `timestamp with time zone` | Não | `now()` |  |
+
+#### Relacionamentos de Saída (Chaves Estrangeiras Referenciadas)
+
+* A coluna `uploaded_by` aponta para [`users_profiles.id`](#users-profiles)`(id)` (Constraint: `hr_epi_records_uploaded_by_fkey`)
+* A coluna `user_id` aponta para [`users_profiles.id`](#users-profiles)`(id)` (Constraint: `hr_epi_records_user_id_fkey`)
+
+#### Relacionamentos de Entrada (Tabelas que Referenciam esta)
+
+* [`hr_epi_record_items.epi_record_id`](#hr-epi-record-items)`(epi_record_id)` aponta para a coluna local `id` (Constraint: `hr_epi_record_items_epi_record_id_fkey`)
+
+#### Índices (Indexes)
+
+* **`hr_epi_records_pkey`**
+  ```sql
+  CREATE UNIQUE INDEX hr_epi_records_pkey ON public.hr_epi_records USING btree (id)
+  ```
+* **`idx_epi_records_date`**
+  ```sql
+  CREATE INDEX idx_epi_records_date ON public.hr_epi_records USING btree (delivery_date)
+  ```
+* **`idx_epi_records_user`**
+  ```sql
+  CREATE INDEX idx_epi_records_user ON public.hr_epi_records USING btree (user_id)
+  ```
+
+---
+
+### hr_integration_types
+
+* **Segurança de Nível de Linha (RLS):** Habilitada (Enabled)
+* **Propósito:** Tipos de integrações de segurança exigidas por clientes para entrada em obra.
+
+#### Colunas
+
+| Coluna | Tipo | Nulável | Padrão | Restrições / Notas |
+| :--- | :--- | :---: | :--- | :--- |
+| `id` | `uuid` | Não | `gen_random_uuid()` | 🔑 PK |
+| `name` | `text` | Não | - | ✨ Unique |
+| `description` | `text` | Sim | - |  |
+| `validity_days` | `integer` | Sim | - |  |
+| `alert_days_before` | `integer` | Não | `15` |  |
+| `active` | `boolean` | Não | `true` |  |
+| `created_at` | `timestamp with time zone` | Não | `now()` |  |
+
+#### Relacionamentos de Entrada (Tabelas que Referenciam esta)
+
+* [`hr_employee_integrations.integration_type_id`](#hr-employee-integrations)`(integration_type_id)` aponta para a coluna local `id` (Constraint: `hr_employee_integrations_integration_type_id_fkey`)
+
+#### Índices (Indexes)
+
+* **`hr_integration_types_name_key`**
+  ```sql
+  CREATE UNIQUE INDEX hr_integration_types_name_key ON public.hr_integration_types USING btree (name)
+  ```
+* **`hr_integration_types_pkey`**
+  ```sql
+  CREATE UNIQUE INDEX hr_integration_types_pkey ON public.hr_integration_types USING btree (id)
+  ```
+
+---
+
+### hr_job_levels
+
+* **Segurança de Nível de Linha (RLS):** Habilitada (Enabled)
+* **Propósito:** Níveis de carreira de RH (ex: Júnior, Pleno, Sênior).
+
+#### Colunas
+
+| Coluna | Tipo | Nulável | Padrão | Restrições / Notas |
+| :--- | :--- | :---: | :--- | :--- |
+| `id` | `uuid` | Não | `gen_random_uuid()` | 🔑 PK |
+| `name` | `text` | Não | - |  |
+| `description` | `text` | Sim | - |  |
+| `created_at` | `timestamp with time zone` | Não | `now()` |  |
+| `updated_at` | `timestamp with time zone` | Não | `now()` |  |
+
+#### Relacionamentos de Entrada (Tabelas que Referenciam esta)
+
+* [`hr_employee_positions.level_id`](#hr-employee-positions)`(level_id)` aponta para a coluna local `id` (Constraint: `hr_employee_positions_level_id_fkey`)
+* [`hr_salary_ranges.level_id`](#hr-salary-ranges)`(level_id)` aponta para a coluna local `id` (Constraint: `hr_salary_ranges_level_id_fkey`)
+
+#### Índices (Indexes)
+
+* **`hr_job_levels_pkey`**
+  ```sql
+  CREATE UNIQUE INDEX hr_job_levels_pkey ON public.hr_job_levels USING btree (id)
+  ```
+
+---
+
+### hr_position_document_types
+
+* **Segurança de Nível de Linha (RLS):** Habilitada (Enabled)
+* **Propósito:** Mapeamento de documentos obrigatórios por cargo no RH.
+
+#### Colunas
+
+| Coluna | Tipo | Nulável | Padrão | Restrições / Notas |
+| :--- | :--- | :---: | :--- | :--- |
+| `id` | `uuid` | Não | `gen_random_uuid()` | 🔑 PK |
+| `position_id` | `uuid` | Não | - | ✨ Unique (hr_position_document_types_position_id_document_type_id_key); FK -> `hr_positions.id` |
+| `document_type_id` | `uuid` | Não | - | ✨ Unique (hr_position_document_types_position_id_document_type_id_key); FK -> `hr_document_types.id` |
+| `mandatory` | `boolean` | Não | `true` |  |
+| `notes` | `text` | Sim | - |  |
+| `created_at` | `timestamp with time zone` | Não | `now()` |  |
+
+#### Relacionamentos de Saída (Chaves Estrangeiras Referenciadas)
+
+* A coluna `document_type_id` aponta para [`hr_document_types.id`](#hr-document-types)`(id)` (Constraint: `hr_position_document_types_document_type_id_fkey`)
+* A coluna `position_id` aponta para [`hr_positions.id`](#hr-positions)`(id)` (Constraint: `hr_position_document_types_position_id_fkey`)
+
+#### Índices (Indexes)
+
+* **`hr_position_document_types_pkey`**
+  ```sql
+  CREATE UNIQUE INDEX hr_position_document_types_pkey ON public.hr_position_document_types USING btree (id)
+  ```
+* **`hr_position_document_types_position_id_document_type_id_key`**
+  ```sql
+  CREATE UNIQUE INDEX hr_position_document_types_position_id_document_type_id_key ON public.hr_position_document_types USING btree (position_id, document_type_id)
+  ```
+* **`idx_pos_doc_types_document`**
+  ```sql
+  CREATE INDEX idx_pos_doc_types_document ON public.hr_position_document_types USING btree (document_type_id)
+  ```
+* **`idx_pos_doc_types_position`**
+  ```sql
+  CREATE INDEX idx_pos_doc_types_position ON public.hr_position_document_types USING btree (position_id)
+  ```
+
+---
+
+### hr_positions
+
+* **Segurança de Nível de Linha (RLS):** Habilitada (Enabled)
+* **Propósito:** Cargos e funções da empresa.
+
+#### Colunas
+
+| Coluna | Tipo | Nulável | Padrão | Restrições / Notas |
+| :--- | :--- | :---: | :--- | :--- |
+| `id` | `uuid` | Não | `gen_random_uuid()` | 🔑 PK |
+| `title` | `text` | Não | - |  |
+| `department` | `text` | Não | - |  |
+| `description` | `text` | Sim | - |  |
+| `cbo_code` | `text` | Sim | - |  |
+| `active` | `boolean` | Não | `true` |  |
+| `created_at` | `timestamp with time zone` | Não | `now()` |  |
+| `updated_at` | `timestamp with time zone` | Não | `now()` |  |
+
+#### Relacionamentos de Entrada (Tabelas que Referenciam esta)
+
+* [`hr_employee_positions.position_id`](#hr-employee-positions)`(position_id)` aponta para a coluna local `id` (Constraint: `hr_employee_positions_position_id_fkey`)
+* [`hr_position_document_types.position_id`](#hr-position-document-types)`(position_id)` aponta para a coluna local `id` (Constraint: `hr_position_document_types_position_id_fkey`)
+* [`hr_salary_ranges.position_id`](#hr-salary-ranges)`(position_id)` aponta para a coluna local `id` (Constraint: `hr_salary_ranges_position_id_fkey`)
+
+#### Índices (Indexes)
+
+* **`hr_positions_pkey`**
+  ```sql
+  CREATE UNIQUE INDEX hr_positions_pkey ON public.hr_positions USING btree (id)
+  ```
+
+---
+
+### hr_salary_ranges
+
+* **Segurança de Nível de Linha (RLS):** Habilitada (Enabled)
+* **Propósito:** Faixas salariais por cargo e nível no RH.
+
+#### Colunas
+
+| Coluna | Tipo | Nulável | Padrão | Restrições / Notas |
+| :--- | :--- | :---: | :--- | :--- |
+| `id` | `uuid` | Não | `gen_random_uuid()` | 🔑 PK |
+| `position_id` | `uuid` | Não | - | FK -> `hr_positions.id` |
+| `level_id` | `uuid` | Não | - | FK -> `hr_job_levels.id` |
+| `salary_min` | `numeric` | Não | - |  |
+| `salary_mid` | `numeric` | Sim | - |  |
+| `salary_max` | `numeric` | Não | - |  |
+| `effective_date` | `date` | Não | - |  |
+| `notes` | `text` | Sim | - |  |
+| `created_at` | `timestamp with time zone` | Não | `now()` |  |
+| `updated_at` | `timestamp with time zone` | Não | `now()` |  |
+
+#### Relacionamentos de Saída (Chaves Estrangeiras Referenciadas)
+
+* A coluna `level_id` aponta para [`hr_job_levels.id`](#hr-job-levels)`(id)` (Constraint: `hr_salary_ranges_level_id_fkey`)
+* A coluna `position_id` aponta para [`hr_positions.id`](#hr-positions)`(id)` (Constraint: `hr_salary_ranges_position_id_fkey`)
+
+#### Índices (Indexes)
+
+* **`hr_salary_ranges_pkey`**
+  ```sql
+  CREATE UNIQUE INDEX hr_salary_ranges_pkey ON public.hr_salary_ranges USING btree (id)
+  ```
+
+---
+
+### hr_time_records
+
+* **Segurança de Nível de Linha (RLS):** Habilitada (Enabled)
+* **Propósito:** Registros de ponto eletrônico e controle de jornada dos funcionários.
+
+#### Colunas
+
+| Coluna | Tipo | Nulável | Padrão | Restrições / Notas |
+| :--- | :--- | :---: | :--- | :--- |
+| `id` | `uuid` | Não | `gen_random_uuid()` | 🔑 PK |
+| `user_id` | `uuid` | Não | - | FK -> `users_profiles.id` |
+| `record_type` | `text` | Não | - |  |
+| `recorded_at` | `timestamp with time zone` | Não | `now()` |  |
+| `record_date` | `date` | Não | `CURRENT_DATE` |  |
+| `origin` | `text` | Não | `'Sistema'::text` |  |
+| `justification` | `text` | Sim | - |  |
+| `adjusted_by` | `uuid` | Sim | - | FK -> `users_profiles.id` |
+| `created_at` | `timestamp with time zone` | Não | `now()` |  |
+
+#### Relacionamentos de Saída (Chaves Estrangeiras Referenciadas)
+
+* A coluna `adjusted_by` aponta para [`users_profiles.id`](#users-profiles)`(id)` (Constraint: `hr_time_records_adjusted_by_fkey`)
+* A coluna `user_id` aponta para [`users_profiles.id`](#users-profiles)`(id)` (Constraint: `hr_time_records_user_id_fkey`)
+
+#### Índices (Indexes)
+
+* **`hr_time_records_pkey`**
+  ```sql
+  CREATE UNIQUE INDEX hr_time_records_pkey ON public.hr_time_records USING btree (id)
+  ```
+* **`idx_time_records_date`**
+  ```sql
+  CREATE INDEX idx_time_records_date ON public.hr_time_records USING btree (record_date)
+  ```
+* **`idx_time_records_user_date`**
+  ```sql
+  CREATE INDEX idx_time_records_user_date ON public.hr_time_records USING btree (user_id, record_date)
+  ```
+
+---
+
+### hr_timesheet_reports
+
+* **Segurança de Nível de Linha (RLS):** Habilitada (Enabled)
+* **Propósito:** Relatórios consolidados de espelho de ponto mensal com aprovações.
+
+#### Colunas
+
+| Coluna | Tipo | Nulável | Padrão | Restrições / Notas |
+| :--- | :--- | :---: | :--- | :--- |
+| `id` | `uuid` | Não | `gen_random_uuid()` | 🔑 PK |
+| `user_id` | `uuid` | Não | - | ✨ Unique (uq_timesheet_user_period); FK -> `users_profiles.id` |
+| `period_start` | `date` | Não | - | ✨ Unique (uq_timesheet_user_period) |
+| `period_end` | `date` | Não | - | ✨ Unique (uq_timesheet_user_period) |
+| `total_days_worked` | `integer` | Não | `0` |  |
+| `total_hours_worked` | `numeric` | Não | `0` |  |
+| `total_overtime_hours` | `numeric` | Não | `0` |  |
+| `total_absence_days` | `integer` | Não | `0` |  |
+| `status` | `text` | Não | `'Gerada'::text` |  |
+| `file_url` | `text` | Sim | - |  |
+| `generated_by` | `uuid` | Não | - | FK -> `users_profiles.id` |
+| `approved_by` | `uuid` | Sim | - | FK -> `users_profiles.id` |
+| `approved_at` | `timestamp with time zone` | Sim | - |  |
+| `notes` | `text` | Sim | - |  |
+| `created_at` | `timestamp with time zone` | Não | `now()` |  |
+| `updated_at` | `timestamp with time zone` | Não | `now()` |  |
+
+#### Relacionamentos de Saída (Chaves Estrangeiras Referenciadas)
+
+* A coluna `approved_by` aponta para [`users_profiles.id`](#users-profiles)`(id)` (Constraint: `hr_timesheet_reports_approved_by_fkey`)
+* A coluna `generated_by` aponta para [`users_profiles.id`](#users-profiles)`(id)` (Constraint: `hr_timesheet_reports_generated_by_fkey`)
+* A coluna `user_id` aponta para [`users_profiles.id`](#users-profiles)`(id)` (Constraint: `hr_timesheet_reports_user_id_fkey`)
+
+#### Índices (Indexes)
+
+* **`hr_timesheet_reports_pkey`**
+  ```sql
+  CREATE UNIQUE INDEX hr_timesheet_reports_pkey ON public.hr_timesheet_reports USING btree (id)
+  ```
+* **`idx_timesheet_reports_period`**
+  ```sql
+  CREATE INDEX idx_timesheet_reports_period ON public.hr_timesheet_reports USING btree (period_start, period_end)
+  ```
+* **`idx_timesheet_reports_user`**
+  ```sql
+  CREATE INDEX idx_timesheet_reports_user ON public.hr_timesheet_reports USING btree (user_id)
+  ```
+* **`uq_timesheet_user_period`**
+  ```sql
+  CREATE UNIQUE INDEX uq_timesheet_user_period ON public.hr_timesheet_reports USING btree (user_id, period_start, period_end)
+  ```
+
+---
+
+### hr_training_catalog
+
+* **Segurança de Nível de Linha (RLS):** Habilitada (Enabled)
+* **Propósito:** Catálogo de cursos e treinamentos (NR-35, NR-11, etc.).
+
+#### Colunas
+
+| Coluna | Tipo | Nulável | Padrão | Restrições / Notas |
+| :--- | :--- | :---: | :--- | :--- |
+| `id` | `uuid` | Não | `gen_random_uuid()` | 🔑 PK |
+| `name` | `text` | Não | - |  |
+| `category` | `text` | Sim | - |  |
+| `description` | `text` | Sim | - |  |
+| `workload_hours` | `numeric` | Sim | - |  |
+| `validity_days` | `integer` | Sim | - |  |
+| `alert_days_before` | `integer` | Não | `30` |  |
+| `mandatory` | `boolean` | Não | `false` |  |
+| `active` | `boolean` | Não | `true` |  |
+| `created_at` | `timestamp with time zone` | Não | `now()` |  |
+| `updated_at` | `timestamp with time zone` | Não | `now()` |  |
+
+#### Relacionamentos de Entrada (Tabelas que Referenciam esta)
+
+* [`hr_employee_trainings.training_id`](#hr-employee-trainings)`(training_id)` aponta para a coluna local `id` (Constraint: `hr_employee_trainings_training_id_fkey`)
+
+#### Índices (Indexes)
+
+* **`hr_training_catalog_pkey`**
+  ```sql
+  CREATE UNIQUE INDEX hr_training_catalog_pkey ON public.hr_training_catalog USING btree (id)
+  ```
+
+---
+
+### hr_vacation_approvals
+
+* **Segurança de Nível de Linha (RLS):** Habilitada (Enabled)
+* **Propósito:** Aprovações das solicitações de férias por gestores e diretoria.
+
+#### Colunas
+
+| Coluna | Tipo | Nulável | Padrão | Restrições / Notas |
+| :--- | :--- | :---: | :--- | :--- |
+| `id` | `uuid` | Não | `gen_random_uuid()` | 🔑 PK |
+| `vacation_request_id` | `uuid` | Não | - | ✨ Unique (uq_approval_per_approver); FK -> `hr_vacation_requests.id` |
+| `approver_id` | `uuid` | Não | - | ✨ Unique (uq_approval_per_approver); FK -> `users_profiles.id` |
+| `status` | `text` | Não | `'Pendente'::text` |  |
+| `rejection_reason` | `text` | Sim | - |  |
+| `decided_at` | `timestamp with time zone` | Sim | - |  |
+| `created_at` | `timestamp with time zone` | Não | `now()` |  |
+
+#### Relacionamentos de Saída (Chaves Estrangeiras Referenciadas)
+
+* A coluna `approver_id` aponta para [`users_profiles.id`](#users-profiles)`(id)` (Constraint: `hr_vacation_approvals_approver_id_fkey`)
+* A coluna `vacation_request_id` aponta para [`hr_vacation_requests.id`](#hr-vacation-requests)`(id)` (Constraint: `hr_vacation_approvals_vacation_request_id_fkey`)
+
+#### Índices (Indexes)
+
+* **`hr_vacation_approvals_pkey`**
+  ```sql
+  CREATE UNIQUE INDEX hr_vacation_approvals_pkey ON public.hr_vacation_approvals USING btree (id)
+  ```
+* **`idx_vacation_approvals_appr`**
+  ```sql
+  CREATE INDEX idx_vacation_approvals_appr ON public.hr_vacation_approvals USING btree (approver_id)
+  ```
+* **`idx_vacation_approvals_req`**
+  ```sql
+  CREATE INDEX idx_vacation_approvals_req ON public.hr_vacation_approvals USING btree (vacation_request_id)
+  ```
+* **`idx_vacation_approvals_status`**
+  ```sql
+  CREATE INDEX idx_vacation_approvals_status ON public.hr_vacation_approvals USING btree (status)
+  ```
+* **`uq_approval_per_approver`**
+  ```sql
+  CREATE UNIQUE INDEX uq_approval_per_approver ON public.hr_vacation_approvals USING btree (vacation_request_id, approver_id)
+  ```
+
+#### Gatilhos (Triggers)
+
+* **`trg_vacation_approval_status`**
+  ```sql
+  CREATE TRIGGER trg_vacation_approval_status AFTER INSERT OR UPDATE ON public.hr_vacation_approvals FOR EACH ROW EXECUTE FUNCTION fn_update_vacation_request_status()
+  ```
+
+---
+
+### hr_vacation_installments
+
+* **Segurança de Nível de Linha (RLS):** Habilitada (Enabled)
+* **Propósito:** Parcelas de gozo de férias (até 3 períodos conforme legislação).
+
+#### Colunas
+
+| Coluna | Tipo | Nulável | Padrão | Restrições / Notas |
+| :--- | :--- | :---: | :--- | :--- |
+| `id` | `uuid` | Não | `gen_random_uuid()` | 🔑 PK |
+| `vacation_request_id` | `uuid` | Não | - | ✨ Unique (uq_installment_number); FK -> `hr_vacation_requests.id` |
+| `installment_number` | `integer` | Não | - | ✨ Unique (uq_installment_number) |
+| `start_date` | `date` | Não | - |  |
+| `end_date` | `date` | Não | - |  |
+| `duration_days` | `integer` | Não | - |  |
+| `created_at` | `timestamp with time zone` | Não | `now()` |  |
+
+#### Relacionamentos de Saída (Chaves Estrangeiras Referenciadas)
+
+* A coluna `vacation_request_id` aponta para [`hr_vacation_requests.id`](#hr-vacation-requests)`(id)` (Constraint: `hr_vacation_installments_vacation_request_id_fkey`)
+
+#### Índices (Indexes)
+
+* **`hr_vacation_installments_pkey`**
+  ```sql
+  CREATE UNIQUE INDEX hr_vacation_installments_pkey ON public.hr_vacation_installments USING btree (id)
+  ```
+* **`idx_vacation_installments_req`**
+  ```sql
+  CREATE INDEX idx_vacation_installments_req ON public.hr_vacation_installments USING btree (vacation_request_id)
+  ```
+* **`uq_installment_number`**
+  ```sql
+  CREATE UNIQUE INDEX uq_installment_number ON public.hr_vacation_installments USING btree (vacation_request_id, installment_number)
+  ```
+
+---
+
+### hr_vacation_requests
+
+* **Segurança de Nível de Linha (RLS):** Habilitada (Enabled)
+* **Propósito:** Solicitações de férias dos colaboradores.
+
+#### Colunas
+
+| Coluna | Tipo | Nulável | Padrão | Restrições / Notas |
+| :--- | :--- | :---: | :--- | :--- |
+| `id` | `uuid` | Não | `gen_random_uuid()` | 🔑 PK |
+| `user_id` | `uuid` | Não | - | FK -> `users_profiles.id` |
+| `entitlement_period_start` | `date` | Não | - |  |
+| `entitlement_period_end` | `date` | Não | - |  |
+| `total_entitled_days` | `integer` | Não | `30` |  |
+| `installments_count` | `integer` | Não | - |  |
+| `days_sold` | `integer` | Não | `0` |  |
+| `total_days_requested` | `integer` | Não | - |  |
+| `status` | `text` | Não | `'Pendente'::text` |  |
+| `rejection_reason` | `text` | Sim | - |  |
+| `notes` | `text` | Sim | - |  |
+| `created_at` | `timestamp with time zone` | Não | `now()` |  |
+| `updated_at` | `timestamp with time zone` | Não | `now()` |  |
+
+#### Relacionamentos de Saída (Chaves Estrangeiras Referenciadas)
+
+* A coluna `user_id` aponta para [`users_profiles.id`](#users-profiles)`(id)` (Constraint: `hr_vacation_requests_user_id_fkey`)
+
+#### Relacionamentos de Entrada (Tabelas que Referenciam esta)
+
+* [`hr_vacation_approvals.vacation_request_id`](#hr-vacation-approvals)`(vacation_request_id)` aponta para a coluna local `id` (Constraint: `hr_vacation_approvals_vacation_request_id_fkey`)
+* [`hr_vacation_installments.vacation_request_id`](#hr-vacation-installments)`(vacation_request_id)` aponta para a coluna local `id` (Constraint: `hr_vacation_installments_vacation_request_id_fkey`)
+
+#### Índices (Indexes)
+
+* **`hr_vacation_requests_pkey`**
+  ```sql
+  CREATE UNIQUE INDEX hr_vacation_requests_pkey ON public.hr_vacation_requests USING btree (id)
+  ```
+* **`idx_vacation_requests_status`**
+  ```sql
+  CREATE INDEX idx_vacation_requests_status ON public.hr_vacation_requests USING btree (status)
+  ```
+* **`idx_vacation_requests_user`**
+  ```sql
+  CREATE INDEX idx_vacation_requests_user ON public.hr_vacation_requests USING btree (user_id)
+  ```
+
+---
+
+### invoice_nfse
+
+* **Segurança de Nível de Linha (RLS):** Habilitada (Enabled)
+* **Propósito:** Notas Fiscais de Serviços Eletrônicas (NFS-e) emitidas ou vinculadas a faturas.
+
+#### Colunas
+
+| Coluna | Tipo | Nulável | Padrão | Restrições / Notas |
+| :--- | :--- | :---: | :--- | :--- |
+| `id` | `uuid` | Não | `gen_random_uuid()` | 🔑 PK |
+| `invoice_id` | `uuid` | Não | - | FK -> `rental_invoices.id` |
+| `gateway` | `text` | Não | `'asaas'::text` |  |
+| `external_id` | `text` | Sim | - |  |
+| `status` | `text` | Não | `'PENDENTE'::text` |  |
+| `nfse_link` | `text` | Sim | - |  |
+| `xml_url` | `text` | Sim | - |  |
+| `service_code` | `text` | Sim | - |  |
+| `iss_regime` | `text` | Sim | - |  |
+| `return_message` | `text` | Sim | - |  |
+| `created_at` | `timestamp with time zone` | Não | `now()` |  |
+| `updated_at` | `timestamp with time zone` | Não | `now()` |  |
+
+#### Relacionamentos de Saída (Chaves Estrangeiras Referenciadas)
+
+* A coluna `invoice_id` aponta para [`rental_invoices.id`](#rental-invoices)`(id)` (Constraint: `invoice_nfse_invoice_id_fkey`)
+
+#### Índices (Indexes)
+
+* **`invoice_nfse_invoice_id_idx`**
+  ```sql
+  CREATE INDEX invoice_nfse_invoice_id_idx ON public.invoice_nfse USING btree (invoice_id)
+  ```
+* **`invoice_nfse_pkey`**
+  ```sql
+  CREATE UNIQUE INDEX invoice_nfse_pkey ON public.invoice_nfse USING btree (id)
+  ```
+
+---
+
+### invoice_year_counters
+
+* **Segurança de Nível de Linha (RLS):** Habilitada (Enabled)
+* **Propósito:** Controle sequencial anual para numeração de contratos/faturas de locação.
+
+#### Colunas
+
+| Coluna | Tipo | Nulável | Padrão | Restrições / Notas |
+| :--- | :--- | :---: | :--- | :--- |
+| `year` | `integer` | Não | - | 🔑 PK |
+| `last_seq` | `integer` | Não | `0` |  |
+
+#### Índices (Indexes)
+
+* **`invoice_year_counters_pkey`**
+  ```sql
+  CREATE UNIQUE INDEX invoice_year_counters_pkey ON public.invoice_year_counters USING btree (year)
+  ```
+
+---
+
+### logistics_triage_photos
+
+* **Segurança de Nível de Linha (RLS):** Habilitada (Enabled)
+* **Propósito:** Fotos de triagem e vistoria de entrega/devolução de equipamentos na logística.
+
+#### Colunas
+
+| Coluna | Tipo | Nulável | Padrão | Restrições / Notas |
+| :--- | :--- | :---: | :--- | :--- |
+| `id` | `uuid` | Não | `gen_random_uuid()` | 🔑 PK |
+| `contract_id` | `uuid` | Não | - | ✨ Unique (logistics_triage_photos_contract_equipment_position_key); FK -> `crm_deal_contracts.id` |
+| `position` | `integer` | Não | - | ✨ Unique (logistics_triage_photos_contract_equipment_position_key) |
+| `label` | `text` | Não | - |  |
+| `file_path` | `text` | Não | - |  |
+| `file_url` | `text` | Sim | - |  |
+| `uploaded_by` | `uuid` | Sim | - | FK -> `users_profiles.id` |
+| `uploaded_at` | `timestamp with time zone` | Sim | `now()` |  |
+| `equipment_id` | `uuid` | Sim | - | ✨ Unique (logistics_triage_photos_contract_equipment_position_key); FK -> `equipments.id` |
+
+#### Relacionamentos de Saída (Chaves Estrangeiras Referenciadas)
+
+* A coluna `contract_id` aponta para [`crm_deal_contracts.id`](#crm-deal-contracts)`(id)` (Constraint: `logistics_triage_photos_contract_id_fkey`)
+* A coluna `equipment_id` aponta para [`equipments.id`](#equipments)`(id)` (Constraint: `logistics_triage_photos_equipment_id_fkey`)
+* A coluna `uploaded_by` aponta para [`users_profiles.id`](#users-profiles)`(id)` (Constraint: `logistics_triage_photos_uploaded_by_fkey`)
+
+#### Índices (Indexes)
+
+* **`logistics_triage_photos_contract_equip_pos_idx`**
+  ```sql
+  CREATE UNIQUE INDEX logistics_triage_photos_contract_equip_pos_idx ON public.logistics_triage_photos USING btree (contract_id, COALESCE(equipment_id, '00000000-0000-0000-0000-000000000000'::uuid), "position")
+  ```
+* **`logistics_triage_photos_contract_equipment_position_key`**
+  ```sql
+  CREATE UNIQUE INDEX logistics_triage_photos_contract_equipment_position_key ON public.logistics_triage_photos USING btree (contract_id, equipment_id, "position")
+  ```
+* **`logistics_triage_photos_pkey`**
+  ```sql
+  CREATE UNIQUE INDEX logistics_triage_photos_pkey ON public.logistics_triage_photos USING btree (id)
+  ```
+
+---
+
+### nfe_imports
+
+* **Segurança de Nível de Linha (RLS):** Habilitada (Enabled)
+* **Propósito:** Histórico, compliance e auditoria de todas as Notas Fiscais Eletrônicas (NF-e de entrada ou saída) importadas em XML no sistema, prevenindo duplicidade de chave de acesso e mantendo rastreabilidade total.
+
+#### Colunas
+
+| Coluna | Tipo | Nulável | Padrão | Restrições / Notas |
+| :--- | :--- | :---: | :--- | :--- |
+| `id` | `uuid` | Não | `gen_random_uuid()` | 🔑 PK |
+| `access_key` | `text` | Não | - | ✨ Unique |
+| `invoice_number` | `text` | Não | - |  |
+| `series` | `text` | Sim | - |  |
+| `operation_type` | `text` | Não | `'entrada'::text` |  |
+| `issue_date` | `timestamp with time zone` | Não | - |  |
+| `issuer_name` | `text` | Não | - |  |
+| `issuer_cnpj` | `text` | Não | - |  |
+| `recipient_name` | `text` | Sim | - |  |
+| `recipient_cnpj` | `text` | Sim | - |  |
+| `total_products` | `numeric` | Não | `0` |  |
+| `total_invoice` | `numeric` | Não | `0` |  |
+| `payment_type` | `text` | Não | `'a_vista'::text` |  |
+| `installments_count` | `integer` | Não | `1` |  |
+| `raw_xml` | `text` | Sim | - |  |
+| `parsed_json` | `jsonb` | Sim | - |  |
+| `destination_summary` | `jsonb` | Sim | - |  |
+| `created_by` | `uuid` | Sim | - | FK -> `users_profiles.id` |
+| `created_at` | `timestamp with time zone` | Não | `now()` |  |
+| `updated_at` | `timestamp with time zone` | Não | `now()` |  |
+
+#### Relacionamentos de Saída (Chaves Estrangeiras Referenciadas)
+
+* A coluna `created_by` aponta para [`users_profiles.id`](#users-profiles)`(id)` (Constraint: `nfe_imports_created_by_fkey`)
+
+#### Índices (Indexes)
+
+* **`nfe_imports_access_key_key`**
+  ```sql
+  CREATE UNIQUE INDEX nfe_imports_access_key_key ON public.nfe_imports USING btree (access_key)
+  ```
+* **`nfe_imports_pkey`**
+  ```sql
+  CREATE UNIQUE INDEX nfe_imports_pkey ON public.nfe_imports USING btree (id)
+  ```
+
+---
+
+### parts
+
+* **Segurança de Nível de Linha (RLS):** Habilitada (Enabled)
+* **Propósito:** Catálogo e estoque de peças, componentes e insumos para manutenção.
+
+#### Colunas
+
+| Coluna | Tipo | Nulável | Padrão | Restrições / Notas |
+| :--- | :--- | :---: | :--- | :--- |
+| `id` | `uuid` | Não | `gen_random_uuid()` | 🔑 PK |
+| `internal_code` | `text` | Não | - | ✨ Unique |
+| `description` | `text` | Não | - |  |
+| `part_number` | `text` | Sim | - |  |
+| `quantity` | `numeric` | Sim | `0` |  |
+| `unit_value` | `numeric` | Sim | `0` |  |
+| `notes` | `text` | Sim | - |  |
 | `created_at` | `timestamp with time zone` | Sim | `now()` |  |
 | `updated_at` | `timestamp with time zone` | Sim | `now()` |  |
+| `category` | `text` | Não | `'Peça'::text` |  |
+| `unit` | `text` | Não | `'UN'::text` |  |
+| `invoice_number` | `text` | Sim | - |  |
+| `nfe_access_key` | `text` | Sim | - |  |
+| `supplier_name` | `text` | Sim | - |  |
+| `supplier_cnpj` | `text` | Sim | - |  |
+| `ncm` | `text` | Sim | - |  |
+| `cfop` | `text` | Sim | - |  |
+| `total_value` | `numeric` | Sim | - |  |
+| `created_by` | `uuid` | Sim | - | FK -> `users_profiles.id` |
+
+#### Relacionamentos de Saída (Chaves Estrangeiras Referenciadas)
+
+* A coluna `created_by` aponta para [`users_profiles.id`](#users-profiles)`(id)` (Constraint: `parts_created_by_fkey`)
 
 #### Relacionamentos de Entrada (Tabelas que Referenciam esta)
 
 * [`service_order_parts.part_id`](#service-order-parts)`(part_id)` aponta para a coluna local `id` (Constraint: `service_order_parts_part_id_fkey`)
+* [`stock_movements.part_id`](#stock-movements)`(part_id)` aponta para a coluna local `id` (Constraint: `stock_movements_part_id_fkey`)
 
 #### Índices (Indexes)
 
 * **`parts_internal_code_key`**
   ```sql
   CREATE UNIQUE INDEX parts_internal_code_key ON public.parts USING btree (internal_code)
+  ```
+* **`parts_pkey`**
+  ```sql
+  CREATE UNIQUE INDEX parts_pkey ON public.parts USING btree (id)
   ```
 
 #### Gatilhos (Triggers)
@@ -300,163 +1948,35 @@ Abaixo estão listadas as 46 tabelas ativas no esquema `public` do banco de dado
 
 ---
 
-### rental_invoices
-
-* **Segurança de Nível de Linha (RLS):** Habilitada (Enabled)
-
-#### Colunas
-
-| Coluna | Tipo | Nulável | Padrão | Restrições / Notas |
-| :--- | :--- | :---: | :--- | :--- |
-| `id` | `uuid` | Não | `gen_random_uuid()` | 🔑 PK |
-| `client_id` | `uuid` | Sim | - |  |
-| `client_name` | `text` | Sim | - |  |
-| `cnpj` | `text` | Sim | - |  |
-| `equipment_id` | `uuid` | Sim | - |  |
-| `equipment_name` | `text` | Sim | - |  |
-| `equipment_type` | `text` | Sim | - |  |
-| `equipment_size` | `text` | Sim | - |  |
-| `asset_number` | `text` | Sim | - |  |
-| `work_site` | `text` | Sim | - |  |
-| `billing_period_start` | `date` | Sim | - |  |
-| `billing_period_end` | `date` | Sim | - |  |
-| `billing_status` | `USER-DEFINED` | Sim | `'Pendente'::billing_status_type` | Valores: ["Pendente", "Faturado", "Emitida", "Cancelada"] |
-| `return_date` | `date` | Sim | - |  |
-| `cost_rental` | `numeric` | Sim | `0` |  |
-| `cost_insurance` | `numeric` | Sim | `0` |  |
-| `cost_freight` | `numeric` | Sim | `0` |  |
-| `cost_rcd` | `numeric` | Sim | `0` |  |
-| `cost_third_party` | `numeric` | Sim | `0` |  |
-| `cost_training` | `numeric` | Sim | `0` |  |
-| `total_value` | `numeric` | Sim | `0` | Valor total da fatura (calculado) |
-| `due_date` | `date` | Sim | - |  |
-| `payment_method` | `text` | Sim | - |  |
-| `billing_method` | `text` | Sim | `'ASAAS'` | Valores: 'ASAAS', 'MANUAL' |
-| `document_type` | `text` | Sim | `'FATURA_LOCACAO'` | Valores: 'FATURA_LOCACAO', 'NFSE' |
-| `manual_due_date` | `date` | Sim | - | Data de vencimento no lançamento manual |
-| `fatura_pdf_url` | `text` | Sim | - | Link/Storage URL do PDF da Fatura de Locação gerada |
-| `bank_reconciliation_date` | `date` | Sim | - |  |
-| `reconciliation_status` | `USER-DEFINED` | Sim | `'Atrasado'::reconciliation_status_type` | Valores: ["Pendente", "Atrasado", "Recebido", "Divergente", "No prazo"] |
-| `notes` | `text` | Sim | - |  |
-| `created_at` | `timestamp with time zone` | Sim | `now()` |  |
-| `updated_at` | `timestamp with time zone` | Sim | `now()` |  |
-| `created_by` | `uuid` | Sim | - |  |
-| `invoice_number` | `text` | Sim | - |  |
-| `client_score` | `integer` | Sim | - | CHECK: client_score >= 1 AND client_score <= 5 |
-| `deal_id` | `uuid` | Sim | - | Chave estrangeira para o negócio no CRM |
-
-#### Relacionamentos de Saída (Chaves Estrangeiras Referenciadas)
-
-* A coluna `deal_id` aponta para [`crm_deals.id`](#crm-deals)`(id)` (Constraint: `rental_invoices_deal_id_fkey`)
-* A coluna `client_id` aponta para [`clients.id`](#clients)`(id)` (Constraint: `rental_invoices_client_id_fkey`)
-* A coluna `equipment_id` aponta para [`equipments.id`](#equipments)`(id)` (Constraint: `rental_invoices_equipment_id_fkey`)
-* A coluna `created_by` aponta para [`users_profiles.id`](#users-profiles)`(id)` (Constraint: `rental_invoices_created_by_fkey`)
-
-#### Relacionamentos de Entrada (Tabelas que Referenciam esta)
-
-* [`bills.rental_invoice_id`](#bills)`(rental_invoice_id)` aponta para a coluna local `id` (Constraint: `bills_rental_invoice_id_fkey`)
-* [`invoice_nfse.invoice_id`](#invoice-nfse)`(invoice_id)` aponta para a coluna local `id` (Constraint: `invoice_nfse_invoice_id_fkey`)
-* [`payments.invoice_id`](#payments)`(invoice_id)` aponta para a coluna local `id` (Constraint: `payments_invoice_id_fkey`)
-* [`crm_deal_contracts.rental_invoice_id`](#crm-deal-contracts)`(rental_invoice_id)` aponta para a coluna local `id` (Constraint: `crm_deal_contracts_rental_invoice_id_fkey`)
-* [`crm_deals.rental_invoice_id`](#crm-deals)`(rental_invoice_id)` aponta para a coluna local `id` (Constraint: `crm_deals_rental_invoice_id_fkey`)
-* [`rental_invoice_equipments.rental_invoice_id`](#rental-invoice-equipments)`(rental_invoice_id)` aponta para a coluna local `id` (Constraint: `rental_invoice_equipments_rental_invoice_id_fkey`)
-* [`service_orders.rental_invoice_id`](#service-orders)`(rental_invoice_id)` aponta para a coluna local `id` (Constraint: `service_orders_rental_invoice_id_fkey`)
-
-#### Gatilhos (Triggers)
-
-* **`update_rental_invoices_updated_at`**
-  ```sql
-  CREATE TRIGGER update_rental_invoices_updated_at BEFORE UPDATE ON public.rental_invoices FOR EACH ROW EXECUTE FUNCTION update_updated_at_column()
-  ```
-* **`trg_set_invoice_number`**
-  ```sql
-  CREATE TRIGGER trg_set_invoice_number BEFORE INSERT ON public.rental_invoices FOR EACH ROW WHEN ((new.invoice_number IS NULL)) EXECUTE FUNCTION generate_invoice_number()
-  ```
-* **`tr_update_client_score`**
-  ```sql
-  CREATE TRIGGER tr_update_client_score AFTER INSERT OR UPDATE OF client_score ON public.rental_invoices FOR EACH ROW EXECUTE FUNCTION update_client_average_score()
-  ```
-
----
-
-### rental_invoice_equipments
-
-* **Segurança de Nível de Linha (RLS):** Habilitada (Enabled)
-* **Propósito:** Armazena cada equipamento vinculado a uma fatura de locação (`rental_invoices`) ou contrato de CRM (`crm_deal_contracts`), permitindo que uma locação contenha múltiplos equipamentos com datas e valores individuais.
-
-#### Colunas
-
-| Coluna | Tipo | Nulável | Padrão | Restrições / Notas |
-| :--- | :--- | :---: | :--- | :--- |
-| `id` | `uuid` | Não | `gen_random_uuid()` | 🔑 PK |
-| `rental_invoice_id` | `uuid` | Sim | - | Chave estrangeira para `rental_invoices.id` (ON DELETE CASCADE) |
-| `deal_contract_id` | `uuid` | Sim | - | Chave estrangeira para `crm_deal_contracts.id` (ON DELETE CASCADE) |
-| `equipment_id` | `uuid` | Não | - | Chave estrangeira para `equipments.id` (ON DELETE RESTRICT) |
-| `equipment_name` | `text` | Sim | - | Nome denormalizado do equipamento |
-| `equipment_type` | `text` | Sim | - | Tipo/Modelo do equipamento |
-| `equipment_size` | `text` | Sim | - | Altura/Tamanho do equipamento |
-| `asset_number` | `text` | Sim | - | Número de patrimônio |
-| `billing_period_start` | `date` | Não | - | Início da locação deste equipamento |
-| `billing_period_end` | `date` | Não | - | Fim previsto da locação deste equipamento |
-| `return_date` | `date` | Sim | - | Data de devolução real/efetiva |
-| `cost_rental` | `numeric` | Sim | `0` | Valor da locação deste item |
-| `cost_insurance` | `numeric` | Sim | `0` | Valor do seguro deste item |
-| `cost_freight` | `numeric` | Sim | `0` | Valor do frete deste item |
-| `cost_rcd` | `numeric` | Sim | `0` | Valor de RCD deste item |
-| `cost_third_party` | `numeric` | Sim | `0` | Valor de terceiros deste item |
-| `cost_training` | `numeric` | Sim | `0` | Valor de treinamento deste item |
-| `total_value` | `numeric` | Sim | `0` | Valor total consolidado deste equipamento |
-| `notes` | `text` | Sim | - | Observações adicionais do item |
-| `created_at` | `timestamp with time zone` | Sim | `now()` |  |
-| `updated_at` | `timestamp with time zone` | Sim | `now()` |  |
-
-#### Relacionamentos de Saída (Chaves Estrangeiras Referenciadas)
-
-* A coluna `rental_invoice_id` aponta para [`rental_invoices.id`](#rental-invoices)`(id)` (Constraint: `rental_invoice_equipments_rental_invoice_id_fkey`)
-* A coluna `deal_contract_id` aponta para [`crm_deal_contracts.id`](#crm-deal-contracts)`(id)` (Constraint: `rental_invoice_equipments_deal_contract_id_fkey`)
-* A coluna `equipment_id` aponta para [`equipments.id`](#equipments)`(id)` (Constraint: `rental_invoice_equipments_equipment_id_fkey`)
-
-#### Índices (Indexes)
-
-* **`idx_rental_invoice_equipments_invoice`**
-  ```sql
-  CREATE INDEX idx_rental_invoice_equipments_invoice ON public.rental_invoice_equipments USING btree (rental_invoice_id)
-  ```
-* **`idx_rental_invoice_equipments_contract`**
-  ```sql
-  CREATE INDEX idx_rental_invoice_equipments_contract ON public.rental_invoice_equipments USING btree (deal_contract_id)
-  ```
-* **`idx_rental_invoice_equipments_equipment`**
-  ```sql
-  CREATE INDEX idx_rental_invoice_equipments_equipment ON public.rental_invoice_equipments USING btree (equipment_id)
-  ```
-
----
-
 ### payments
 
 * **Segurança de Nível de Linha (RLS):** Habilitada (Enabled)
-* **Propósito:** Cumpre a arquitetura PaymentProfile → Payment → Invoice: gerencia o status financeiro real com o Asaas e as baixas manuais. Uma fatura pode ser paga em N parcelas, logo 1 `rental_invoices` tem N `payments`.
+* **Propósito:** Registro de transações e cobranças geradas via gateway de pagamento (Asaas/Boleto).
 
 #### Colunas
 
 | Coluna | Tipo | Nulável | Padrão | Restrições / Notas |
 | :--- | :--- | :---: | :--- | :--- |
 | `id` | `uuid` | Não | `gen_random_uuid()` | 🔑 PK |
-| `invoice_id` | `uuid` | Não | - |  |
-| `client_id` | `uuid` | Não | - |  |
-| `asaas_payment_id` | `text` | Sim | - | ID gerado pelo Asaas (ex: pay_000001); ID gerado pelo Asaas (ex: `pay_000001`) |
-| `billing_type` | `text` | Não | `'BOLETO'::text` | Ex: PIX, BOLETO, CREDIT_CARD |
-| `value` | `numeric` | Não | - | Valor bruto cobrado |
-| `net_value` | `numeric` | Sim | - | Valor liquido (apos taxa do Asaas) |
-| `due_date` | `date` | Não | - | Data de vencimento |
-| `payment_date` | `date` | Sim | - | Data em que o pagamento foi efetivado |
-| `status` | `text` | Não | `'PENDING'::text` | Valores do Asaas: PENDING, RECEIVED, OVERDUE, CANCELLED |
-| `is_manual_reconciliation` | `boolean` | Não | `false` | true se o cliente utilizou o botao Recebido por fora (Baixa Manual); `true` se o cliente utilizou o botão "Recebido por fora" (Baixa Manual) |
+| `invoice_id` | `uuid` | Não | - | FK -> `rental_invoices.id` |
+| `client_id` | `uuid` | Não | - | FK -> `clients.id` |
+| `asaas_payment_id` | `text` | Sim | - |  |
+| `billing_type` | `text` | Não | `'BOLETO'::text` |  |
+| `value` | `numeric` | Não | - |  |
+| `net_value` | `numeric` | Sim | - |  |
+| `due_date` | `date` | Não | - |  |
+| `payment_date` | `date` | Sim | - |  |
+| `status` | `text` | Não | `'PENDING'::text` |  |
+| `is_manual_reconciliation` | `boolean` | Não | `false` |  |
 | `created_at` | `timestamp with time zone` | Não | `now()` |  |
 | `net_value_projected` | `numeric` | Sim | - |  |
 | `invoice_url` | `text` | Sim | - |  |
 | `bank_slip_url` | `text` | Sim | - |  |
+
+#### Relacionamentos de Saída (Chaves Estrangeiras Referenciadas)
+
+* A coluna `client_id` aponta para [`clients.id`](#clients)`(id)` (Constraint: `payments_client_id_fkey`)
+* A coluna `invoice_id` aponta para [`rental_invoices.id`](#rental-invoices)`(id)` (Constraint: `payments_invoice_id_fkey`)
 
 #### Relacionamentos de Entrada (Tabelas que Referenciam esta)
 
@@ -484,111 +2004,370 @@ Abaixo estão listadas as 46 tabelas ativas no esquema `public` do banco de dado
   ```sql
   CREATE UNIQUE INDEX payments_invoice_active_unique_idx ON public.payments USING btree (invoice_id) WHERE (status <> ALL (ARRAY['CANCELLED'::text, 'REFUNDED'::text]))
   ```
+* **`payments_pkey`**
+  ```sql
+  CREATE UNIQUE INDEX payments_pkey ON public.payments USING btree (id)
+  ```
 
 ---
 
-### bills
-
-* **Segurança de Nível de Linha (RLS):** Desabilitada (Disabled)
-* **Propósito:** Tabela central de contas a pagar e receber (extrato financeiro e conciliação bancária). Armazena lançamentos originados do Asaas (após confirmação de recebimento) e lançamentos manuais com conciliação contra extrato do Banco do Brasil.
-
-#### Colunas
-
-| Coluna | Tipo | Nulável | Padrão | Restrições / Notas |
-| :--- | :--- | :---: | :--- | :--- |
-| `id` | `uuid` | Não | `gen_random_uuid()` | 🔑 PK |
-| `origin` | `text` | Não | - | CHECK: origin = ANY (ARRAY['ASAAS'::text, 'MANUAL'::text, 'NFE'::text]) |
-| `type` | `text` | Não | `'receivable'::text` | CHECK: type = ANY (ARRAY['receivable'::text, 'payable'::text]) |
-| `rental_invoice_id` | `uuid` | Sim | - |  |
-| `payment_id` | `uuid` | Sim | - |  |
-| `client_id` | `uuid` | Sim | - |  |
-| `counterparty_name` | `text` | Sim | - |  |
-| `description` | `text` | Sim | - |  |
-| `gross_value` | `numeric` | Não | - |  |
-| `fee_amount` | `numeric` | Sim | `0` |  |
-| `net_value` | `numeric` | Não | - |  |
-| `due_date` | `date` | Sim | - |  |
-| `pix_end_to_end_id` | `text` | Sim | - |  |
-| `bank_transaction_date` | `date` | Sim | - |  |
-| `bank_raw_snapshot` | `jsonb` | Sim | - |  |
-| `status` | `text` | Não | `'Pendente'::text` | CHECK: status = ANY (ARRAY['Pendente'::text, 'Atrasado'::text, 'Recebido'::text, 'Divergente'::text, 'No prazo'::text]) |
-| `reconciled_at` | `timestamp with time zone` | Sim | - |  |
-| `created_by` | `uuid` | Sim | - |  |
-| `created_at` | `timestamp with time zone` | Não | `now()` |  |
-| `updated_at` | `timestamp with time zone` | Não | `now()` |  |
-| `barcode` | `text` | Sim | - |  |
-
----
-
-### nfe_imports
+### rental_billing_invoices
 
 * **Segurança de Nível de Linha (RLS):** Habilitada (Enabled)
-* **Propósito:** Histórico, compliance e auditoria de todas as Notas Fiscais Eletrônicas (NF-e de entrada ou saída) importadas em XML no sistema, prevenindo duplicidade de chave de acesso e mantendo rastreabilidade total.
+* **Propósito:** Faturas oficiais de locação emitidas pelo sistema (com numeração sequencial anual atômica int_seq/ano, ex: "49/2026"), contendo dados do cliente, discriminação dos equipamentos faturados, PDF e vínculo com o contas a receber (bills).
 
 #### Colunas
 
 | Coluna | Tipo | Nulável | Padrão | Restrições / Notas |
 | :--- | :--- | :---: | :--- | :--- |
 | `id` | `uuid` | Não | `gen_random_uuid()` | 🔑 PK |
-| `access_key` | `text` | Não | - | ✨ Unique; Chave de acesso de 44 dígitos da NF-e |
-| `invoice_number` | `text` | Não | - | Número da NF-e |
-| `series` | `text` | Sim | - | Série da NF-e |
-| `operation_type` | `text` | Não | `'entrada'::text` | 'entrada' ou 'saida' |
-| `issue_date` | `timestamp with time zone` | Não | - | Data de emissão da NF-e |
-| `issuer_name` | `text` | Não | - | Razão Social do Emitente |
-| `issuer_cnpj` | `text` | Não | - | CNPJ do Emitente |
-| `recipient_name` | `text` | Sim | - | Razão Social do Destinatário |
-| `recipient_cnpj` | `text` | Sim | - | CNPJ do Destinatário |
-| `total_products` | `numeric` | Não | `0` | Valor total dos produtos |
-| `total_invoice` | `numeric` | Não | `0` | Valor total da NF-e |
-| `payment_type` | `text` | Não | `'a_vista'::text` | 'a_vista', 'parcelado' ou 'nenhum' |
-| `installments_count` | `integer` | Não | `1` | Quantidade de parcelas geradas em bills |
-| `raw_xml` | `text` | Sim | - | Conteúdo bruto do XML para compliance |
-| `parsed_json` | `jsonb` | Sim | - | Objeto JSON normalizado com itens e tributos |
-| `destination_summary` | `jsonb` | Sim | - | Resumo: equipments_created, parts_created, parts_updated, bills_created |
-| `created_by` | `uuid` | Sim | - | Usuário responsável pela importação |
+| `invoice_number` | `text` | Não | - | ✨ Unique |
+| `year` | `integer` | Não | - | ✨ Unique (uq_rental_billing_invoices_year_seq) |
+| `sequence_number` | `integer` | Não | - | ✨ Unique (uq_rental_billing_invoices_year_seq) |
+| `rental_invoice_id` | `uuid` | Não | - | FK -> `rental_invoices.id` |
+| `bill_id` | `uuid` | Sim | - | FK -> `bills.id` |
+| `invoice_type` | `text` | Não | `'INITIAL'::text` |  |
+| `pdf_url` | `text` | Sim | - |  |
+| `period_start` | `date` | Sim | - |  |
+| `period_end` | `date` | Sim | - |  |
+| `total_amount` | `numeric` | Não | `0` |  |
+| `invoice_data` | `jsonb` | Sim | - |  |
+| `created_by` | `uuid` | Sim | - | FK -> `users_profiles.id` |
 | `created_at` | `timestamp with time zone` | Não | `now()` |  |
 | `updated_at` | `timestamp with time zone` | Não | `now()` |  |
 
 #### Relacionamentos de Saída (Chaves Estrangeiras Referenciadas)
 
-* A coluna `created_by` aponta para [`users_profiles.id`](#users-profiles)`(id)` (Constraint: `nfe_imports_created_by_fkey`)
+* A coluna `bill_id` aponta para [`bills.id`](#bills)`(id)` (Constraint: `rental_billing_invoices_bill_id_fkey`)
+* A coluna `created_by` aponta para [`users_profiles.id`](#users-profiles)`(id)` (Constraint: `rental_billing_invoices_created_by_fkey`)
+* A coluna `rental_invoice_id` aponta para [`rental_invoices.id`](#rental-invoices)`(id)` (Constraint: `rental_billing_invoices_rental_invoice_id_fkey`)
 
 #### Índices (Indexes)
 
-* **`nfe_imports_access_key_key`**
+* **`idx_rental_billing_invoices_bill_id`**
   ```sql
-  CREATE UNIQUE INDEX nfe_imports_access_key_key ON public.nfe_imports USING btree (access_key)
+  CREATE INDEX idx_rental_billing_invoices_bill_id ON public.rental_billing_invoices USING btree (bill_id)
+  ```
+* **`idx_rental_billing_invoices_rental_id`**
+  ```sql
+  CREATE INDEX idx_rental_billing_invoices_rental_id ON public.rental_billing_invoices USING btree (rental_invoice_id)
+  ```
+* **`idx_rental_billing_invoices_year_seq`**
+  ```sql
+  CREATE INDEX idx_rental_billing_invoices_year_seq ON public.rental_billing_invoices USING btree (year, sequence_number)
+  ```
+* **`rental_billing_invoices_invoice_number_key`**
+  ```sql
+  CREATE UNIQUE INDEX rental_billing_invoices_invoice_number_key ON public.rental_billing_invoices USING btree (invoice_number)
+  ```
+* **`rental_billing_invoices_pkey`**
+  ```sql
+  CREATE UNIQUE INDEX rental_billing_invoices_pkey ON public.rental_billing_invoices USING btree (id)
+  ```
+* **`uq_rental_billing_invoices_year_seq`**
+  ```sql
+  CREATE UNIQUE INDEX uq_rental_billing_invoices_year_seq ON public.rental_billing_invoices USING btree (year, sequence_number)
   ```
 
 ---
 
-### asaas_webhook_logs
+### rental_invoice_equipments
 
 * **Segurança de Nível de Linha (RLS):** Habilitada (Enabled)
-* **Propósito:** Auditoria e resiliência para processamento assíncrono via webhook — evita perder atualizações de pagamento ou transferências enviadas pelo Asaas.
+* **Propósito:** Itens de equipamentos vinculados a cada locação/contrato, discriminando períodos específicos de locação e prorrogações individuais por máquina, valores de locação, seguro, frete, RCD, terceiros e treinamento.
 
 #### Colunas
 
 | Coluna | Tipo | Nulável | Padrão | Restrições / Notas |
 | :--- | :--- | :---: | :--- | :--- |
 | `id` | `uuid` | Não | `gen_random_uuid()` | 🔑 PK |
-| `event_id` | `text` | Não | - | ✨ Unique; ID unico do evento do Asaas (evita duplicidade); ID único do evento do Asaas (evita duplicidade) |
-| `event_type` | `text` | Não | - | Ex: PAYMENT_RECEIVED, PAYMENT_OVERDUE |
-| `payment_id` | `text` | Não | - | Referencia logica a payments.asaas_payment_id — sem constraint de FK formal no banco; Referência lógica a `payments.asaas_payment_id` |
-| `payload` | `jsonb` | Não | - | JSON completo recebido do Asaas |
-| `processed` | `boolean` | Não | `false` | true apos atualizar a tabela payments com sucesso; `true` após atualizar a tabela `payments`/`bills` com sucesso |
-| `created_at` | `timestamp with time zone` | Não | `now()` |  |
+| `rental_invoice_id` | `uuid` | Sim | - | FK -> `rental_invoices.id` |
+| `deal_contract_id` | `uuid` | Sim | - | FK -> `crm_deal_contracts.id` |
+| `equipment_id` | `uuid` | Sim | - | FK -> `equipments.id` |
+| `equipment_name` | `text` | Sim | - |  |
+| `equipment_type` | `text` | Sim | - |  |
+| `equipment_size` | `text` | Sim | - |  |
+| `asset_number` | `text` | Sim | - |  |
+| `billing_period_start` | `date` | Não | - |  |
+| `billing_period_end` | `date` | Não | - |  |
+| `return_date` | `date` | Sim | - |  |
+| `cost_rental` | `numeric` | Sim | `0` |  |
+| `cost_insurance` | `numeric` | Sim | `0` |  |
+| `cost_freight` | `numeric` | Sim | `0` |  |
+| `cost_rcd` | `numeric` | Sim | `0` |  |
+| `cost_third_party` | `numeric` | Sim | `0` |  |
+| `cost_training` | `numeric` | Sim | `0` |  |
+| `total_value` | `numeric` | Sim | `0` |  |
+| `notes` | `text` | Sim | - |  |
+| `created_at` | `timestamp with time zone` | Sim | `now()` |  |
+| `updated_at` | `timestamp with time zone` | Sim | `now()` |  |
+
+#### Relacionamentos de Saída (Chaves Estrangeiras Referenciadas)
+
+* A coluna `deal_contract_id` aponta para [`crm_deal_contracts.id`](#crm-deal-contracts)`(id)` (Constraint: `rental_invoice_equipments_deal_contract_id_fkey`)
+* A coluna `equipment_id` aponta para [`equipments.id`](#equipments)`(id)` (Constraint: `rental_invoice_equipments_equipment_id_fkey`)
+* A coluna `rental_invoice_id` aponta para [`rental_invoices.id`](#rental-invoices)`(id)` (Constraint: `rental_invoice_equipments_rental_invoice_id_fkey`)
 
 #### Índices (Indexes)
 
-* **`idx_asaas_webhook_logs_payment_id`**
+* **`idx_rental_invoice_equipments_contract`**
   ```sql
-  CREATE INDEX idx_asaas_webhook_logs_payment_id ON public.asaas_webhook_logs USING btree (payment_id)
+  CREATE INDEX idx_rental_invoice_equipments_contract ON public.rental_invoice_equipments USING btree (deal_contract_id)
   ```
-* **`idx_asaas_webhook_logs_processed`**
+* **`idx_rental_invoice_equipments_equipment`**
   ```sql
-  CREATE INDEX idx_asaas_webhook_logs_processed ON public.asaas_webhook_logs USING btree (processed) WHERE (processed = false)
+  CREATE INDEX idx_rental_invoice_equipments_equipment ON public.rental_invoice_equipments USING btree (equipment_id)
+  ```
+* **`idx_rental_invoice_equipments_invoice`**
+  ```sql
+  CREATE INDEX idx_rental_invoice_equipments_invoice ON public.rental_invoice_equipments USING btree (rental_invoice_id)
+  ```
+* **`rental_invoice_equipments_pkey`**
+  ```sql
+  CREATE UNIQUE INDEX rental_invoice_equipments_pkey ON public.rental_invoice_equipments USING btree (id)
+  ```
+
+---
+
+### rental_invoice_sequence
+
+* **Segurança de Nível de Linha (RLS):** Desabilitada (Disabled)
+* **Propósito:** Controle sequencial atômico anual para geração e emissão de faturas de locação.
+
+#### Colunas
+
+| Coluna | Tipo | Nulável | Padrão | Restrições / Notas |
+| :--- | :--- | :---: | :--- | :--- |
+| `year` | `integer` | Não | - | 🔑 PK |
+| `current_seq` | `integer` | Não | `0` |  |
+| `updated_at` | `timestamp with time zone` | Sim | `now()` |  |
+
+#### Índices (Indexes)
+
+* **`rental_invoice_sequence_pkey`**
+  ```sql
+  CREATE UNIQUE INDEX rental_invoice_sequence_pkey ON public.rental_invoice_sequence USING btree (year)
+  ```
+
+---
+
+### rental_invoices
+
+* **Segurança de Nível de Linha (RLS):** Habilitada (Enabled)
+* **Propósito:** Contratos e pedidos principais de locação de equipamentos, com períodos globais, valores consolidados, cliente e endereço de entrega.
+
+#### Colunas
+
+| Coluna | Tipo | Nulável | Padrão | Restrições / Notas |
+| :--- | :--- | :---: | :--- | :--- |
+| `id` | `uuid` | Não | `gen_random_uuid()` | 🔑 PK |
+| `client_id` | `uuid` | Sim | - | FK -> `clients.id` |
+| `client_name` | `text` | Sim | - |  |
+| `cnpj` | `text` | Sim | - |  |
+| `equipment_id` | `uuid` | Sim | - | FK -> `equipments.id` |
+| `equipment_name` | `text` | Sim | - |  |
+| `equipment_type` | `text` | Sim | - |  |
+| `equipment_size` | `text` | Sim | - |  |
+| `asset_number` | `text` | Sim | - |  |
+| `work_site` | `text` | Sim | - |  |
+| `billing_period_start` | `date` | Sim | - |  |
+| `billing_period_end` | `date` | Sim | - |  |
+| `billing_status` | `USER-DEFINED (billing_status_type)` | Sim | `'Pendente'::billing_status_type` | Valores: ["Pendente", "Faturado", "Emitida", "Cancelada"] |
+| `return_date` | `date` | Sim | - |  |
+| `cost_rental` | `numeric` | Sim | `0` |  |
+| `cost_insurance` | `numeric` | Sim | `0` |  |
+| `cost_freight` | `numeric` | Sim | `0` |  |
+| `cost_rcd` | `numeric` | Sim | `0` |  |
+| `cost_third_party` | `numeric` | Sim | `0` |  |
+| `cost_training` | `numeric` | Sim | `0` |  |
+| `total_value` | `numeric` | Sim | `0` |  |
+| `due_date` | `date` | Sim | - |  |
+| `payment_method` | `text` | Sim | - |  |
+| `bank_reconciliation_date` | `date` | Sim | - |  |
+| `reconciliation_status` | `USER-DEFINED (reconciliation_status_type)` | Sim | `'Atrasado'::reconciliation_status_type` | Valores: ["Pendente", "Atrasado", "Recebido", "Divergente", "No prazo"] |
+| `notes` | `text` | Sim | - |  |
+| `created_at` | `timestamp with time zone` | Sim | `now()` |  |
+| `updated_at` | `timestamp with time zone` | Sim | `now()` |  |
+| `created_by` | `uuid` | Sim | - | FK -> `users_profiles.id` |
+| `invoice_number` | `text` | Sim | - |  |
+| `client_score` | `integer` | Sim | - |  |
+| `billing_method` | `text` | Sim | `'ASAAS'::text` |  |
+| `document_type` | `text` | Sim | `'FATURA_LOCACAO'::text` |  |
+| `manual_due_date` | `date` | Sim | - |  |
+| `fatura_pdf_url` | `text` | Sim | - |  |
+| `deal_id` | `uuid` | Sim | - | FK -> `crm_deals.id` |
+| `return_checklist_urls` | `ARRAY` | Sim | `'{}'::text[]` |  |
+
+#### Relacionamentos de Saída (Chaves Estrangeiras Referenciadas)
+
+* A coluna `client_id` aponta para [`clients.id`](#clients)`(id)` (Constraint: `rental_invoices_client_id_fkey`)
+* A coluna `created_by` aponta para [`users_profiles.id`](#users-profiles)`(id)` (Constraint: `rental_invoices_created_by_fkey`)
+* A coluna `deal_id` aponta para [`crm_deals.id`](#crm-deals)`(id)` (Constraint: `rental_invoices_deal_id_fkey`)
+* A coluna `equipment_id` aponta para [`equipments.id`](#equipments)`(id)` (Constraint: `rental_invoices_equipment_id_fkey`)
+
+#### Relacionamentos de Entrada (Tabelas que Referenciam esta)
+
+* [`bills.rental_invoice_id`](#bills)`(rental_invoice_id)` aponta para a coluna local `id` (Constraint: `bills_rental_invoice_id_fkey`)
+* [`crm_deal_contracts.rental_invoice_id`](#crm-deal-contracts)`(rental_invoice_id)` aponta para a coluna local `id` (Constraint: `crm_deal_contracts_rental_invoice_id_fkey`)
+* [`crm_deals.rental_invoice_id`](#crm-deals)`(rental_invoice_id)` aponta para a coluna local `id` (Constraint: `crm_deals_rental_invoice_id_fkey`)
+* [`invoice_nfse.invoice_id`](#invoice-nfse)`(invoice_id)` aponta para a coluna local `id` (Constraint: `invoice_nfse_invoice_id_fkey`)
+* [`payments.invoice_id`](#payments)`(invoice_id)` aponta para a coluna local `id` (Constraint: `payments_invoice_id_fkey`)
+* [`rental_billing_invoices.rental_invoice_id`](#rental-billing-invoices)`(rental_invoice_id)` aponta para a coluna local `id` (Constraint: `rental_billing_invoices_rental_invoice_id_fkey`)
+* [`rental_invoice_equipments.rental_invoice_id`](#rental-invoice-equipments)`(rental_invoice_id)` aponta para a coluna local `id` (Constraint: `rental_invoice_equipments_rental_invoice_id_fkey`)
+* [`service_orders.rental_invoice_id`](#service-orders)`(rental_invoice_id)` aponta para a coluna local `id` (Constraint: `service_orders_rental_invoice_id_fkey`)
+
+#### Índices (Indexes)
+
+* **`rental_invoices_pkey`**
+  ```sql
+  CREATE UNIQUE INDEX rental_invoices_pkey ON public.rental_invoices USING btree (id)
+  ```
+
+#### Gatilhos (Triggers)
+
+* **`tr_update_client_score`**
+  ```sql
+  CREATE TRIGGER tr_update_client_score AFTER INSERT OR UPDATE ON public.rental_invoices FOR EACH ROW EXECUTE FUNCTION update_client_average_score()
+  ```
+* **`trg_set_invoice_number`**
+  ```sql
+  CREATE TRIGGER trg_set_invoice_number BEFORE INSERT ON public.rental_invoices FOR EACH ROW EXECUTE FUNCTION generate_invoice_number()
+  ```
+* **`update_rental_invoices_updated_at`**
+  ```sql
+  CREATE TRIGGER update_rental_invoices_updated_at BEFORE UPDATE ON public.rental_invoices FOR EACH ROW EXECUTE FUNCTION update_updated_at_column()
+  ```
+
+---
+
+### service_order_labor
+
+* **Segurança de Nível de Linha (RLS):** Habilitada (Enabled)
+* **Propósito:** Registro de mão de obra e horas técnicas aplicadas em Ordens de Serviço.
+
+#### Colunas
+
+| Coluna | Tipo | Nulável | Padrão | Restrições / Notas |
+| :--- | :--- | :---: | :--- | :--- |
+| `id` | `uuid` | Não | `gen_random_uuid()` | 🔑 PK |
+| `service_order_id` | `uuid` | Sim | - | FK -> `service_orders.id` |
+| `technician_name` | `text` | Não | - |  |
+| `labor_date` | `date` | Sim | - |  |
+| `start_time` | `time without time zone` | Sim | - |  |
+| `end_time` | `time without time zone` | Sim | - |  |
+| `labor_type` | `text` | Sim | `'T'::text` |  |
+| `created_at` | `timestamp with time zone` | Sim | `now()` |  |
+
+#### Relacionamentos de Saída (Chaves Estrangeiras Referenciadas)
+
+* A coluna `service_order_id` aponta para [`service_orders.id`](#service-orders)`(id)` (Constraint: `service_order_labor_service_order_id_fkey`)
+
+#### Índices (Indexes)
+
+* **`service_order_labor_pkey`**
+  ```sql
+  CREATE UNIQUE INDEX service_order_labor_pkey ON public.service_order_labor USING btree (id)
+  ```
+
+---
+
+### service_order_parts
+
+* **Segurança de Nível de Linha (RLS):** Habilitada (Enabled)
+* **Propósito:** Peças e componentes utilizados na execução de Ordens de Serviço.
+
+#### Colunas
+
+| Coluna | Tipo | Nulável | Padrão | Restrições / Notas |
+| :--- | :--- | :---: | :--- | :--- |
+| `id` | `uuid` | Não | `gen_random_uuid()` | 🔑 PK |
+| `service_order_id` | `uuid` | Sim | - | FK -> `service_orders.id` |
+| `part_id` | `uuid` | Sim | - | FK -> `parts.id` |
+| `quantity_used` | `numeric` | Sim | `0` |  |
+| `unit_value_at_use` | `numeric` | Sim | `0` |  |
+| `subtotal` | `numeric` | Sim | `0` |  |
+| `was_used` | `boolean` | Sim | `true` |  |
+
+#### Relacionamentos de Saída (Chaves Estrangeiras Referenciadas)
+
+* A coluna `part_id` aponta para [`parts.id`](#parts)`(id)` (Constraint: `service_order_parts_part_id_fkey`)
+* A coluna `service_order_id` aponta para [`service_orders.id`](#service-orders)`(id)` (Constraint: `service_order_parts_service_order_id_fkey`)
+
+#### Índices (Indexes)
+
+* **`service_order_parts_pkey`**
+  ```sql
+  CREATE UNIQUE INDEX service_order_parts_pkey ON public.service_order_parts USING btree (id)
+  ```
+
+---
+
+### service_order_rcd
+
+* **Segurança de Nível de Linha (RLS):** Desabilitada (Disabled)
+* **Propósito:** Relatório de Constatação de Danos (RCD) gerado a partir de Ordens de Serviço, com discriminação de peças e serviços avariados, valores de ressarcimento, condições de pagamento, parcelamento financeiro, termos assinados e faturamento atrelado.
+
+#### Colunas
+
+| Coluna | Tipo | Nulável | Padrão | Restrições / Notas |
+| :--- | :--- | :---: | :--- | :--- |
+| `id` | `uuid` | Não | `gen_random_uuid()` | 🔑 PK |
+| `service_order_id` | `uuid` | Não | - | ✨ Unique; FK -> `service_orders.id` |
+| `rcd_number` | `text` | Sim | - |  |
+| `issue_date` | `date` | Não | `CURRENT_DATE` |  |
+| `validity_date` | `date` | Sim | - |  |
+| `payment_terms` | `text` | Sim | `'15 DIAS PARA PAGAMENTO'::text` |  |
+| `notes` | `text` | Sim | - |  |
+| `origin_description` | `text` | Sim | `'Contrato de locação'::text` |  |
+| `client_id` | `uuid` | Sim | - | FK -> `clients.id` |
+| `client_name` | `text` | Sim | - |  |
+| `client_cnpj` | `text` | Sim | - |  |
+| `client_address` | `text` | Sim | - |  |
+| `client_ie` | `text` | Sim | - |  |
+| `client_contact` | `text` | Sim | - |  |
+| `client_phone` | `text` | Sim | - |  |
+| `equipment_id` | `uuid` | Sim | - | FK -> `equipments.id` |
+| `equipment_name` | `text` | Sim | - |  |
+| `equipment_asset_number` | `text` | Sim | - |  |
+| `equipment_model` | `text` | Sim | - |  |
+| `problem_description` | `text` | Sim | - |  |
+| `parts` | `jsonb` | Não | `'[]'::jsonb` |  |
+| `services` | `jsonb` | Não | `'[]'::jsonb` |  |
+| `total_parts` | `numeric` | Não | `0` |  |
+| `total_services` | `numeric` | Não | `0` |  |
+| `total_value` | `numeric` | Não | `0` |  |
+| `payment_method` | `text` | Sim | `'Boleto Bancário'::text` |  |
+| `payment_type` | `text` | Sim | `'a_vista'::text` |  |
+| `installments_count` | `integer` | Sim | `1` |  |
+| `installments_data` | `jsonb` | Sim | `'[]'::jsonb` |  |
+| `bill_ids` | `ARRAY` | Sim | `'{}'::uuid[]` |  |
+| `bill_group_id` | `text` | Sim | - |  |
+| `billed_at` | `timestamp with time zone` | Sim | - |  |
+| `invoice_number` | `text` | Sim | - |  |
+| `signed_document_url` | `text` | Sim | - |  |
+| `signed_at` | `timestamp with time zone` | Sim | - |  |
+| `signed_by_name` | `text` | Sim | - |  |
+| `status` | `text` | Sim | `'Pendente'::text` |  |
+| `created_at` | `timestamp with time zone` | Sim | `now()` |  |
+| `updated_at` | `timestamp with time zone` | Sim | `now()` |  |
+| `created_by` | `uuid` | Sim | - | FK -> `auth.users.id` |
+
+#### Relacionamentos de Saída (Chaves Estrangeiras Referenciadas)
+
+* A coluna `client_id` aponta para [`clients.id`](#clients)`(id)` (Constraint: `service_order_rcd_client_id_fkey`)
+* A coluna `created_by` aponta para [`auth.users.id`](#auth.users)`(id)` (Constraint: `service_order_rcd_created_by_fkey`)
+* A coluna `equipment_id` aponta para [`equipments.id`](#equipments)`(id)` (Constraint: `service_order_rcd_equipment_id_fkey`)
+* A coluna `service_order_id` aponta para [`service_orders.id`](#service-orders)`(id)` (Constraint: `service_order_rcd_service_order_id_fkey`)
+
+#### Índices (Indexes)
+
+* **`service_order_rcd_pkey`**
+  ```sql
+  CREATE UNIQUE INDEX service_order_rcd_pkey ON public.service_order_rcd USING btree (id)
+  ```
+* **`uq_service_order_rcd`**
+  ```sql
+  CREATE UNIQUE INDEX uq_service_order_rcd ON public.service_order_rcd USING btree (service_order_id)
   ```
 
 ---
@@ -596,6 +2375,7 @@ Abaixo estão listadas as 46 tabelas ativas no esquema `public` do banco de dado
 ### service_orders
 
 * **Segurança de Nível de Linha (RLS):** Habilitada (Enabled)
+* **Propósito:** Ordens de Serviço de manutenção preventiva, corretiva e triagem de equipamentos da frota.
 
 #### Colunas
 
@@ -603,16 +2383,16 @@ Abaixo estão listadas as 46 tabelas ativas no esquema `public` do banco de dado
 | :--- | :--- | :---: | :--- | :--- |
 | `id` | `uuid` | Não | `gen_random_uuid()` | 🔑 PK |
 | `os_number` | `integer` | Não | `nextval('service_orders_os_number_seq'::regclass)` | ✨ Unique |
-| `equipment_id` | `uuid` | Sim | - |  |
+| `equipment_id` | `uuid` | Sim | - | FK -> `equipments.id` |
 | `equipment_asset_number` | `text` | Sim | - |  |
 | `equipment_name` | `text` | Sim | - |  |
 | `equipment_model` | `text` | Sim | - |  |
 | `equipment_serial_number` | `text` | Sim | - |  |
 | `equipment_condition_entry` | `text` | Sim | - |  |
-| `executed_by` | `uuid` | Sim | - |  |
+| `executed_by` | `uuid` | Sim | - | FK -> `users_profiles.id` |
 | `execution_date` | `date` | Sim | - |  |
 | `execution_location` | `text` | Sim | - |  |
-| `status` | `USER-DEFINED` | Sim | `'Aberta'::service_order_status_type` | Valores: ["Aberta", "Em Andamento", "Aguardando Peças", "Concluída", "Cancelada"] |
+| `status` | `USER-DEFINED (service_order_status_type)` | Sim | `'Aberta'::service_order_status_type` | Valores: ["Aberta", "Em Andamento", "Aguardando Peças", "Concluída", "Cancelada", "Encerrada com pendências"] |
 | `description` | `text` | Sim | - |  |
 | `notes` | `text` | Sim | - |  |
 | `created_at` | `timestamp with time zone` | Sim | `now()` |  |
@@ -650,30 +2430,37 @@ Abaixo estão listadas as 46 tabelas ativas no esquema `public` do banco de dado
 | `cost_company` | `numeric` | Sim | `0` |  |
 | `cost_client` | `numeric` | Sim | `0` |  |
 | `has_pending` | `boolean` | Sim | `false` |  |
-| `nfe_invoices` | `jsonb` | Sim | `'[]'::jsonb` | Lista de NF-es vinculadas à OS (acesso, número, emitente, data, valor) |
-| `nfe_access_keys` | `text[]` | Sim | `'{}'::text[]` | Array de chaves de acesso das NF-es vinculadas |
-| `rental_invoice_id` | `uuid` | Sim | - | Chave estrangeira para `rental_invoices.id` (ON DELETE SET NULL) |
+| `nfe_invoices` | `jsonb` | Sim | `'[]'::jsonb` |  |
+| `nfe_access_keys` | `ARRAY` | Sim | `'{}'::text[]` |  |
+| `rental_invoice_id` | `uuid` | Sim | - | FK -> `rental_invoices.id` |
+| `signed_rcd_url` | `text` | Sim | - |  |
+| `rcd_total_value` | `numeric` | Sim | `0` |  |
 
 #### Relacionamentos de Saída (Chaves Estrangeiras Referenciadas)
 
-* A coluna `rental_invoice_id` aponta para [`rental_invoices.id`](#rental-invoices)`(id)` (Constraint: `service_orders_rental_invoice_id_fkey`)
 * A coluna `equipment_id` aponta para [`equipments.id`](#equipments)`(id)` (Constraint: `service_orders_equipment_id_fkey`)
 * A coluna `executed_by` aponta para [`users_profiles.id`](#users-profiles)`(id)` (Constraint: `service_orders_executed_by_fkey`)
+* A coluna `rental_invoice_id` aponta para [`rental_invoices.id`](#rental-invoices)`(id)` (Constraint: `service_orders_rental_invoice_id_fkey`)
 
 #### Relacionamentos de Entrada (Tabelas que Referenciam esta)
 
-* [`service_order_parts.service_order_id`](#service-order-parts)`(service_order_id)` aponta para a coluna local `id` (Constraint: `service_order_parts_service_order_id_fkey`)
 * [`service_order_labor.service_order_id`](#service-order-labor)`(service_order_id)` aponta para a coluna local `id` (Constraint: `service_order_labor_service_order_id_fkey`)
+* [`service_order_parts.service_order_id`](#service-order-parts)`(service_order_id)` aponta para a coluna local `id` (Constraint: `service_order_parts_service_order_id_fkey`)
+* [`service_order_rcd.service_order_id`](#service-order-rcd)`(service_order_id)` aponta para a coluna local `id` (Constraint: `service_order_rcd_service_order_id_fkey`)
 
 #### Índices (Indexes)
 
+* **`idx_service_orders_rental_invoice_id`**
+  ```sql
+  CREATE INDEX idx_service_orders_rental_invoice_id ON public.service_orders USING btree (rental_invoice_id)
+  ```
 * **`service_orders_os_number_key`**
   ```sql
   CREATE UNIQUE INDEX service_orders_os_number_key ON public.service_orders USING btree (os_number)
   ```
-* **`idx_service_orders_rental_invoice_id`**
+* **`service_orders_pkey`**
   ```sql
-  CREATE INDEX idx_service_orders_rental_invoice_id ON public.service_orders USING btree (rental_invoice_id)
+  CREATE UNIQUE INDEX service_orders_pkey ON public.service_orders USING btree (id)
   ```
 
 #### Gatilhos (Triggers)
@@ -685,1224 +2472,40 @@ Abaixo estão listadas as 46 tabelas ativas no esquema `public` do banco de dado
 
 ---
 
-### service_order_parts
-
-* **Segurança de Nível de Linha (RLS):** Habilitada (Enabled)
-
-#### Colunas
-
-| Coluna | Tipo | Nulável | Padrão | Restrições / Notas |
-| :--- | :--- | :---: | :--- | :--- |
-| `id` | `uuid` | Não | `gen_random_uuid()` | 🔑 PK |
-| `service_order_id` | `uuid` | Sim | - |  |
-| `part_id` | `uuid` | Sim | - |  |
-| `quantity_used` | `integer` | Sim | `1` |  |
-| `unit_value_at_use` | `numeric` | Sim | `0` |  |
-| `subtotal` | `numeric` | Sim | `0` |  |
-| `was_used` | `boolean` | Sim | `true` |  |
-
----
-
-### invoice_year_counters
-
-* **Segurança de Nível de Linha (RLS):** Habilitada (Enabled)
-
-#### Colunas
-
-| Coluna | Tipo | Nulável | Padrão | Restrições / Notas |
-| :--- | :--- | :---: | :--- | :--- |
-| `year` | `integer` | Não | - | 🔑 PK |
-| `last_seq` | `integer` | Não | `0` |  |
-
----
-
-### hr_job_levels
-
-* **Segurança de Nível de Linha (RLS):** Habilitada (Enabled)
-
-#### Colunas
-
-| Coluna | Tipo | Nulável | Padrão | Restrições / Notas |
-| :--- | :--- | :---: | :--- | :--- |
-| `id` | `uuid` | Não | `gen_random_uuid()` | 🔑 PK; Identificador único |
-| `name` | `text` | Não | - | Nome do nível (ex: "Júnior", "Pleno", "Sênior") |
-| `description` | `text` | Sim | - | Descrição do nível |
-| `created_at` | `timestamp with time zone` | Não | `now()` |  |
-| `updated_at` | `timestamp with time zone` | Não | `now()` |  |
-
-#### Relacionamentos de Entrada (Tabelas que Referenciam esta)
-
-* [`hr_employee_positions.level_id`](#hr-employee-positions)`(level_id)` aponta para a coluna local `id` (Constraint: `hr_employee_positions_level_id_fkey`)
-* [`hr_salary_ranges.level_id`](#hr-salary-ranges)`(level_id)` aponta para a coluna local `id` (Constraint: `hr_salary_ranges_level_id_fkey`)
-
----
-
-### hr_positions
-
-* **Segurança de Nível de Linha (RLS):** Habilitada (Enabled)
-
-#### Colunas
-
-| Coluna | Tipo | Nulável | Padrão | Restrições / Notas |
-| :--- | :--- | :---: | :--- | :--- |
-| `id` | `uuid` | Não | `gen_random_uuid()` | 🔑 PK; Identificador único |
-| `title` | `text` | Não | - | Título do cargo (ex: "Técnico de Manutenção") |
-| `department` | `text` | Não | - | Departamento (ex: "Operações", "Comercial", "Administrativo") |
-| `description` | `text` | Sim | - | Descrição e responsabilidades do cargo |
-| `cbo_code` | `text` | Sim | - | Código Brasileiro de Ocupações (CBO) |
-| `active` | `boolean` | Não | `true` | Cargo ativo ou desativado |
-| `created_at` | `timestamp with time zone` | Não | `now()` |  |
-| `updated_at` | `timestamp with time zone` | Não | `now()` |  |
-
-#### Relacionamentos de Entrada (Tabelas que Referenciam esta)
-
-* [`hr_salary_ranges.position_id`](#hr-salary-ranges)`(position_id)` aponta para a coluna local `id` (Constraint: `hr_salary_ranges_position_id_fkey`)
-* [`hr_employee_positions.position_id`](#hr-employee-positions)`(position_id)` aponta para a coluna local `id` (Constraint: `hr_employee_positions_position_id_fkey`)
-* [`hr_position_document_types.position_id`](#hr-position-document-types)`(position_id)` aponta para a coluna local `id` (Constraint: `hr_position_document_types_position_id_fkey`)
-
----
-
-### hr_salary_ranges
-
-* **Segurança de Nível de Linha (RLS):** Habilitada (Enabled)
-
-#### Colunas
-
-| Coluna | Tipo | Nulável | Padrão | Restrições / Notas |
-| :--- | :--- | :---: | :--- | :--- |
-| `id` | `uuid` | Não | `gen_random_uuid()` | 🔑 PK; Identificador único |
-| `position_id` | `uuid` | Não | - | Cargo ao qual a faixa pertence |
-| `level_id` | `uuid` | Não | - | Nível hierárquico da faixa |
-| `salary_min` | `numeric` | Não | - | Piso salarial da faixa |
-| `salary_mid` | `numeric` | Sim | - | Ponto médio (midpoint) da faixa |
-| `salary_max` | `numeric` | Não | - | Teto salarial da faixa |
-| `effective_date` | `date` | Não | - | Data de vigência desta faixa |
-| `notes` | `text` | Sim | - | Observações (ex: "Revisão anual 2025") |
-| `created_at` | `timestamp with time zone` | Não | `now()` |  |
-| `updated_at` | `timestamp with time zone` | Não | `now()` |  |
-
----
-
-### hr_employee_positions
-
-* **Segurança de Nível de Linha (RLS):** Habilitada (Enabled)
-
-#### Colunas
-
-| Coluna | Tipo | Nulável | Padrão | Restrições / Notas |
-| :--- | :--- | :---: | :--- | :--- |
-| `id` | `uuid` | Não | `gen_random_uuid()` | 🔑 PK; Identificador único |
-| `user_id` | `uuid` | Não | - | Colaborador |
-| `position_id` | `uuid` | Não | - | Cargo assumido |
-| `level_id` | `uuid` | Não | - | Nível assumido |
-| `salary` | `numeric` | Não | - | Salário negociado nesta vigência |
-| `start_date` | `date` | Não | - | Início da vigência |
-| `end_date` | `date` | Sim | - | Fim da vigência (NULL = posição atual) |
-| `change_reason` | `text` | Sim | - | Motivo da movimentação (promoção, reajuste, transferência, etc.) |
-| `registered_by` | `uuid` | Sim | - | Quem registrou a movimentação |
-| `created_at` | `timestamp with time zone` | Não | `now()` |  |
-| `updated_at` | `timestamp with time zone` | Não | `now()` |  |
-
-#### Índices (Indexes)
-
-* **`idx_employee_positions_current`**
-  ```sql
-  CREATE INDEX idx_employee_positions_current ON public.hr_employee_positions USING btree (user_id) WHERE (end_date IS NULL)
-  ```
-* **`idx_employee_positions_user`**
-  ```sql
-  CREATE INDEX idx_employee_positions_user ON public.hr_employee_positions USING btree (user_id)
-  ```
-
----
-
-### hr_document_types
-
-* **Segurança de Nível de Linha (RLS):** Habilitada (Enabled)
-
-#### Colunas
-
-| Coluna | Tipo | Nulável | Padrão | Restrições / Notas |
-| :--- | :--- | :---: | :--- | :--- |
-| `id` | `uuid` | Não | `gen_random_uuid()` | 🔑 PK; Identificador único |
-| `name` | `text` | Não | - | ✨ Unique; Nome do documento (ex: "CNH", "ASO", "CTPS") |
-| `description` | `text` | Sim | - | Descrição e instruções |
-| `requires_expiry` | `boolean` | Não | `false` | Se o documento possui data de validade |
-| `alert_days_before` | `integer` | Sim | `30` | Quantos dias antes do vencimento emitir alerta |
-| `mandatory` | `boolean` | Não | `true` | Se é obrigatório para todos os colaboradores |
-| `active` | `boolean` | Não | `true` | Tipo ativo no sistema |
-| `created_at` | `timestamp with time zone` | Não | `now()` |  |
-
-#### Relacionamentos de Entrada (Tabelas que Referenciam esta)
-
-* [`hr_position_document_types.document_type_id`](#hr-position-document-types)`(document_type_id)` aponta para a coluna local `id` (Constraint: `hr_position_document_types_document_type_id_fkey`)
-* [`hr_employee_documents.document_type_id`](#hr-employee-documents)`(document_type_id)` aponta para a coluna local `id` (Constraint: `hr_employee_documents_document_type_id_fkey`)
-
-#### Índices (Indexes)
-
-* **`hr_document_types_name_key`**
-  ```sql
-  CREATE UNIQUE INDEX hr_document_types_name_key ON public.hr_document_types USING btree (name)
-  ```
-
----
-
-### hr_employee_documents
-
-* **Segurança de Nível de Linha (RLS):** Habilitada (Enabled)
-
-#### Colunas
-
-| Coluna | Tipo | Nulável | Padrão | Restrições / Notas |
-| :--- | :--- | :---: | :--- | :--- |
-| `id` | `uuid` | Não | `gen_random_uuid()` | 🔑 PK; Identificador único |
-| `user_id` | `uuid` | Não | - | Colaborador titular |
-| `document_type_id` | `uuid` | Não | - | Tipo do documento |
-| `document_number` | `text` | Sim | - | Número/identificador do documento |
-| `issue_date` | `date` | Sim | - | Data de emissão |
-| `expiry_date` | `date` | Sim | - | Data de validade (obrigatório se requires_expiry = TRUE) |
-| `status` | `text` | Não | `'Válido'::text` | Status: Válido, Vencido, A Vencer, Pendente, Dispensado |
-| `file_url` | `text` | Sim | - | URL do arquivo no Supabase Storage |
-| `notes` | `text` | Sim | - | Observações |
-| `registered_by` | `uuid` | Sim | - | Quem registrou |
-| `created_at` | `timestamp with time zone` | Não | `now()` |  |
-| `updated_at` | `timestamp with time zone` | Não | `now()` |  |
-
-#### Índices (Indexes)
-
-* **`idx_employee_documents_expiry`**
-  ```sql
-  CREATE INDEX idx_employee_documents_expiry ON public.hr_employee_documents USING btree (expiry_date) WHERE (expiry_date IS NOT NULL)
-  ```
-* **`idx_employee_documents_status`**
-  ```sql
-  CREATE INDEX idx_employee_documents_status ON public.hr_employee_documents USING btree (status)
-  ```
-* **`idx_employee_documents_user`**
-  ```sql
-  CREATE INDEX idx_employee_documents_user ON public.hr_employee_documents USING btree (user_id)
-  ```
-
----
-
-### hr_integration_types
-
-* **Segurança de Nível de Linha (RLS):** Habilitada (Enabled)
-
-#### Colunas
-
-| Coluna | Tipo | Nulável | Padrão | Restrições / Notas |
-| :--- | :--- | :---: | :--- | :--- |
-| `id` | `uuid` | Não | `gen_random_uuid()` | 🔑 PK; Identificador único |
-| `name` | `text` | Não | - | ✨ Unique; Nome da integração (ex: "Integração SST Cliente X", "NR-35 Trabalho em Altura") |
-| `description` | `text` | Sim | - | Descrição e requisitos |
-| `validity_days` | `integer` | Sim | - | Validade padrão em dias (pode ser sobrescrita por registro) |
-| `alert_days_before` | `integer` | Não | `15` | Dias de antecedência para alertas de vencimento |
-| `active` | `boolean` | Não | `true` | Tipo ativo |
-| `created_at` | `timestamp with time zone` | Não | `now()` |  |
-
-#### Relacionamentos de Entrada (Tabelas que Referenciam esta)
-
-* [`hr_employee_integrations.integration_type_id`](#hr-employee-integrations)`(integration_type_id)` aponta para a coluna local `id` (Constraint: `hr_employee_integrations_integration_type_id_fkey`)
-
-#### Índices (Indexes)
-
-* **`hr_integration_types_name_key`**
-  ```sql
-  CREATE UNIQUE INDEX hr_integration_types_name_key ON public.hr_integration_types USING btree (name)
-  ```
-
----
-
-### hr_employee_integrations
-
-* **Segurança de Nível de Linha (RLS):** Habilitada (Enabled)
-
-#### Colunas
-
-| Coluna | Tipo | Nulável | Padrão | Restrições / Notas |
-| :--- | :--- | :---: | :--- | :--- |
-| `id` | `uuid` | Não | `gen_random_uuid()` | 🔑 PK; Identificador único |
-| `user_id` | `uuid` | Não | - | Colaborador |
-| `integration_type_id` | `uuid` | Não | - | Tipo de integração |
-| `client_id` | `uuid` | Sim | - | Cliente/empresa onde a integração foi realizada (opcional) |
-| `integration_date` | `date` | Não | - | Data em que a integração foi realizada |
-| `expiry_date` | `date` | Sim | - | Data de vencimento da integração |
-| `status` | `text` | Não | `'Válida'::text` | Status: Válida, Vencida, A Vencer, Cancelada |
-| `location` | `text` | Sim | - | Local onde foi realizada (obra, unidade, endereço) |
-| `notes` | `text` | Sim | - | Observações adicionais |
-| `file_url` | `text` | Sim | - | Comprovante/certificado no Supabase Storage |
-| `registered_by` | `uuid` | Sim | - | Quem registrou |
-| `created_at` | `timestamp with time zone` | Não | `now()` |  |
-| `updated_at` | `timestamp with time zone` | Não | `now()` |  |
-
-#### Índices (Indexes)
-
-* **`idx_employee_integrations_expiry`**
-  ```sql
-  CREATE INDEX idx_employee_integrations_expiry ON public.hr_employee_integrations USING btree (expiry_date) WHERE (expiry_date IS NOT NULL)
-  ```
-* **`idx_employee_integrations_status`**
-  ```sql
-  CREATE INDEX idx_employee_integrations_status ON public.hr_employee_integrations USING btree (status)
-  ```
-* **`idx_employee_integrations_user`**
-  ```sql
-  CREATE INDEX idx_employee_integrations_user ON public.hr_employee_integrations USING btree (user_id)
-  ```
-
----
-
-### hr_training_catalog
-
-* **Segurança de Nível de Linha (RLS):** Habilitada (Enabled)
-
-#### Colunas
-
-| Coluna | Tipo | Nulável | Padrão | Restrições / Notas |
-| :--- | :--- | :---: | :--- | :--- |
-| `id` | `uuid` | Não | `gen_random_uuid()` | 🔑 PK; Identificador único |
-| `name` | `text` | Não | - | Nome do treinamento (ex: "NR-11 Operação de Plataformas") |
-| `category` | `text` | Sim | - | Categoria (ex: "Segurança", "Operação", "Gestão", "Qualidade") |
-| `description` | `text` | Sim | - | Descrição e objetivos do treinamento |
-| `workload_hours` | `numeric` | Sim | - | Carga horária padrão |
-| `validity_days` | `integer` | Sim | - | Validade padrão em dias (0 ou NULL = sem validade) |
-| `alert_days_before` | `integer` | Não | `30` | Dias de antecedência para alertas de renovação |
-| `mandatory` | `boolean` | Não | `false` | Se é obrigatório para todos os colaboradores |
-| `active` | `boolean` | Não | `true` | Treinamento ativo no catálogo |
-| `created_at` | `timestamp with time zone` | Não | `now()` |  |
-| `updated_at` | `timestamp with time zone` | Não | `now()` |  |
-
-#### Relacionamentos de Entrada (Tabelas que Referenciam esta)
-
-* [`hr_employee_trainings.training_id`](#hr-employee-trainings)`(training_id)` aponta para a coluna local `id` (Constraint: `hr_employee_trainings_training_id_fkey`)
-
----
-
-### hr_employee_trainings
-
-* **Segurança de Nível de Linha (RLS):** Habilitada (Enabled)
-
-#### Colunas
-
-| Coluna | Tipo | Nulável | Padrão | Restrições / Notas |
-| :--- | :--- | :---: | :--- | :--- |
-| `id` | `uuid` | Não | `gen_random_uuid()` | 🔑 PK; Identificador único |
-| `user_id` | `uuid` | Não | - | Colaborador que realizou o treinamento |
-| `training_id` | `uuid` | Não | - | Treinamento do catálogo |
-| `provider` | `text` | Sim | - | Instituição/empresa fornecedora do treinamento |
-| `instructor` | `text` | Sim | - | Nome do instrutor (quando aplicável) |
-| `completion_date` | `date` | Não | - | Data de conclusão do treinamento |
-| `workload_hours` | `numeric` | Sim | - | Carga horária efetiva (pode diferir do padrão) |
-| `expiry_date` | `date` | Sim | - | Data de validade do certificado (quando aplicável) |
-| `status` | `text` | Não | `'Válido'::text` | Status: Válido, Vencido, A Vencer |
-| `certificate_url` | `text` | Sim | - | Certificado no Supabase Storage |
-| `cost` | `numeric` | Sim | - | Custo do treinamento (para controle de investimento em T&D) |
-| `notes` | `text` | Sim | - | Observações |
-| `registered_by` | `uuid` | Sim | - | Quem lançou o registro |
-| `created_at` | `timestamp with time zone` | Não | `now()` |  |
-| `updated_at` | `timestamp with time zone` | Não | `now()` |  |
-
-#### Índices (Indexes)
-
-* **`idx_employee_trainings_expiry`**
-  ```sql
-  CREATE INDEX idx_employee_trainings_expiry ON public.hr_employee_trainings USING btree (expiry_date) WHERE (expiry_date IS NOT NULL)
-  ```
-* **`idx_employee_trainings_status`**
-  ```sql
-  CREATE INDEX idx_employee_trainings_status ON public.hr_employee_trainings USING btree (status)
-  ```
-* **`idx_employee_trainings_user`**
-  ```sql
-  CREATE INDEX idx_employee_trainings_user ON public.hr_employee_trainings USING btree (user_id)
-  ```
-
----
-
-### crm_leads
-
-* **Segurança de Nível de Linha (RLS):** Habilitada (Enabled)
-
-#### Colunas
-
-| Coluna | Tipo | Nulável | Padrão | Restrições / Notas |
-| :--- | :--- | :---: | :--- | :--- |
-| `id` | `uuid` | Não | `gen_random_uuid()` | 🔑 PK |
-| `company_name` | `text` | Não | - |  |
-| `cnpj` | `text` | Sim | - |  |
-| `segment` | `text` | Sim | - |  |
-| `estimated_potential` | `numeric` | Sim | - |  |
-| `source` | `text` | Sim | - |  |
-| `status` | `text` | Não | `'Novo'::text` |  |
-| `converted_at` | `timestamp with time zone` | Sim | - |  |
-| `converted_client_id` | `uuid` | Sim | - |  |
-| `owner_id` | `uuid` | Não | - |  |
-| `notes` | `text` | Sim | - |  |
-| `created_at` | `timestamp with time zone` | Não | `now()` |  |
-| `updated_at` | `timestamp with time zone` | Não | `now()` |  |
-
-#### Relacionamentos de Entrada (Tabelas que Referenciam esta)
-
-* [`crm_tasks.lead_id`](#crm-tasks)`(lead_id)` aponta para a coluna local `id` (Constraint: `crm_tasks_lead_id_fkey`)
-* [`crm_deals.lead_id`](#crm-deals)`(lead_id)` aponta para a coluna local `id` (Constraint: `crm_deals_lead_id_fkey`)
-* [`crm_contacts.lead_id`](#crm-contacts)`(lead_id)` aponta para a coluna local `id` (Constraint: `crm_contacts_lead_id_fkey`)
-
-#### Índices (Indexes)
-
-* **`idx_crm_leads_converted`**
-  ```sql
-  CREATE INDEX idx_crm_leads_converted ON public.crm_leads USING btree (converted_client_id) WHERE (converted_client_id IS NOT NULL)
-  ```
-* **`idx_crm_leads_owner`**
-  ```sql
-  CREATE INDEX idx_crm_leads_owner ON public.crm_leads USING btree (owner_id)
-  ```
-* **`idx_crm_leads_status`**
-  ```sql
-  CREATE INDEX idx_crm_leads_status ON public.crm_leads USING btree (status)
-  ```
-
----
-
-### crm_contacts
-
-* **Segurança de Nível de Linha (RLS):** Habilitada (Enabled)
-
-#### Colunas
-
-| Coluna | Tipo | Nulável | Padrão | Restrições / Notas |
-| :--- | :--- | :---: | :--- | :--- |
-| `id` | `uuid` | Não | `gen_random_uuid()` | 🔑 PK |
-| `lead_id` | `uuid` | Sim | - |  |
-| `client_id` | `uuid` | Sim | - |  |
-| `full_name` | `text` | Não | - |  |
-| `role_title` | `text` | Sim | - |  |
-| `department` | `text` | Sim | - |  |
-| `email` | `text` | Sim | - |  |
-| `phone` | `text` | Sim | - |  |
-| `is_primary` | `boolean` | Não | `false` |  |
-| `notes` | `text` | Sim | - |  |
-| `active` | `boolean` | Não | `true` |  |
-| `created_at` | `timestamp with time zone` | Não | `now()` |  |
-| `updated_at` | `timestamp with time zone` | Não | `now()` |  |
-
-#### Relacionamentos de Entrada (Tabelas que Referenciam esta)
-
-* [`crm_tasks.contact_id`](#crm-tasks)`(contact_id)` aponta para a coluna local `id` (Constraint: `crm_tasks_contact_id_fkey`)
-* [`crm_deal_activities.contact_id`](#crm-deal-activities)`(contact_id)` aponta para a coluna local `id` (Constraint: `crm_deal_activities_contact_id_fkey`)
-* [`crm_deals.primary_contact_id`](#crm-deals)`(primary_contact_id)` aponta para a coluna local `id` (Constraint: `crm_deals_primary_contact_id_fkey`)
-
-#### Índices (Indexes)
-
-* **`idx_crm_contacts_client`**
-  ```sql
-  CREATE INDEX idx_crm_contacts_client ON public.crm_contacts USING btree (client_id) WHERE (client_id IS NOT NULL)
-  ```
-* **`idx_crm_contacts_lead`**
-  ```sql
-  CREATE INDEX idx_crm_contacts_lead ON public.crm_contacts USING btree (lead_id) WHERE (lead_id IS NOT NULL)
-  ```
-
----
-
-### crm_pipelines
-
-* **Segurança de Nível de Linha (RLS):** Habilitada (Enabled)
-
-#### Colunas
-
-| Coluna | Tipo | Nulável | Padrão | Restrições / Notas |
-| :--- | :--- | :---: | :--- | :--- |
-| `id` | `uuid` | Não | `gen_random_uuid()` | 🔑 PK |
-| `name` | `text` | Não | - | ✨ Unique |
-| `description` | `text` | Sim | - |  |
-| `active` | `boolean` | Não | `true` |  |
-| `created_at` | `timestamp with time zone` | Não | `now()` |  |
-| `updated_at` | `timestamp with time zone` | Não | `now()` |  |
-
-#### Relacionamentos de Entrada (Tabelas que Referenciam esta)
-
-* [`crm_deals.pipeline_id`](#crm-deals)`(pipeline_id)` aponta para a coluna local `id` (Constraint: `crm_deals_pipeline_id_fkey`)
-* [`crm_pipeline_stages.pipeline_id`](#crm-pipeline-stages)`(pipeline_id)` aponta para a coluna local `id` (Constraint: `crm_pipeline_stages_pipeline_id_fkey`)
-
-#### Índices (Indexes)
-
-* **`crm_pipelines_name_key`**
-  ```sql
-  CREATE UNIQUE INDEX crm_pipelines_name_key ON public.crm_pipelines USING btree (name)
-  ```
-
----
-
-### crm_pipeline_stages
-
-* **Segurança de Nível de Linha (RLS):** Habilitada (Enabled)
-
-#### Colunas
-
-| Coluna | Tipo | Nulável | Padrão | Restrições / Notas |
-| :--- | :--- | :---: | :--- | :--- |
-| `id` | `uuid` | Não | `gen_random_uuid()` | 🔑 PK |
-| `pipeline_id` | `uuid` | Não | - |  |
-| `name` | `text` | Não | - |  |
-| `position` | `integer` | Não | - |  |
-| `is_won` | `boolean` | Não | `false` |  |
-| `is_lost` | `boolean` | Não | `false` |  |
-| `probability_pct` | `integer` | Sim | - | CHECK: probability_pct >= 0 AND probability_pct <= 100 |
-| `created_at` | `timestamp with time zone` | Não | `now()` |  |
-
-#### Relacionamentos de Entrada (Tabelas que Referenciam esta)
-
-* [`crm_deal_activities.stage_to_id`](#crm-deal-activities)`(stage_to_id)` aponta para a coluna local `id` (Constraint: `crm_deal_activities_stage_to_id_fkey`)
-* [`crm_deals.stage_id`](#crm-deals)`(stage_id)` aponta para a coluna local `id` (Constraint: `crm_deals_stage_id_fkey`)
-* [`crm_deal_activities.stage_from_id`](#crm-deal-activities)`(stage_from_id)` aponta para a coluna local `id` (Constraint: `crm_deal_activities_stage_from_id_fkey`)
-
-#### Índices (Indexes)
-
-* **`idx_crm_stages_pipeline`**
-  ```sql
-  CREATE INDEX idx_crm_stages_pipeline ON public.crm_pipeline_stages USING btree (pipeline_id)
-  ```
-
----
-
-### crm_deals
-
-* **Segurança de Nível de Linha (RLS):** Habilitada (Enabled)
-
-#### Colunas
-
-| Coluna | Tipo | Nulável | Padrão | Restrições / Notas |
-| :--- | :--- | :---: | :--- | :--- |
-| `id` | `uuid` | Não | `gen_random_uuid()` | 🔑 PK |
-| `title` | `text` | Não | - |  |
-| `pipeline_id` | `uuid` | Não | - |  |
-| `stage_id` | `uuid` | Não | - |  |
-| `lead_id` | `uuid` | Sim | - |  |
-| `client_id` | `uuid` | Sim | - |  |
-| `primary_contact_id` | `uuid` | Sim | - |  |
-| `owner_id` | `uuid` | Não | - |  |
-| `value` | `numeric` | Sim | - |  |
-| `probability_pct` | `integer` | Sim | - | CHECK: probability_pct >= 0 AND probability_pct <= 100 |
-| `expected_close_date` | `date` | Sim | - |  |
-| `closed_at` | `timestamp with time zone` | Sim | - |  |
-| `lost_reason` | `text` | Sim | - |  |
-| `description` | `text` | Sim | - |  |
-| `created_at` | `timestamp with time zone` | Não | `now()` |  |
-| `updated_at` | `timestamp with time zone` | Não | `now()` |  |
-| `active_contract_id` | `uuid` | Sim | - |  |
-| `contract_form_id` | `uuid` | Sim | - |  |
-| `rental_invoice_id` | `uuid` | Sim | - | Chave estrangeira para fatura de locação vinculada |
-
-#### Relacionamentos de Saída (Chaves Estrangeiras Referenciadas)
-
-* A coluna `active_contract_id` aponta para [`crm_deal_contracts.id`](#crm-deal-contracts)`(id)` (Constraint: `crm_deals_active_contract_id_fkey`)
-* A coluna `contract_form_id` aponta para [`crm_deal_contract_forms.id`](#crm-deal-contract-forms)`(id)` (Constraint: `crm_deals_contract_form_id_fkey`)
-* A coluna `rental_invoice_id` aponta para [`rental_invoices.id`](#rental-invoices)`(id)` (Constraint: `crm_deals_rental_invoice_id_fkey`)
-* A coluna `pipeline_id` aponta para [`crm_pipelines.id`](#crm-pipelines)`(id)` (Constraint: `crm_deals_pipeline_id_fkey`)
-* A coluna `stage_id` aponta para [`crm_pipeline_stages.id`](#crm-pipeline-stages)`(id)` (Constraint: `crm_deals_stage_id_fkey`)
-* A coluna `client_id` aponta para [`clients.id`](#clients)`(id)` (Constraint: `crm_deals_client_id_fkey`)
-* A coluna `lead_id` aponta para [`crm_leads.id`](#crm-leads)`(id)` (Constraint: `crm_deals_lead_id_fkey`)
-* A coluna `primary_contact_id` aponta para [`crm_contacts.id`](#crm-contacts)`(id)` (Constraint: `crm_deals_primary_contact_id_fkey`)
-* A coluna `owner_id` aponta para [`users_profiles.id`](#users-profiles)`(id)` (Constraint: `crm_deals_owner_id_fkey`)
-
-#### Relacionamentos de Entrada (Tabelas que Referenciam esta)
-
-* [`crm_tasks.deal_id`](#crm-tasks)`(deal_id)` aponta para a coluna local `id` (Constraint: `crm_tasks_deal_id_fkey`)
-* [`crm_deal_activities.deal_id`](#crm-deal-activities)`(deal_id)` aponta para a coluna local `id` (Constraint: `crm_deal_activities_deal_id_fkey`)
-* [`crm_deal_contract_forms.deal_id`](#crm-deal-contract-forms)`(deal_id)` aponta para a coluna local `id` (Constraint: `crm_deal_contract_forms_deal_id_fkey`)
-* [`crm_deal_contracts.deal_id`](#crm-deal-contracts)`(deal_id)` aponta para a coluna local `id` (Constraint: `crm_deal_contracts_deal_id_fkey`)
-* [`rental_invoices.deal_id`](#rental-invoices)`(deal_id)` aponta para a coluna local `id` (Constraint: `rental_invoices_deal_id_fkey`)
-
-#### Índices (Indexes)
-
-* **`idx_crm_deals_client`**
-  ```sql
-  CREATE INDEX idx_crm_deals_client ON public.crm_deals USING btree (client_id) WHERE (client_id IS NOT NULL)
-  ```
-* **`idx_crm_deals_close_date`**
-  ```sql
-  CREATE INDEX idx_crm_deals_close_date ON public.crm_deals USING btree (expected_close_date)
-  ```
-* **`idx_crm_deals_lead`**
-  ```sql
-  CREATE INDEX idx_crm_deals_lead ON public.crm_deals USING btree (lead_id) WHERE (lead_id IS NOT NULL)
-  ```
-* **`idx_crm_deals_owner`**
-  ```sql
-  CREATE INDEX idx_crm_deals_owner ON public.crm_deals USING btree (owner_id)
-  ```
-* **`idx_crm_deals_pipeline`**
-  ```sql
-  CREATE INDEX idx_crm_deals_pipeline ON public.crm_deals USING btree (pipeline_id)
-  ```
-* **`idx_crm_deals_stage`**
-  ```sql
-  CREATE INDEX idx_crm_deals_stage ON public.crm_deals USING btree (stage_id)
-  ```
-
----
-
-### crm_deal_activities
-
-* **Segurança de Nível de Linha (RLS):** Habilitada (Enabled)
-
-#### Colunas
-
-| Coluna | Tipo | Nulável | Padrão | Restrições / Notas |
-| :--- | :--- | :---: | :--- | :--- |
-| `id` | `uuid` | Não | `gen_random_uuid()` | 🔑 PK |
-| `deal_id` | `uuid` | Não | - |  |
-| `activity_type` | `text` | Não | - |  |
-| `description` | `text` | Não | - |  |
-| `stage_from_id` | `uuid` | Sim | - |  |
-| `stage_to_id` | `uuid` | Sim | - |  |
-| `contact_id` | `uuid` | Sim | - |  |
-| `performed_by` | `uuid` | Não | - |  |
-| `activity_date` | `timestamp with time zone` | Não | `now()` |  |
-| `created_at` | `timestamp with time zone` | Não | `now()` |  |
-
-#### Índices (Indexes)
-
-* **`idx_crm_activities_date`**
-  ```sql
-  CREATE INDEX idx_crm_activities_date ON public.crm_deal_activities USING btree (activity_date)
-  ```
-* **`idx_crm_activities_deal`**
-  ```sql
-  CREATE INDEX idx_crm_activities_deal ON public.crm_deal_activities USING btree (deal_id)
-  ```
-
----
-
-### crm_task_types
-
-* **Segurança de Nível de Linha (RLS):** Habilitada (Enabled)
-
-#### Colunas
-
-| Coluna | Tipo | Nulável | Padrão | Restrições / Notas |
-| :--- | :--- | :---: | :--- | :--- |
-| `id` | `uuid` | Não | `gen_random_uuid()` | 🔑 PK |
-| `name` | `text` | Não | - | ✨ Unique |
-| `active` | `boolean` | Não | `true` |  |
-| `created_at` | `timestamp with time zone` | Não | `now()` |  |
-
-#### Relacionamentos de Entrada (Tabelas que Referenciam esta)
-
-* [`crm_tasks.task_type_id`](#crm-tasks)`(task_type_id)` aponta para a coluna local `id` (Constraint: `crm_tasks_task_type_id_fkey`)
-
-#### Índices (Indexes)
-
-* **`crm_task_types_name_key`**
-  ```sql
-  CREATE UNIQUE INDEX crm_task_types_name_key ON public.crm_task_types USING btree (name)
-  ```
-
----
-
-### crm_tasks
-
-* **Segurança de Nível de Linha (RLS):** Habilitada (Enabled)
-
-#### Colunas
-
-| Coluna | Tipo | Nulável | Padrão | Restrições / Notas |
-| :--- | :--- | :---: | :--- | :--- |
-| `id` | `uuid` | Não | `gen_random_uuid()` | 🔑 PK |
-| `task_type_id` | `uuid` | Não | - |  |
-| `title` | `text` | Não | - |  |
-| `description` | `text` | Sim | - |  |
-| `deal_id` | `uuid` | Sim | - |  |
-| `lead_id` | `uuid` | Sim | - |  |
-| `contact_id` | `uuid` | Sim | - |  |
-| `assigned_to` | `uuid` | Não | - |  |
-| `created_by` | `uuid` | Não | - |  |
-| `due_date` | `timestamp with time zone` | Não | - |  |
-| `completed_at` | `timestamp with time zone` | Sim | - |  |
-| `status` | `text` | Não | `'Pendente'::text` |  |
-| `priority` | `text` | Não | `'Normal'::text` |  |
-| `notes` | `text` | Sim | - |  |
-| `created_at` | `timestamp with time zone` | Não | `now()` |  |
-| `updated_at` | `timestamp with time zone` | Não | `now()` |  |
-
-#### Índices (Indexes)
-
-* **`idx_crm_tasks_assigned`**
-  ```sql
-  CREATE INDEX idx_crm_tasks_assigned ON public.crm_tasks USING btree (assigned_to)
-  ```
-* **`idx_crm_tasks_deal`**
-  ```sql
-  CREATE INDEX idx_crm_tasks_deal ON public.crm_tasks USING btree (deal_id) WHERE (deal_id IS NOT NULL)
-  ```
-* **`idx_crm_tasks_due`**
-  ```sql
-  CREATE INDEX idx_crm_tasks_due ON public.crm_tasks USING btree (due_date)
-  ```
-* **`idx_crm_tasks_lead`**
-  ```sql
-  CREATE INDEX idx_crm_tasks_lead ON public.crm_tasks USING btree (lead_id) WHERE (lead_id IS NOT NULL)
-  ```
-* **`idx_crm_tasks_status`**
-  ```sql
-  CREATE INDEX idx_crm_tasks_status ON public.crm_tasks USING btree (status)
-  ```
-
----
-
-### erp_company_settings
-
-* **Segurança de Nível de Linha (RLS):** Habilitada (Enabled)
-* **Nota Arquitetural:** Configurações centrais da locadora (single-tenant), dados bancários para repasse, chaves de API e credenciais de faturamento.
-
-#### Colunas
-
-| Coluna | Tipo | Nulável | Padrão | Restrições / Notas |
-| :--- | :--- | :---: | :--- | :--- |
-| `id` | `uuid` | Não | `gen_random_uuid()` | 🔑 PK |
-| `company_name` | `text` | Não | - |  |
-| `cnpj` | `text` | Não | - |  |
-| `state_registration` | `text` | Sim | - |  |
-| `address_full` | `text` | Não | - |  |
-| `logo_url` | `text` | Sim | - |  |
-| `bank_name` | `text` | Sim | - |  |
-| `bank_code` | `text` | Sim | - |  |
-| `bank_agency` | `text` | Sim | - |  |
-| `bank_account` | `text` | Sim | - |  |
-| `bank_pix_key` | `text` | Sim | - |  |
-| `contract_clauses` | `jsonb` | Não | - |  |
-| `active` | `boolean` | Não | `true` |  |
-| `updated_at` | `timestamp with time zone` | Não | `now()` |  |
-| `asaas_account_id` | `text` | Sim | - | ID da subconta criada via API no Asaas (ex: acct_0001) |
-| `asaas_api_key` | `text` | Sim | - | Chave de API exclusiva desta subconta, usada para emitir boletos |
-| `asaas_boleto_fee_amount` | `numeric` | Sim | - |  |
-| `asaas_pix_fee_percent` | `numeric` | Sim | - |  |
-| `nfse_service_code` | `text` | Sim | - |  |
-| `nfse_iss_regime` | `text` | Não | `'Isento'::text` |  |
-
----
-
-### crm_deal_contract_forms
-
-* **Segurança de Nível de Linha (RLS):** Habilitada (Enabled)
-
-#### Colunas
-
-| Coluna | Tipo | Nulável | Padrão | Restrições / Notas |
-| :--- | :--- | :---: | :--- | :--- |
-| `id` | `uuid` | Não | `gen_random_uuid()` | 🔑 PK |
-| `deal_id` | `uuid` | Não | - | ✨ Unique |
-| `contract_date` | `date` | Não | - |  |
-| `locatario_company_name` | `text` | Não | - |  |
-| `locatario_cnpj` | `text` | Não | - |  |
-| `locatario_state_registration` | `text` | Sim | - |  |
-| `locatario_address_full` | `text` | Não | - |  |
-| `equipment_description` | `text` | Não | - |  |
-| `equipment_model` | `text` | Não | - |  |
-| `contract_duration_days` | `integer` | Não | - |  |
-| `period_start` | `date` | Sim | - |  |
-| `period_end` | `date` | Sim | - |  |
-| `cost_rental` | `numeric` | Não | `0` |  |
-| `cost_insurance` | `numeric` | Não | `0` |  |
-| `cost_freight` | `numeric` | Não | `0` |  |
-| `cost_rcd` | `numeric` | Não | `0` |  |
-| `cost_third_party` | `numeric` | Não | `0` |  |
-| `cost_training` | `numeric` | Não | `0` |  |
-| `cost_total` | `numeric` | Não | - |  |
-| `billing_interval_days` | `text` | Sim | - | Condições de Pagamento (ex: '7 dias', '15 dias', '28 dias', 'A vista') |  |
-| `work_site` | `text` | Não | - |  |
-| `site_contact_name` | `text` | Sim | - |  |
-| `site_contact_phone` | `text` | Sim | - |  |
-| `notes` | `text` | Sim | - |  |
-| `form_status` | `text` | Não | `'Rascunho'::text` |  |
-| `created_by` | `uuid` | Não | - |  |
-| `updated_by` | `uuid` | Sim | - |  |
-| `created_at` | `timestamp with time zone` | Não | `now()` |  |
-| `updated_at` | `timestamp with time zone` | Não | `now()` |  |
-
-#### Relacionamentos de Entrada (Tabelas que Referenciam esta)
-
-* [`crm_deals.contract_form_id`](#crm-deals)`(contract_form_id)` aponta para a coluna local `id` (Constraint: `crm_deals_contract_form_id_fkey`)
-* [`crm_deal_contracts.contract_form_id`](#crm-deal-contracts)`(contract_form_id)` aponta para a coluna local `id` (Constraint: `crm_deal_contracts_contract_form_id_fkey`)
-
-#### Índices (Indexes)
-
-* **`idx_deal_contract_forms_deal`**
-  ```sql
-  CREATE INDEX idx_deal_contract_forms_deal ON public.crm_deal_contract_forms USING btree (deal_id)
-  ```
-* **`idx_deal_contract_forms_status`**
-  ```sql
-  CREATE INDEX idx_deal_contract_forms_status ON public.crm_deal_contract_forms USING btree (form_status)
-  ```
-
----
-
-### crm_deal_contracts
-
-* **Segurança de Nível de Linha (RLS):** Habilitada (Enabled)
-
-#### Colunas
-
-| Coluna | Tipo | Nulável | Padrão | Restrições / Notas |
-| :--- | :--- | :---: | :--- | :--- |
-| `id` | `uuid` | Não | `gen_random_uuid()` | 🔑 PK |
-| `deal_id` | `uuid` | Não | - |  |
-| `contract_form_id` | `uuid` | Não | - |  |
-| `contract_number` | `text` | Não | - | ✨ Unique |
-| `version` | `integer` | Não | `1` |  |
-| `status` | `text` | Não | `'Gerado'::text` |  |
-| `generated_at` | `timestamp with time zone` | Não | `now()` |  |
-| `generated_by` | `uuid` | Não | - |  |
-| `signed_file_url` | `text` | Sim | - |  |
-| `signed_uploaded_at` | `timestamp with time zone` | Sim | - |  |
-| `signed_uploaded_by` | `uuid` | Sim | - |  |
-| `snapshot` | `jsonb` | Não | - |  |
-| `notes` | `text` | Sim | - |  |
-| `created_at` | `timestamp with time zone` | Não | `now()` |  |
-| `updated_at` | `timestamp with time zone` | Não | `now()` |  |
-| `rental_invoice_id` | `uuid` | Sim | - |  |
-| `pdf_url` | `text` | Sim | - |  |
-
-#### Relacionamentos de Entrada (Tabelas que Referenciam esta)
-
-* [`crm_deals.active_contract_id`](#crm-deals)`(active_contract_id)` aponta para a coluna local `id` (Constraint: `crm_deals_active_contract_id_fkey`)
-* [`logistics_triage_photos.contract_id`](#logistics-triage-photos)`(contract_id)` aponta para a coluna local `id` (Constraint: `logistics_triage_photos_contract_id_fkey`)
-
-#### Índices (Indexes)
-
-* **`crm_deal_contracts_contract_number_key`**
-  ```sql
-  CREATE UNIQUE INDEX crm_deal_contracts_contract_number_key ON public.crm_deal_contracts USING btree (contract_number)
-  ```
-* **`idx_deal_contracts_deal`**
-  ```sql
-  CREATE INDEX idx_deal_contracts_deal ON public.crm_deal_contracts USING btree (deal_id)
-  ```
-* **`idx_deal_contracts_form`**
-  ```sql
-  CREATE INDEX idx_deal_contracts_form ON public.crm_deal_contracts USING btree (contract_form_id)
-  ```
-* **`idx_deal_contracts_number`**
-  ```sql
-  CREATE INDEX idx_deal_contracts_number ON public.crm_deal_contracts USING btree (contract_number)
-  ```
-* **`idx_deal_contracts_status`**
-  ```sql
-  CREATE INDEX idx_deal_contracts_status ON public.crm_deal_contracts USING btree (status)
-  ```
-
----
-
-### logistics_triage_photos
-
-* **Segurança de Nível de Linha (RLS):** Habilitada (Enabled)
-
-#### Colunas
-
-| Coluna | Tipo | Nulável | Padrão | Restrições / Notas |
-| :--- | :--- | :---: | :--- | :--- |
-| `id` | `uuid` | Não | `gen_random_uuid()` | 🔑 PK |
-| `contract_id` | `uuid` | Não | - |  |
-| `position` | `integer` | Não | - |  |
-| `label` | `text` | Não | - |  |
-| `file_path` | `text` | Não | - |  |
-| `file_url` | `text` | Sim | - |  |
-| `uploaded_by` | `uuid` | Sim | - |  |
-| `uploaded_at` | `timestamp with time zone` | Sim | `now()` |  |
-
-#### Índices (Indexes)
-
-* **`logistics_triage_photos_contract_id_position_key`**
-  ```sql
-  CREATE UNIQUE INDEX logistics_triage_photos_contract_id_position_key ON public.logistics_triage_photos USING btree (contract_id, "position")
-  ```
-
----
-
-### hr_epi_catalog
-
-* **Segurança de Nível de Linha (RLS):** Habilitada (Enabled)
-
-#### Colunas
-
-| Coluna | Tipo | Nulável | Padrão | Restrições / Notas |
-| :--- | :--- | :---: | :--- | :--- |
-| `id` | `uuid` | Não | `gen_random_uuid()` | 🔑 PK |
-| `name` | `text` | Não | - | ✨ Unique |
-| `ca_number` | `text` | Sim | - |  |
-| `description` | `text` | Sim | - |  |
-| `active` | `boolean` | Não | `true` |  |
-| `created_at` | `timestamp with time zone` | Não | `now()` |  |
-
-#### Relacionamentos de Entrada (Tabelas que Referenciam esta)
-
-* [`hr_epi_record_items.epi_id`](#hr-epi-record-items)`(epi_id)` aponta para a coluna local `id` (Constraint: `hr_epi_record_items_epi_id_fkey`)
-
-#### Índices (Indexes)
-
-* **`hr_epi_catalog_name_key`**
-  ```sql
-  CREATE UNIQUE INDEX hr_epi_catalog_name_key ON public.hr_epi_catalog USING btree (name)
-  ```
-
----
-
-### hr_epi_record_items
-
-* **Segurança de Nível de Linha (RLS):** Habilitada (Enabled)
-
-#### Colunas
-
-| Coluna | Tipo | Nulável | Padrão | Restrições / Notas |
-| :--- | :--- | :---: | :--- | :--- |
-| `id` | `uuid` | Não | `gen_random_uuid()` | 🔑 PK |
-| `epi_record_id` | `uuid` | Não | - |  |
-| `epi_id` | `uuid` | Não | - |  |
-| `quantity` | `integer` | Não | `1` |  |
-| `notes` | `text` | Sim | - |  |
-
-#### Índices (Indexes)
-
-* **`idx_epi_record_items_epi`**
-  ```sql
-  CREATE INDEX idx_epi_record_items_epi ON public.hr_epi_record_items USING btree (epi_id)
-  ```
-* **`idx_epi_record_items_record`**
-  ```sql
-  CREATE INDEX idx_epi_record_items_record ON public.hr_epi_record_items USING btree (epi_record_id)
-  ```
-* **`uq_epi_in_record`**
-  ```sql
-  CREATE UNIQUE INDEX uq_epi_in_record ON public.hr_epi_record_items USING btree (epi_record_id, epi_id)
-  ```
-
----
-
-### hr_epi_records
-
-* **Segurança de Nível de Linha (RLS):** Habilitada (Enabled)
-
-#### Colunas
-
-| Coluna | Tipo | Nulável | Padrão | Restrições / Notas |
-| :--- | :--- | :---: | :--- | :--- |
-| `id` | `uuid` | Não | `gen_random_uuid()` | 🔑 PK |
-| `user_id` | `uuid` | Não | - |  |
-| `delivery_date` | `date` | Não | - |  |
-| `file_url` | `text` | Não | - |  |
-| `file_uploaded_at` | `timestamp with time zone` | Não | `now()` |  |
-| `uploaded_by` | `uuid` | Não | - |  |
-| `notes` | `text` | Sim | - |  |
-| `created_at` | `timestamp with time zone` | Não | `now()` |  |
-
-#### Relacionamentos de Entrada (Tabelas que Referenciam esta)
-
-* [`hr_epi_record_items.epi_record_id`](#hr-epi-record-items)`(epi_record_id)` aponta para a coluna local `id` (Constraint: `hr_epi_record_items_epi_record_id_fkey`)
-
-#### Índices (Indexes)
-
-* **`idx_epi_records_date`**
-  ```sql
-  CREATE INDEX idx_epi_records_date ON public.hr_epi_records USING btree (delivery_date)
-  ```
-* **`idx_epi_records_user`**
-  ```sql
-  CREATE INDEX idx_epi_records_user ON public.hr_epi_records USING btree (user_id)
-  ```
-
----
-
-### hr_position_document_types
-
-* **Segurança de Nível de Linha (RLS):** Habilitada (Enabled)
-
-#### Colunas
-
-| Coluna | Tipo | Nulável | Padrão | Restrições / Notas |
-| :--- | :--- | :---: | :--- | :--- |
-| `id` | `uuid` | Não | `gen_random_uuid()` | 🔑 PK |
-| `position_id` | `uuid` | Não | - |  |
-| `document_type_id` | `uuid` | Não | - |  |
-| `mandatory` | `boolean` | Não | `true` |  |
-| `notes` | `text` | Sim | - |  |
-| `created_at` | `timestamp with time zone` | Não | `now()` |  |
-
-#### Índices (Indexes)
-
-* **`idx_pos_doc_types_document`**
-  ```sql
-  CREATE INDEX idx_pos_doc_types_document ON public.hr_position_document_types USING btree (document_type_id)
-  ```
-* **`idx_pos_doc_types_position`**
-  ```sql
-  CREATE INDEX idx_pos_doc_types_position ON public.hr_position_document_types USING btree (position_id)
-  ```
-
----
-
-### hr_time_records
-
-* **Segurança de Nível de Linha (RLS):** Habilitada (Enabled)
-
-#### Colunas
-
-| Coluna | Tipo | Nulável | Padrão | Restrições / Notas |
-| :--- | :--- | :---: | :--- | :--- |
-| `id` | `uuid` | Não | `gen_random_uuid()` | 🔑 PK |
-| `user_id` | `uuid` | Não | - |  |
-| `record_type` | `text` | Não | - | CHECK: record_type = ANY (ARRAY['Entrada'::text, 'Saída Almoço'::text, 'Retorno Almoço'::text, 'Saída'::text]) |
-| `recorded_at` | `timestamp with time zone` | Não | `now()` |  |
-| `record_date` | `date` | Não | `CURRENT_DATE` |  |
-| `origin` | `text` | Não | `'Sistema'::text` | CHECK: origin = ANY (ARRAY['Sistema'::text, 'Manual'::text]) |
-| `justification` | `text` | Sim | - |  |
-| `adjusted_by` | `uuid` | Sim | - |  |
-| `created_at` | `timestamp with time zone` | Não | `now()` |  |
-
-#### Índices (Indexes)
-
-* **`idx_time_records_date`**
-  ```sql
-  CREATE INDEX idx_time_records_date ON public.hr_time_records USING btree (record_date)
-  ```
-* **`idx_time_records_user_date`**
-  ```sql
-  CREATE INDEX idx_time_records_user_date ON public.hr_time_records USING btree (user_id, record_date)
-  ```
-
----
-
-### hr_timesheet_reports
-
-* **Segurança de Nível de Linha (RLS):** Habilitada (Enabled)
-
-#### Colunas
-
-| Coluna | Tipo | Nulável | Padrão | Restrições / Notas |
-| :--- | :--- | :---: | :--- | :--- |
-| `id` | `uuid` | Não | `gen_random_uuid()` | 🔑 PK |
-| `user_id` | `uuid` | Não | - |  |
-| `period_start` | `date` | Não | - |  |
-| `period_end` | `date` | Não | - |  |
-| `total_days_worked` | `integer` | Não | `0` |  |
-| `total_hours_worked` | `numeric` | Não | `0` |  |
-| `total_overtime_hours` | `numeric` | Não | `0` |  |
-| `total_absence_days` | `integer` | Não | `0` |  |
-| `status` | `text` | Não | `'Gerada'::text` | CHECK: status = ANY (ARRAY['Gerada'::text, 'Aprovada'::text, 'Contestada'::text]) |
-| `file_url` | `text` | Sim | - |  |
-| `generated_by` | `uuid` | Não | - |  |
-| `approved_by` | `uuid` | Sim | - |  |
-| `approved_at` | `timestamp with time zone` | Sim | - |  |
-| `notes` | `text` | Sim | - |  |
-| `created_at` | `timestamp with time zone` | Não | `now()` |  |
-| `updated_at` | `timestamp with time zone` | Não | `now()` |  |
-
-#### Índices (Indexes)
-
-* **`idx_timesheet_reports_period`**
-  ```sql
-  CREATE INDEX idx_timesheet_reports_period ON public.hr_timesheet_reports USING btree (period_start, period_end)
-  ```
-* **`idx_timesheet_reports_user`**
-  ```sql
-  CREATE INDEX idx_timesheet_reports_user ON public.hr_timesheet_reports USING btree (user_id)
-  ```
-* **`uq_timesheet_user_period`**
-  ```sql
-  CREATE UNIQUE INDEX uq_timesheet_user_period ON public.hr_timesheet_reports USING btree (user_id, period_start, period_end)
-  ```
-
----
-
-### hr_vacation_approvals
-
-* **Segurança de Nível de Linha (RLS):** Habilitada (Enabled)
-
-#### Colunas
-
-| Coluna | Tipo | Nulável | Padrão | Restrições / Notas |
-| :--- | :--- | :---: | :--- | :--- |
-| `id` | `uuid` | Não | `gen_random_uuid()` | 🔑 PK |
-| `vacation_request_id` | `uuid` | Não | - |  |
-| `approver_id` | `uuid` | Não | - |  |
-| `status` | `text` | Não | `'Pendente'::text` | CHECK: status = ANY (ARRAY['Pendente'::text, 'Aprovado'::text, 'Rejeitado'::text]) |
-| `rejection_reason` | `text` | Sim | - |  |
-| `decided_at` | `timestamp with time zone` | Sim | - |  |
-| `created_at` | `timestamp with time zone` | Não | `now()` |  |
-
-#### Índices (Indexes)
-
-* **`idx_vacation_approvals_appr`**
-  ```sql
-  CREATE INDEX idx_vacation_approvals_appr ON public.hr_vacation_approvals USING btree (approver_id)
-  ```
-* **`idx_vacation_approvals_req`**
-  ```sql
-  CREATE INDEX idx_vacation_approvals_req ON public.hr_vacation_approvals USING btree (vacation_request_id)
-  ```
-* **`idx_vacation_approvals_status`**
-  ```sql
-  CREATE INDEX idx_vacation_approvals_status ON public.hr_vacation_approvals USING btree (status)
-  ```
-* **`uq_approval_per_approver`**
-  ```sql
-  CREATE UNIQUE INDEX uq_approval_per_approver ON public.hr_vacation_approvals USING btree (vacation_request_id, approver_id)
-  ```
-
-#### Gatilhos (Triggers)
-
-* **`trg_vacation_approval_status`**
-  ```sql
-  CREATE TRIGGER trg_vacation_approval_status AFTER INSERT OR UPDATE ON public.hr_vacation_approvals FOR EACH ROW EXECUTE FUNCTION fn_update_vacation_request_status()
-  ```
-
----
-
-### hr_vacation_installments
-
-* **Segurança de Nível de Linha (RLS):** Habilitada (Enabled)
-
-#### Colunas
-
-| Coluna | Tipo | Nulável | Padrão | Restrições / Notas |
-| :--- | :--- | :---: | :--- | :--- |
-| `id` | `uuid` | Não | `gen_random_uuid()` | 🔑 PK |
-| `vacation_request_id` | `uuid` | Não | - |  |
-| `installment_number` | `integer` | Não | - |  |
-| `start_date` | `date` | Não | - |  |
-| `end_date` | `date` | Não | - |  |
-| `duration_days` | `integer` | Não | - | CHECK: duration_days >= 5 |
-| `created_at` | `timestamp with time zone` | Não | `now()` |  |
-
-#### Índices (Indexes)
-
-* **`idx_vacation_installments_req`**
-  ```sql
-  CREATE INDEX idx_vacation_installments_req ON public.hr_vacation_installments USING btree (vacation_request_id)
-  ```
-* **`uq_installment_number`**
-  ```sql
-  CREATE UNIQUE INDEX uq_installment_number ON public.hr_vacation_installments USING btree (vacation_request_id, installment_number)
-  ```
-
----
-
-### hr_vacation_requests
-
-* **Segurança de Nível de Linha (RLS):** Habilitada (Enabled)
-
-#### Colunas
-
-| Coluna | Tipo | Nulável | Padrão | Restrições / Notas |
-| :--- | :--- | :---: | :--- | :--- |
-| `id` | `uuid` | Não | `gen_random_uuid()` | 🔑 PK |
-| `user_id` | `uuid` | Não | - |  |
-| `entitlement_period_start` | `date` | Não | - |  |
-| `entitlement_period_end` | `date` | Não | - |  |
-| `total_entitled_days` | `integer` | Não | `30` |  |
-| `installments_count` | `integer` | Não | - | CHECK: installments_count >= 1 AND installments_count <= 3 |
-| `days_sold` | `integer` | Não | `0` | CHECK: days_sold >= 0 AND days_sold <= 10 |
-| `total_days_requested` | `integer` | Não | - |  |
-| `status` | `text` | Não | `'Pendente'::text` | CHECK: status = ANY (ARRAY['Pendente'::text, 'Em Aprovação'::text, 'Aprovada'::text, 'Rejeitada'::text, 'Cancelada'::text]) |
-| `rejection_reason` | `text` | Sim | - |  |
-| `notes` | `text` | Sim | - |  |
-| `created_at` | `timestamp with time zone` | Não | `now()` |  |
-| `updated_at` | `timestamp with time zone` | Não | `now()` |  |
-
-#### Relacionamentos de Entrada (Tabelas que Referenciam esta)
-
-* [`hr_vacation_approvals.vacation_request_id`](#hr-vacation-approvals)`(vacation_request_id)` aponta para a coluna local `id` (Constraint: `hr_vacation_approvals_vacation_request_id_fkey`)
-* [`hr_vacation_installments.vacation_request_id`](#hr-vacation-installments)`(vacation_request_id)` aponta para a coluna local `id` (Constraint: `hr_vacation_installments_vacation_request_id_fkey`)
-
-#### Índices (Indexes)
-
-* **`idx_vacation_requests_status`**
-  ```sql
-  CREATE INDEX idx_vacation_requests_status ON public.hr_vacation_requests USING btree (status)
-  ```
-* **`idx_vacation_requests_user`**
-  ```sql
-  CREATE INDEX idx_vacation_requests_user ON public.hr_vacation_requests USING btree (user_id)
-  ```
-
----
-
-### service_order_labor
-
-* **Segurança de Nível de Linha (RLS):** Habilitada (Enabled)
-
-#### Colunas
-
-| Coluna | Tipo | Nulável | Padrão | Restrições / Notas |
-| :--- | :--- | :---: | :--- | :--- |
-| `id` | `uuid` | Não | `gen_random_uuid()` | 🔑 PK |
-| `service_order_id` | `uuid` | Sim | - |  |
-| `technician_name` | `text` | Não | - |  |
-| `labor_date` | `date` | Sim | - |  |
-| `start_time` | `time without time zone` | Sim | - |  |
-| `end_time` | `time without time zone` | Sim | - |  |
-| `labor_type` | `text` | Sim | `'T'::text` |  |
-| `created_at` | `timestamp with time zone` | Sim | `now()` |  |
-
----
-
-### invoice_nfse
-
-* **Segurança de Nível de Linha (RLS):** Desabilitada (Disabled)
-
-#### Colunas
-
-| Coluna | Tipo | Nulável | Padrão | Restrições / Notas |
-| :--- | :--- | :---: | :--- | :--- |
-| `id` | `uuid` | Não | `gen_random_uuid()` | 🔑 PK |
-| `invoice_id` | `uuid` | Não | - |  |
-| `gateway` | `text` | Não | `'asaas'::text` |  |
-| `external_id` | `text` | Sim | - |  |
-| `status` | `text` | Não | `'PENDENTE'::text` |  |
-| `nfse_link` | `text` | Sim | - |  |
-| `xml_url` | `text` | Sim | - |  |
-| `service_code` | `text` | Sim | - |  |
-| `iss_regime` | `text` | Sim | - |  |
-| `return_message` | `text` | Sim | - |  |
-| `created_at` | `timestamp with time zone` | Não | `now()` |  |
-| `updated_at` | `timestamp with time zone` | Não | `now()` |  |
-
-#### Índices (Indexes)
-
-* **`invoice_nfse_invoice_id_idx`**
-  ```sql
-  CREATE INDEX invoice_nfse_invoice_id_idx ON public.invoice_nfse USING btree (invoice_id)
-  ```
-
----
-
 ### stock_movements
 
 * **Segurança de Nível de Linha (RLS):** Habilitada (Enabled)
-* **Propósito:** Tabela de auditoria e rastreabilidade total de movimentações de estoque (entradas por importação de NF-e, saídas para aplicação em Ordens de Serviço, e ajustes manuais). Registra saldos anteriores e posteriores, responsável pela operação e timestamp.
+* **Propósito:** Histórico e auditoria de todas as movimentações de entrada e saída de peças e insumos do estoque.
 
 #### Colunas
 
 | Coluna | Tipo | Nulável | Padrão | Restrições / Notas |
 | :--- | :--- | :---: | :--- | :--- |
 | `id` | `uuid` | Não | `gen_random_uuid()` | 🔑 PK |
-| `part_id` | `uuid` | Não | - | Foreign Key -> `parts.id` (ON DELETE CASCADE) |
-| `movement_type` | `text` | Não | - | CHECK: movement_type IN ('ENTRADA', 'SAIDA', 'AJUSTE') |
-| `quantity` | `numeric` | Não | - | Quantidade movimentada (positiva) |
-| `unit_value` | `numeric` | Sim | `0` | Valor unitário na data da movimentação |
-| `previous_stock` | `numeric` | Não | `0` | Saldo em estoque antes da movimentação |
-| `new_stock` | `numeric` | Não | `0` | Saldo em estoque após a movimentação |
-| `reference_type` | `text` | Não | - | CHECK: reference_type IN ('NFE_IMPORT', 'SERVICE_ORDER', 'MANUAL_ADJUSTMENT') |
-| `reference_id` | `text` | Sim | - | Identificador de referência (Chave NF-e ou ID da OS) |
-| `reference_label` | `text` | Sim | - | Rótulo legível (Ex: "NF-e 70804" ou "OS #1024") |
-| `notes` | `text` | Sim | - | Descrição e observações da movimentação |
-| `created_by` | `uuid` | Sim | - | Foreign Key -> `users_profiles.id` (Responsável) |
-| `created_at` | `timestamp with time zone` | Não | `now()` | Data e hora exata da movimentação |
+| `part_id` | `uuid` | Não | - | FK -> `parts.id` |
+| `movement_type` | `text` | Não | - |  |
+| `quantity` | `numeric` | Não | - |  |
+| `unit_value` | `numeric` | Sim | `0` |  |
+| `previous_stock` | `numeric` | Não | `0` |  |
+| `new_stock` | `numeric` | Não | `0` |  |
+| `reference_type` | `text` | Não | - |  |
+| `reference_id` | `text` | Sim | - |  |
+| `reference_label` | `text` | Sim | - |  |
+| `notes` | `text` | Sim | - |  |
+| `created_by` | `uuid` | Sim | - | FK -> `users_profiles.id` |
+| `created_at` | `timestamp with time zone` | Não | `now()` |  |
+
+#### Relacionamentos de Saída (Chaves Estrangeiras Referenciadas)
+
+* A coluna `created_by` aponta para [`users_profiles.id`](#users-profiles)`(id)` (Constraint: `stock_movements_created_by_fkey`)
+* A coluna `part_id` aponta para [`parts.id`](#parts)`(id)` (Constraint: `stock_movements_part_id_fkey`)
 
 #### Índices (Indexes)
 
+* **`idx_stock_movements_created_at`**
+  ```sql
+  CREATE INDEX idx_stock_movements_created_at ON public.stock_movements USING btree (created_at DESC)
+  ```
 * **`idx_stock_movements_part_id`**
   ```sql
   CREATE INDEX idx_stock_movements_part_id ON public.stock_movements USING btree (part_id)
@@ -1911,16 +2514,140 @@ Abaixo estão listadas as 46 tabelas ativas no esquema `public` do banco de dado
   ```sql
   CREATE INDEX idx_stock_movements_reference ON public.stock_movements USING btree (reference_type, reference_id)
   ```
-* **`idx_stock_movements_created_at`**
+* **`stock_movements_pkey`**
   ```sql
-  CREATE INDEX idx_stock_movements_created_at ON public.stock_movements USING btree (created_at DESC)
+  CREATE UNIQUE INDEX stock_movements_pkey ON public.stock_movements USING btree (id)
   ```
+
+---
+
+### users_profiles
+
+* **Segurança de Nível de Linha (RLS):** Habilitada (Enabled)
+* **Propósito:** Perfis de usuários do sistema integrados ao Supabase Auth, controlando níveis de acesso (RBAC), dados cadastrais e permissões.
+
+#### Colunas
+
+| Coluna | Tipo | Nulável | Padrão | Restrições / Notas |
+| :--- | :--- | :---: | :--- | :--- |
+| `id` | `uuid` | Não | - | 🔑 PK; FK -> `auth.users.id` |
+| `full_name` | `text` | Não | - |  |
+| `cpf` | `text` | Sim | - | ✨ Unique |
+| `birth_date` | `date` | Sim | - |  |
+| `phone` | `text` | Sim | - |  |
+| `email` | `text` | Não | - | ✨ Unique |
+| `address_street` | `text` | Sim | - |  |
+| `address_number` | `text` | Sim | - |  |
+| `address_complement` | `text` | Sim | - |  |
+| `address_city` | `text` | Sim | - |  |
+| `address_state` | `text` | Sim | - |  |
+| `address_zip` | `text` | Sim | - |  |
+| `role_title` | `text` | Sim | - |  |
+| `access_level` | `USER-DEFINED (access_level_type)` | Sim | `'Financeiro'::access_level_type` | Valores: ["Administrador", "Diretoria", "Gerente", "Comercial", "Logística", "Manutenção", "Financeiro", "Recursos Humanos", "Usuário"] |
+| `active` | `boolean` | Sim | `true` |  |
+| `created_at` | `timestamp with time zone` | Sim | `now()` |  |
+| `updated_at` | `timestamp with time zone` | Sim | `now()` |  |
+| `photo_url` | `text` | Sim | - |  |
+| `password_set` | `boolean` | Sim | `false` |  |
+
+#### Relacionamentos de Saída (Chaves Estrangeiras Referenciadas)
+
+* A coluna `id` aponta para [`auth.users.id`](#auth.users)`(id)` (Constraint: `users_profiles_id_fkey`)
+
+#### Relacionamentos de Entrada (Tabelas que Referenciam esta)
+
+* [`bills.created_by`](#bills)`(created_by)` aponta para a coluna local `id` (Constraint: `bills_created_by_fkey`)
+* [`crm_deal_activities.performed_by`](#crm-deal-activities)`(performed_by)` aponta para a coluna local `id` (Constraint: `crm_deal_activities_performed_by_fkey`)
+* [`crm_deal_contract_forms.created_by`](#crm-deal-contract-forms)`(created_by)` aponta para a coluna local `id` (Constraint: `crm_deal_contract_forms_created_by_fkey`)
+* [`crm_deal_contract_forms.updated_by`](#crm-deal-contract-forms)`(updated_by)` aponta para a coluna local `id` (Constraint: `crm_deal_contract_forms_updated_by_fkey`)
+* [`crm_deal_contracts.generated_by`](#crm-deal-contracts)`(generated_by)` aponta para a coluna local `id` (Constraint: `crm_deal_contracts_generated_by_fkey`)
+* [`crm_deal_contracts.signed_uploaded_by`](#crm-deal-contracts)`(signed_uploaded_by)` aponta para a coluna local `id` (Constraint: `crm_deal_contracts_signed_uploaded_by_fkey`)
+* [`crm_deals.owner_id`](#crm-deals)`(owner_id)` aponta para a coluna local `id` (Constraint: `crm_deals_owner_id_fkey`)
+* [`crm_leads.owner_id`](#crm-leads)`(owner_id)` aponta para a coluna local `id` (Constraint: `crm_leads_owner_id_fkey`)
+* [`crm_tasks.assigned_to`](#crm-tasks)`(assigned_to)` aponta para a coluna local `id` (Constraint: `crm_tasks_assigned_to_fkey`)
+* [`crm_tasks.created_by`](#crm-tasks)`(created_by)` aponta para a coluna local `id` (Constraint: `crm_tasks_created_by_fkey`)
+* [`equipment_documents.created_by`](#equipment-documents)`(created_by)` aponta para a coluna local `id` (Constraint: `equipment_documents_created_by_fkey`)
+* [`equipment_documents.updated_by`](#equipment-documents)`(updated_by)` aponta para a coluna local `id` (Constraint: `equipment_documents_updated_by_fkey`)
+* [`equipment_hour_meter_logs.created_by`](#equipment-hour-meter-logs)`(created_by)` aponta para a coluna local `id` (Constraint: `equipment_hour_meter_logs_created_by_fkey`)
+* [`equipments.created_by`](#equipments)`(created_by)` aponta para a coluna local `id` (Constraint: `equipments_created_by_fkey`)
+* [`hr_employee_documents.registered_by`](#hr-employee-documents)`(registered_by)` aponta para a coluna local `id` (Constraint: `hr_employee_documents_registered_by_fkey`)
+* [`hr_employee_documents.user_id`](#hr-employee-documents)`(user_id)` aponta para a coluna local `id` (Constraint: `hr_employee_documents_user_id_fkey`)
+* [`hr_employee_integrations.registered_by`](#hr-employee-integrations)`(registered_by)` aponta para a coluna local `id` (Constraint: `hr_employee_integrations_registered_by_fkey`)
+* [`hr_employee_integrations.user_id`](#hr-employee-integrations)`(user_id)` aponta para a coluna local `id` (Constraint: `hr_employee_integrations_user_id_fkey`)
+* [`hr_employee_positions.registered_by`](#hr-employee-positions)`(registered_by)` aponta para a coluna local `id` (Constraint: `hr_employee_positions_registered_by_fkey`)
+* [`hr_employee_positions.user_id`](#hr-employee-positions)`(user_id)` aponta para a coluna local `id` (Constraint: `hr_employee_positions_user_id_fkey`)
+* [`hr_employee_trainings.registered_by`](#hr-employee-trainings)`(registered_by)` aponta para a coluna local `id` (Constraint: `hr_employee_trainings_registered_by_fkey`)
+* [`hr_employee_trainings.user_id`](#hr-employee-trainings)`(user_id)` aponta para a coluna local `id` (Constraint: `hr_employee_trainings_user_id_fkey`)
+* [`hr_epi_records.uploaded_by`](#hr-epi-records)`(uploaded_by)` aponta para a coluna local `id` (Constraint: `hr_epi_records_uploaded_by_fkey`)
+* [`hr_epi_records.user_id`](#hr-epi-records)`(user_id)` aponta para a coluna local `id` (Constraint: `hr_epi_records_user_id_fkey`)
+* [`hr_time_records.adjusted_by`](#hr-time-records)`(adjusted_by)` aponta para a coluna local `id` (Constraint: `hr_time_records_adjusted_by_fkey`)
+* [`hr_time_records.user_id`](#hr-time-records)`(user_id)` aponta para a coluna local `id` (Constraint: `hr_time_records_user_id_fkey`)
+* [`hr_timesheet_reports.approved_by`](#hr-timesheet-reports)`(approved_by)` aponta para a coluna local `id` (Constraint: `hr_timesheet_reports_approved_by_fkey`)
+* [`hr_timesheet_reports.generated_by`](#hr-timesheet-reports)`(generated_by)` aponta para a coluna local `id` (Constraint: `hr_timesheet_reports_generated_by_fkey`)
+* [`hr_timesheet_reports.user_id`](#hr-timesheet-reports)`(user_id)` aponta para a coluna local `id` (Constraint: `hr_timesheet_reports_user_id_fkey`)
+* [`hr_vacation_approvals.approver_id`](#hr-vacation-approvals)`(approver_id)` aponta para a coluna local `id` (Constraint: `hr_vacation_approvals_approver_id_fkey`)
+* [`hr_vacation_requests.user_id`](#hr-vacation-requests)`(user_id)` aponta para a coluna local `id` (Constraint: `hr_vacation_requests_user_id_fkey`)
+* [`logistics_triage_photos.uploaded_by`](#logistics-triage-photos)`(uploaded_by)` aponta para a coluna local `id` (Constraint: `logistics_triage_photos_uploaded_by_fkey`)
+* [`nfe_imports.created_by`](#nfe-imports)`(created_by)` aponta para a coluna local `id` (Constraint: `nfe_imports_created_by_fkey`)
+* [`parts.created_by`](#parts)`(created_by)` aponta para a coluna local `id` (Constraint: `parts_created_by_fkey`)
+* [`rental_billing_invoices.created_by`](#rental-billing-invoices)`(created_by)` aponta para a coluna local `id` (Constraint: `rental_billing_invoices_created_by_fkey`)
+* [`rental_invoices.created_by`](#rental-invoices)`(created_by)` aponta para a coluna local `id` (Constraint: `rental_invoices_created_by_fkey`)
+* [`service_orders.executed_by`](#service-orders)`(executed_by)` aponta para a coluna local `id` (Constraint: `service_orders_executed_by_fkey`)
+* [`stock_movements.created_by`](#stock-movements)`(created_by)` aponta para a coluna local `id` (Constraint: `stock_movements_created_by_fkey`)
+
+#### Índices (Indexes)
+
+* **`users_profiles_cpf_key`**
+  ```sql
+  CREATE UNIQUE INDEX users_profiles_cpf_key ON public.users_profiles USING btree (cpf)
+  ```
+* **`users_profiles_email_key`**
+  ```sql
+  CREATE UNIQUE INDEX users_profiles_email_key ON public.users_profiles USING btree (email)
+  ```
+* **`users_profiles_pkey`**
+  ```sql
+  CREATE UNIQUE INDEX users_profiles_pkey ON public.users_profiles USING btree (id)
+  ```
+
+#### Gatilhos (Triggers)
+
+* **`update_users_profiles_updated_at`**
+  ```sql
+  CREATE TRIGGER update_users_profiles_updated_at BEFORE UPDATE ON public.users_profiles FOR EACH ROW EXECUTE FUNCTION update_updated_at_column()
+  ```
+
+---
+
+## Tipos Enumerados (Enums)
+
+Abaixo estão os tipos enumerados customizados criados no banco de dados:
+
+### `access_level_type`
+
+* **Valores:** `Administrador`, `Diretoria`, `Gerente`, `Comercial`, `Logística`, `Manutenção`, `Financeiro`, `Recursos Humanos`, `Usuário`
+
+### `billing_status_type`
+
+* **Valores:** `Pendente`, `Faturado`, `Emitida`, `Cancelada`
+
+### `equipment_status_type`
+
+* **Valores:** `Disponível`, `Locado`, `Em Manutenção`, `Inativo`
+
+### `reconciliation_status_type`
+
+* **Valores:** `Pendente`, `Atrasado`, `Recebido`, `Divergente`, `No prazo`
+
+### `service_order_status_type`
+
+* **Valores:** `Aberta`, `Em Andamento`, `Aguardando Peças`, `Concluída`, `Cancelada`, `Encerrada com pendências`
 
 ---
 
 ## Definição das Funções Auxiliares
 
-Estas funções PL/pgSQL são utilizadas por gatilhos ou como utilitários de segurança:
+Estas funções PL/pgSQL são utilizadas por gatilhos, rotinas atômicas de faturamento ou como utilitários de segurança:
 
 ### Função `fn_update_vacation_request_status()`
 
@@ -1937,26 +2664,26 @@ DECLARE
   rejected_count INTEGER;
 BEGIN
   SELECT COUNT(*) INTO total_approvals
-    FROM hr_vacation_approvals WHERE vacation_request_id = req_id;
+    FROM public.hr_vacation_approvals WHERE vacation_request_id = req_id;
 
   SELECT COUNT(*) INTO approved_count
-    FROM hr_vacation_approvals WHERE vacation_request_id = req_id AND status = 'Aprovado';
+    FROM public.hr_vacation_approvals WHERE vacation_request_id = req_id AND status = 'Aprovado';
 
   SELECT COUNT(*) INTO rejected_count
-    FROM hr_vacation_approvals WHERE vacation_request_id = req_id AND status = 'Rejeitado';
+    FROM public.hr_vacation_approvals WHERE vacation_request_id = req_id AND status = 'Rejeitado';
 
   IF rejected_count > 0 THEN
-    UPDATE hr_vacation_requests
+    UPDATE public.hr_vacation_requests
       SET status = 'Rejeitada',
           rejection_reason = NEW.rejection_reason,
           updated_at = now()
       WHERE id = req_id;
   ELSIF approved_count = total_approvals THEN
-    UPDATE hr_vacation_requests
+    UPDATE public.hr_vacation_requests
       SET status = 'Aprovada', updated_at = now()
       WHERE id = req_id;
   ELSE
-    UPDATE hr_vacation_requests
+    UPDATE public.hr_vacation_requests
       SET status = 'Em Aprovação', updated_at = now()
       WHERE id = req_id;
   END IF;
@@ -1974,11 +2701,18 @@ $function$
 CREATE OR REPLACE FUNCTION public.generate_invoice_number()
  RETURNS trigger
  LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO 'public'
 AS $function$
 DECLARE
   v_year   INTEGER;
   v_seq    INTEGER;
 BEGIN
+  -- Se o invoice_number já foi informado manualmente e não está vazio, não sobrescreve
+  IF NEW.invoice_number IS NOT NULL AND TRIM(NEW.invoice_number) <> '' THEN
+    RETURN NEW;
+  END IF;
+
   v_year := EXTRACT(YEAR FROM now())::INTEGER;
 
   -- Incrementa atomicamente o contador do ano corrente
@@ -1990,6 +2724,100 @@ BEGIN
 
   NEW.invoice_number := v_seq::TEXT || '/' || v_year::TEXT;
   RETURN NEW;
+END;
+$function$
+```
+
+---
+
+### Função `generate_rental_billing_invoice()`
+
+```sql
+CREATE OR REPLACE FUNCTION public.generate_rental_billing_invoice(p_rental_invoice_id uuid, p_bill_id uuid DEFAULT NULL::uuid, p_invoice_type text DEFAULT 'INITIAL'::text, p_pdf_url text DEFAULT NULL::text, p_period_start date DEFAULT NULL::date, p_period_end date DEFAULT NULL::date, p_total_amount numeric DEFAULT 0, p_invoice_data jsonb DEFAULT NULL::jsonb, p_user_id uuid DEFAULT NULL::uuid)
+ RETURNS TABLE(id uuid, invoice_number text, year integer, sequence_number integer, pdf_url text, is_new boolean)
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+AS $function$
+DECLARE
+  v_year INTEGER;
+  v_seq INTEGER;
+  v_invoice_number TEXT;
+  v_rec public.rental_billing_invoices%ROWTYPE;
+BEGIN
+  v_year := EXTRACT(YEAR FROM CURRENT_DATE)::INTEGER;
+
+  -- If bill_id is provided, check if billing invoice was already issued for this bill
+  IF p_bill_id IS NOT NULL THEN
+    SELECT * INTO v_rec
+    FROM public.rental_billing_invoices
+    WHERE bill_id = p_bill_id
+    LIMIT 1;
+
+    IF FOUND THEN
+      -- If new PDF url was passed and record needs update
+      IF p_pdf_url IS NOT NULL AND (v_rec.pdf_url IS NULL OR v_rec.pdf_url <> p_pdf_url) THEN
+        UPDATE public.rental_billing_invoices
+        SET pdf_url = p_pdf_url,
+            updated_at = now()
+        WHERE public.rental_billing_invoices.id = v_rec.id;
+        v_rec.pdf_url := p_pdf_url;
+      END IF;
+
+      RETURN QUERY
+      SELECT v_rec.id, v_rec.invoice_number, v_rec.year, v_rec.sequence_number, v_rec.pdf_url, FALSE;
+      RETURN;
+    END IF;
+  END IF;
+
+  -- Acquire exclusive transaction advisory lock for the year to ensure atomic sequence
+  PERFORM pg_advisory_xact_lock(847291, v_year);
+
+  -- Get next sequence for the year
+  SELECT COALESCE(MAX(rbi.sequence_number), 0) + 1
+  INTO v_seq
+  FROM public.rental_billing_invoices rbi
+  WHERE rbi.year = v_year;
+
+  -- Format: int_sequential & "/" & current_year (e.g. "1/2026", "2/2026")
+  v_invoice_number := v_seq::TEXT || '/' || v_year::TEXT;
+
+  -- Insert new billing invoice record
+  INSERT INTO public.rental_billing_invoices (
+    invoice_number,
+    year,
+    sequence_number,
+    rental_invoice_id,
+    bill_id,
+    invoice_type,
+    pdf_url,
+    period_start,
+    period_end,
+    total_amount,
+    invoice_data,
+    created_by,
+    created_at,
+    updated_at
+  )
+  VALUES (
+    v_invoice_number,
+    v_year,
+    v_seq,
+    p_rental_invoice_id,
+    p_bill_id,
+    COALESCE(p_invoice_type, 'INITIAL'),
+    p_pdf_url,
+    p_period_start,
+    p_period_end,
+    COALESCE(p_total_amount, 0),
+    p_invoice_data,
+    p_user_id,
+    now(),
+    now()
+  )
+  RETURNING * INTO v_rec;
+
+  RETURN QUERY
+  SELECT v_rec.id, v_rec.invoice_number, v_rec.year, v_rec.sequence_number, v_rec.pdf_url, TRUE;
 END;
 $function$
 ```
@@ -2026,7 +2854,7 @@ CREATE OR REPLACE FUNCTION public.is_hr_admin()
 AS $function$
 BEGIN
   RETURN EXISTS (
-    SELECT 1 FROM users_profiles
+    SELECT 1 FROM public.users_profiles
     WHERE id = auth.uid()
     AND access_level IN ('Administrador', 'Gerente', 'Diretoria', 'Recursos Humanos')
   );
@@ -2044,10 +2872,10 @@ CREATE OR REPLACE FUNCTION public.update_client_average_score()
  LANGUAGE plpgsql
 AS $function$
 BEGIN
-  UPDATE clients
+  UPDATE public.clients
   SET average_score = (
     SELECT ROUND(AVG(client_score), 2)
-    FROM rental_invoices
+    FROM public.rental_invoices
     WHERE client_id = NEW.client_id AND client_score IS NOT NULL
   )
   WHERE id = NEW.client_id;
@@ -2071,3 +2899,5 @@ BEGIN
 END;
 $function$
 ```
+
+---
