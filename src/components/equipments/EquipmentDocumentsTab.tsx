@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { supabase } from '../../lib/supabase';
 import api from '../../services/api';
 import type { EquipmentDocument } from '../../types';
+import { formatDate } from '../../utils/date';
 
 interface EquipmentDocumentsTabProps {
   equipmentId: string;
@@ -19,19 +20,67 @@ export const EquipmentDocumentsTab: React.FC<EquipmentDocumentsTabProps> = ({
   // Modal / Formulário de Novo Documento
   const [isUploadModalOpen, setIsUploadModalOpen] = useState(false);
   const [docName, setDocName] = useState('');
+  const [docDueDate, setDocDueDate] = useState('');
   const [file, setFile] = useState<File | null>(null);
   const [uploading, setUploading] = useState(false);
   const [uploadError, setUploadError] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  // Modal / Edição de Nome
+  // Modal / Edição
   const [editingDoc, setEditingDoc] = useState<EquipmentDocument | null>(null);
   const [editName, setEditName] = useState('');
+  const [editDueDate, setEditDueDate] = useState('');
   const [updating, setUpdating] = useState(false);
 
   // Modal / Exclusão
   const [deletingDoc, setDeletingDoc] = useState<EquipmentDocument | null>(null);
   const [deleting, setDeleting] = useState(false);
+
+  const getDueDateStatus = (dueDateStr?: string | null) => {
+    if (!dueDateStr) return null;
+    const raw = dueDateStr.includes('T') ? dueDateStr.split('T')[0] : dueDateStr.trim();
+    const parts = raw.split('-');
+    if (parts.length !== 3) return null;
+    const [year, month, day] = parts.map(Number);
+    if (!year || !month || !day) return null;
+
+    const dueDate = new Date(year, month - 1, day);
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+
+    const diffMs = dueDate.getTime() - today.getTime();
+    const diffDays = Math.round(diffMs / (1000 * 60 * 60 * 24));
+
+    if (diffDays < 0) {
+      return {
+        status: 'expired' as const,
+        label: `Vencido há ${Math.abs(diffDays)} dia${Math.abs(diffDays) === 1 ? '' : 's'}`,
+        badgeClass: 'bg-red-50 text-red-700 dark:bg-red-950/50 dark:text-red-300 border border-red-200 dark:border-red-900/50',
+        icon: 'error',
+      };
+    } else if (diffDays === 0) {
+      return {
+        status: 'today' as const,
+        label: 'Vence hoje',
+        badgeClass: 'bg-amber-50 text-amber-700 dark:bg-amber-950/50 dark:text-amber-300 border border-amber-200 dark:border-amber-900/50',
+        icon: 'warning',
+      };
+    } else if (diffDays <= 30) {
+      return {
+        status: 'warning' as const,
+        label: `Vence em ${diffDays} dia${diffDays === 1 ? '' : 's'}`,
+        badgeClass: 'bg-amber-50 text-amber-700 dark:bg-amber-950/50 dark:text-amber-300 border border-amber-200 dark:border-amber-900/50',
+        icon: 'schedule',
+      };
+    } else {
+      return {
+        status: 'ok' as const,
+        label: `Válido (${diffDays} dias)`,
+        badgeClass: 'bg-emerald-50 text-emerald-700 dark:bg-emerald-950/50 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-900/50',
+        icon: 'check_circle',
+      };
+    }
+  };
 
   const fetchDocuments = async () => {
     try {
@@ -106,11 +155,13 @@ export const EquipmentDocumentsTab: React.FC<EquipmentDocumentsTabProps> = ({
         file_url: publicUrl,
         file_name: file.name,
         file_size: file.size,
+        due_date: docDueDate ? docDueDate : null,
       });
 
       // Fechar modal e resetar
       setIsUploadModalOpen(false);
       setDocName('');
+      setDocDueDate('');
       setFile(null);
       if (fileInputRef.current) fileInputRef.current.value = '';
 
@@ -132,12 +183,13 @@ export const EquipmentDocumentsTab: React.FC<EquipmentDocumentsTabProps> = ({
       setUpdating(true);
       await api.put(`/equipments/documents/${editingDoc.id}`, {
         document_name: editName.trim(),
+        due_date: editDueDate ? editDueDate : null,
       });
       setEditingDoc(null);
       await fetchDocuments();
     } catch (err: any) {
-      console.error('Erro ao renomear documento:', err);
-      alert('Erro ao renomear documento: ' + (err.response?.data?.error || err.message));
+      console.error('Erro ao salvar alterações do documento:', err);
+      alert('Erro ao salvar alterações do documento: ' + (err.response?.data?.error || err.message));
     } finally {
       setUpdating(false);
     }
@@ -193,10 +245,30 @@ export const EquipmentDocumentsTab: React.FC<EquipmentDocumentsTabProps> = ({
       {/* Cabeçalho da Aba */}
       <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 p-6 shadow-sm flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
-          <h2 className="text-xl font-bold text-slate-900 dark:text-white flex items-center gap-2">
-            <span className="material-symbols-outlined text-mustard-500 text-2xl">folder_open</span>
-            Documentação da Máquina
-          </h2>
+          <div className="flex flex-wrap items-center gap-2.5">
+            <h2 className="text-xl font-bold text-slate-900 dark:text-white flex items-center gap-2">
+              <span className="material-symbols-outlined text-mustard-500 text-2xl">folder_open</span>
+              Documentação da Máquina
+            </h2>
+            {documents.some(d => getDueDateStatus(d.due_date)?.status === 'expired') && (
+              <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-red-100 text-red-700 dark:bg-red-950/60 dark:text-red-400 border border-red-300 dark:border-red-900">
+                <span className="material-symbols-outlined text-[13px]">error</span>
+                {documents.filter(d => getDueDateStatus(d.due_date)?.status === 'expired').length} vencido(s)
+              </span>
+            )}
+            {documents.some(d => {
+              const s = getDueDateStatus(d.due_date)?.status;
+              return s === 'warning' || s === 'today';
+            }) && (
+              <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-amber-100 text-amber-800 dark:bg-amber-950/60 dark:text-amber-400 border border-amber-300 dark:border-amber-900">
+                <span className="material-symbols-outlined text-[13px]">schedule</span>
+                {documents.filter(d => {
+                  const s = getDueDateStatus(d.due_date)?.status;
+                  return s === 'warning' || s === 'today';
+                }).length} a vencer
+              </span>
+            )}
+          </div>
           <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
             Anexe manuais, laudos ART, termos, notas fiscais e certificados. Os arquivos são salvos na pasta{' '}
             <code className="font-mono text-[11px] bg-slate-100 dark:bg-slate-800 px-1.5 py-0.5 rounded text-mustard-600 dark:text-mustard-400">
@@ -209,6 +281,7 @@ export const EquipmentDocumentsTab: React.FC<EquipmentDocumentsTabProps> = ({
           type="button"
           onClick={() => {
             setDocName('');
+            setDocDueDate('');
             setFile(null);
             setUploadError(null);
             setIsUploadModalOpen(true);
@@ -245,7 +318,13 @@ export const EquipmentDocumentsTab: React.FC<EquipmentDocumentsTabProps> = ({
           </p>
           <button
             type="button"
-            onClick={() => setIsUploadModalOpen(true)}
+            onClick={() => {
+              setDocName('');
+              setDocDueDate('');
+              setFile(null);
+              setUploadError(null);
+              setIsUploadModalOpen(true);
+            }}
             className="mt-6 px-4 py-2 bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 font-bold text-xs uppercase tracking-widest rounded-xl transition-colors flex items-center gap-1.5 cursor-pointer"
           >
             <span className="material-symbols-outlined text-sm">add</span>
@@ -256,10 +335,15 @@ export const EquipmentDocumentsTab: React.FC<EquipmentDocumentsTabProps> = ({
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           {documents.map(doc => {
             const { icon, color } = getFileIcon(doc.file_name, doc.file_url);
+            const dueStatus = getDueDateStatus(doc.due_date);
             return (
               <div
                 key={doc.id}
-                className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 p-5 shadow-sm hover:border-mustard-500/40 transition-all flex flex-col justify-between gap-4"
+                className={`bg-white dark:bg-slate-900 rounded-2xl border p-5 shadow-sm hover:border-mustard-500/40 transition-all flex flex-col justify-between gap-4 ${
+                  dueStatus?.status === 'expired'
+                    ? 'border-red-300 dark:border-red-900/60 bg-red-50/5'
+                    : 'border-slate-200 dark:border-slate-800'
+                }`}
               >
                 <div className="flex items-start gap-3.5">
                   <div className={`w-12 h-12 rounded-xl flex items-center justify-center shrink-0 ${color}`}>
@@ -275,6 +359,16 @@ export const EquipmentDocumentsTab: React.FC<EquipmentDocumentsTabProps> = ({
                       <p className="text-xs text-slate-400 dark:text-slate-500 truncate mt-0.5" title={doc.file_name}>
                         {doc.file_name} • {formatFileSize(doc.file_size)}
                       </p>
+                    )}
+
+                    {doc.due_date && dueStatus && (
+                      <div className="mt-2.5 flex flex-wrap items-center gap-1.5">
+                        <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-semibold ${dueStatus.badgeClass}`}>
+                          <span className="material-symbols-outlined text-[15px]">{dueStatus.icon}</span>
+                          <span>Vencimento: {formatDate(doc.due_date)}</span>
+                          <span className="text-[11px] opacity-80">({dueStatus.label})</span>
+                        </span>
+                      </div>
                     )}
 
                     <div className="flex flex-wrap items-center gap-x-3 gap-y-1 mt-2 text-[11px] text-slate-400 dark:text-slate-500">
@@ -301,8 +395,9 @@ export const EquipmentDocumentsTab: React.FC<EquipmentDocumentsTabProps> = ({
                     onClick={() => {
                       setEditingDoc(doc);
                       setEditName(doc.document_name);
+                      setEditDueDate(doc.due_date ? (doc.due_date.includes('T') ? doc.due_date.split('T')[0] : doc.due_date) : '');
                     }}
-                    title="Renomear documento"
+                    title="Editar documento"
                     className="p-2 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-xl transition-colors cursor-pointer"
                   >
                     <span className="material-symbols-outlined text-lg">edit</span>
@@ -374,6 +469,22 @@ export const EquipmentDocumentsTab: React.FC<EquipmentDocumentsTabProps> = ({
               </div>
 
               <div className="space-y-1.5">
+                <label className="text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-widest flex items-center justify-between">
+                  <span>Data de Vencimento</span>
+                  <span className="text-[10px] text-slate-400 font-normal lowercase tracking-normal">(opcional)</span>
+                </label>
+                <input
+                  type="date"
+                  value={docDueDate}
+                  onChange={e => setDocDueDate(e.target.value)}
+                  className="w-full px-4 py-2.5 bg-slate-50 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700 rounded-xl text-slate-900 dark:text-white focus:bg-white dark:focus:bg-slate-900 focus:ring-2 focus:ring-mustard-500/10 focus:border-mustard-500 transition-all outline-none text-sm [color-scheme:light] dark:[color-scheme:dark]"
+                />
+                <p className="text-[11px] text-slate-400 dark:text-slate-500">
+                  Preencha caso o documento tenha validade (ex: ART, laudo técnico, calibração).
+                </p>
+              </div>
+
+              <div className="space-y-1.5">
                 <label className="text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-widest">
                   Arquivo *
                 </label>
@@ -435,12 +546,15 @@ export const EquipmentDocumentsTab: React.FC<EquipmentDocumentsTabProps> = ({
         </div>
       )}
 
-      {/* Modal: Renomear Documento */}
+      {/* Modal: Editar Documento */}
       {editingDoc && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm">
           <div className="bg-white dark:bg-slate-900 rounded-3xl border border-slate-200 dark:border-slate-800 shadow-2xl max-w-md w-full overflow-hidden">
             <div className="p-6 border-b border-slate-100 dark:border-slate-800 flex items-center justify-between">
-              <h3 className="text-base font-bold text-slate-900 dark:text-white">Renomear Documento</h3>
+              <h3 className="text-base font-bold text-slate-900 dark:text-white flex items-center gap-2">
+                <span className="material-symbols-outlined text-mustard-500">edit_document</span>
+                Editar Documento
+              </h3>
               <button
                 type="button"
                 onClick={() => setEditingDoc(null)}
@@ -452,7 +566,7 @@ export const EquipmentDocumentsTab: React.FC<EquipmentDocumentsTabProps> = ({
             <form onSubmit={handleEditSubmit} className="p-6 space-y-4">
               <div className="space-y-1.5">
                 <label className="text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-widest">
-                  Novo Nome *
+                  Nome do Documento *
                 </label>
                 <input
                   type="text"
@@ -461,6 +575,22 @@ export const EquipmentDocumentsTab: React.FC<EquipmentDocumentsTabProps> = ({
                   onChange={e => setEditName(e.target.value)}
                   className="w-full px-4 py-2.5 bg-slate-50 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700 rounded-xl text-slate-900 dark:text-white focus:bg-white dark:focus:bg-slate-900 focus:ring-2 focus:ring-mustard-500/10 focus:border-mustard-500 transition-all outline-none text-sm"
                 />
+              </div>
+
+              <div className="space-y-1.5">
+                <label className="text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-widest flex items-center justify-between">
+                  <span>Data de Vencimento</span>
+                  <span className="text-[10px] text-slate-400 font-normal lowercase tracking-normal">(opcional)</span>
+                </label>
+                <input
+                  type="date"
+                  value={editDueDate}
+                  onChange={e => setEditDueDate(e.target.value)}
+                  className="w-full px-4 py-2.5 bg-slate-50 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700 rounded-xl text-slate-900 dark:text-white focus:bg-white dark:focus:bg-slate-900 focus:ring-2 focus:ring-mustard-500/10 focus:border-mustard-500 transition-all outline-none text-sm [color-scheme:light] dark:[color-scheme:dark]"
+                />
+                <p className="text-[11px] text-slate-400 dark:text-slate-500">
+                  Deixe em branco para remover ou não definir prazo de validade.
+                </p>
               </div>
 
               <div className="flex items-center justify-end gap-3 pt-2">
@@ -474,9 +604,10 @@ export const EquipmentDocumentsTab: React.FC<EquipmentDocumentsTabProps> = ({
                 <button
                   type="submit"
                   disabled={updating}
-                  className="px-5 py-2 bg-mustard-500 hover:bg-mustard-600 text-white font-bold text-xs uppercase tracking-widest rounded-xl transition-all cursor-pointer"
+                  className="px-5 py-2 bg-mustard-500 hover:bg-mustard-600 text-white font-bold text-xs uppercase tracking-widest rounded-xl transition-all cursor-pointer flex items-center gap-1.5 disabled:opacity-50"
                 >
-                  {updating ? 'Salvando...' : 'Salvar'}
+                  {updating && <div className="w-3.5 h-3.5 border-2 border-white border-t-transparent rounded-full animate-spin"></div>}
+                  {updating ? 'Salvando...' : 'Salvar Alterações'}
                 </button>
               </div>
             </form>

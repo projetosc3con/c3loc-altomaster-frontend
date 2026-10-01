@@ -776,6 +776,7 @@ Abaixo estão listadas as 52 tabelas ativas no esquema `public` do banco de dado
 | `updated_at` | `timestamp with time zone` | Não | `now()` |  |
 | `created_by` | `uuid` | Sim | - | FK -> `users_profiles.id` |
 | `updated_by` | `uuid` | Sim | - | FK -> `users_profiles.id` |
+| `due_date` | `date` | Sim | - | Data de vencimento / validade do documento |
 
 #### Relacionamentos de Saída (Chaves Estrangeiras Referenciadas)
 
@@ -792,6 +793,10 @@ Abaixo estão listadas as 52 tabelas ativas no esquema `public` do banco de dado
 * **`idx_equipment_documents_equipment_id`**
   ```sql
   CREATE INDEX idx_equipment_documents_equipment_id ON public.equipment_documents USING btree (equipment_id)
+  ```
+* **`idx_equipment_documents_due_date`**
+  ```sql
+  CREATE INDEX idx_equipment_documents_due_date ON public.equipment_documents USING btree (due_date)
   ```
 
 ---
