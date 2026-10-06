@@ -34,13 +34,14 @@ const RECONCILIATION_STATUSES: ReconciliationStatus[] = ['Pendente', 'Atrasado',
 export type SortField = 'billing_period_end' | 'client_name' | 'equipment_name' | 'total_value' | 'billing_status';
 export type SortOrder = 'asc' | 'desc';
 
+export type PeriodStatusFilter = 'encerrado' | 'em_vigor' | 'futuro' | '';
 export type ReturnStatusFilter = 'active' | 'returned' | '';
 
 interface Filters {
   search: string;
   billing_status: BillingStatus | '';
   reconciliation_status: ReconciliationStatus | '';
-  return_status: ReturnStatusFilter;
+  period_status: PeriodStatusFilter;
   date_from: string;
   date_to: string;
   value_min: number;
@@ -53,7 +54,7 @@ const emptyFilters: Filters = {
   search: '',
   billing_status: '',
   reconciliation_status: '',
-  return_status: 'active',
+  period_status: 'em_vigor',
   date_from: '',
   date_to: '',
   value_min: 0,
@@ -72,11 +73,8 @@ const buildParams = (page: number, f: Filters, limit: number = 10) => {
   if (f.search) p.search = f.search;
   if (f.billing_status) p.billing_status = f.billing_status;
   if (f.reconciliation_status) p.reconciliation_status = f.reconciliation_status;
-  if (f.return_status) {
-    p.return_status = f.return_status;
-    if (f.return_status === 'active') {
-      p.hide_returned = 'true';
-    }
+  if (f.period_status) {
+    p.period_status = f.period_status;
   }
   if (f.date_from) p.date_from = f.date_from;
   if (f.date_to) p.date_to = f.date_to;
@@ -93,13 +91,22 @@ const getInitialFilters = (): Filters => {
     const saved = localStorage.getItem(STORAGE_KEY);
     if (saved) {
       const parsed = JSON.parse(saved);
-      const isLegacy = parsed.return_status === undefined;
+      let period_status: PeriodStatusFilter = 'em_vigor';
+      if (parsed.period_status !== undefined) {
+        period_status = parsed.period_status;
+      } else if (parsed.return_status === 'returned') {
+        period_status = 'encerrado';
+      } else if (parsed.return_status === 'active') {
+        period_status = 'em_vigor';
+      } else if (parsed.return_status === '') {
+        period_status = '';
+      }
       return {
         ...emptyFilters,
         ...parsed,
-        return_status: isLegacy ? 'active' : parsed.return_status,
+        period_status,
         sort_by: parsed.sort_by || 'billing_period_end',
-        sort_order: isLegacy ? 'asc' : (parsed.sort_order || 'asc')
+        sort_order: parsed.sort_order || 'asc'
       };
     }
   } catch (e) {
@@ -243,7 +250,7 @@ const Rentals: React.FC = () => {
   const activeFilterCount = [
     filters.billing_status, filters.reconciliation_status,
     filters.date_from, filters.date_to,
-    filters.return_status,
+    filters.period_status,
   ].filter(Boolean).length + (filters.value_min > 0 || filters.value_max > 0 ? 1 : 0);
 
   const fetchRentals = useCallback(async (page: number, f: Filters, limit: number = itemsPerPage) => {
@@ -316,7 +323,7 @@ const Rentals: React.FC = () => {
     setSearchInput('');
     const reset: Filters = {
       ...emptyFilters,
-      return_status: '',
+      period_status: '',
       sort_by: 'billing_period_end',
       sort_order: 'asc'
     };
@@ -421,9 +428,13 @@ const Rentals: React.FC = () => {
           {
             label: (filters.date_from || filters.date_to)
               ? 'Total Faturado no Período'
-              : filters.return_status === 'active'
-                ? 'Total Faturado (Período Vigente)'
-                : 'Total Faturado',
+              : filters.period_status === 'em_vigor'
+                ? 'Total Faturado (Em vigor)'
+                : filters.period_status === 'encerrado'
+                  ? 'Total Faturado (Encerrados)'
+                  : filters.period_status === 'futuro'
+                    ? 'Total Faturado (Futuros)'
+                    : 'Total Faturado',
             value: (stats.currentPeriodTotalValue ?? stats.totalValue ?? 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' }),
             color: 'bg-emerald-100 dark:bg-emerald-900/20 text-emerald-800 dark:text-emerald-400',
             icon: 'payments',
@@ -503,7 +514,13 @@ const Rentals: React.FC = () => {
                 {renderSortHeader(
                   (filters.date_from || filters.date_to)
                     ? 'Valor (Período)'
-                    : 'Valor (Período Vigente)',
+                    : filters.period_status === 'em_vigor'
+                      ? 'Valor (Em vigor)'
+                      : filters.period_status === 'encerrado'
+                        ? 'Valor (Encerrado)'
+                        : filters.period_status === 'futuro'
+                          ? 'Valor (Futuro)'
+                          : 'Valor Total',
                   'total_value',
                   'right'
                 )}
@@ -558,10 +575,16 @@ const Rentals: React.FC = () => {
                         <div className="text-[11px] text-slate-400 dark:text-slate-500 font-mono">{rental.asset_number}</div>
                       </td>
                       <td className="px-6 py-4 text-slate-600 dark:text-slate-400 whitespace-nowrap min-w-[180px]">
-                        <div className="flex items-center gap-1">
+                        <div className="flex items-center gap-1 font-medium">
                           <span className="material-symbols-outlined text-[16px] text-slate-400 dark:text-slate-500">date_range</span>
-                          {formatDate(rental.billing_period_start)} - {formatDate(rental.billing_period_end)}
+                          {formatDate(rental.current_period_start || rental.billing_period_start)} - {formatDate(rental.current_period_end || rental.billing_period_end)}
                         </div>
+                        {((rental.current_period_start && rental.current_period_start !== rental.billing_period_start) ||
+                          (rental.current_period_end && rental.current_period_end !== rental.billing_period_end)) && (
+                          <div className="text-[10px] text-slate-400 dark:text-slate-500 font-mono mt-0.5" title="Período total do contrato">
+                            Contrato: {formatDate(rental.billing_period_start)} - {formatDate(rental.billing_period_end)}
+                          </div>
+                        )}
                         {rental.return_date && (
                           <div className="text-[10px] text-emerald-600 dark:text-emerald-400 font-bold flex items-center gap-1 mt-0.5">
                             <span className="material-symbols-outlined text-[12px]">verified</span>
@@ -698,59 +721,78 @@ const Rentals: React.FC = () => {
 
               {/* Body */}
               <div className="flex-1 overflow-y-auto p-6 space-y-8">
-                {/* Situação do Contrato / Devolução */}
+                {/* Por período */}
                 <div className="space-y-2">
                   <div className="flex items-center justify-between">
                     <label className="text-[11px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-widest">
-                      Situação do Contrato
+                      Por período
                     </label>
-                    {filters.return_status === 'active' && (
-                      <span className="text-[10px] font-bold text-emerald-600 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-950/40 px-2 py-0.5 rounded-md border border-emerald-200 dark:border-emerald-800/50">
-                        Finalizadas Ocultas
+                    {filters.period_status && (
+                      <span className="text-[10px] font-bold text-mustard-600 dark:text-mustard-400 bg-mustard-50 dark:bg-mustard-950/40 px-2 py-0.5 rounded-md border border-mustard-200 dark:border-mustard-800/50">
+                        {filters.period_status === 'encerrado' ? 'Encerrados' : filters.period_status === 'em_vigor' ? 'Em vigor' : 'Futuros'}
                       </span>
                     )}
                   </div>
-                  <div className="grid grid-cols-2 gap-2">
+                  <div className="grid grid-cols-3 gap-2">
                     <button
                       type="button"
-                      onClick={() => setFilters(f => ({ ...f, return_status: f.return_status === 'active' ? '' : 'active' }))}
-                      className={`px-3 py-2.5 rounded-xl text-xs font-bold text-left transition-all flex items-center justify-between ${
-                        filters.return_status === 'active'
+                      onClick={() => setFilters(f => ({ ...f, period_status: f.period_status === 'encerrado' ? '' : 'encerrado' }))}
+                      className={`px-2.5 py-2.5 rounded-xl text-xs font-bold text-left transition-all flex items-center justify-between ${
+                        filters.period_status === 'encerrado'
                           ? 'bg-mustard-500 text-white shadow-md'
                           : 'bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-700'
                       }`}
                     >
                       <div className="flex items-center gap-1.5 min-w-0">
                         <span className="material-symbols-outlined text-[18px] shrink-0">
-                          {filters.return_status === 'active' ? 'check_box' : 'check_box_outline_blank'}
+                          {filters.period_status === 'encerrado' ? 'check_box' : 'check_box_outline_blank'}
                         </span>
-                        <span className="truncate">Ocultar Finalizadas</span>
+                        <span className="truncate">Encerrado</span>
                       </div>
                     </button>
 
                     <button
                       type="button"
-                      onClick={() => setFilters(f => ({ ...f, return_status: f.return_status === 'returned' ? '' : 'returned' }))}
-                      className={`px-3 py-2.5 rounded-xl text-xs font-bold text-left transition-all flex items-center justify-between ${
-                        filters.return_status === 'returned'
+                      onClick={() => setFilters(f => ({ ...f, period_status: f.period_status === 'em_vigor' ? '' : 'em_vigor' }))}
+                      className={`px-2.5 py-2.5 rounded-xl text-xs font-bold text-left transition-all flex items-center justify-between ${
+                        filters.period_status === 'em_vigor'
                           ? 'bg-mustard-500 text-white shadow-md'
                           : 'bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-700'
                       }`}
                     >
                       <div className="flex items-center gap-1.5 min-w-0">
                         <span className="material-symbols-outlined text-[18px] shrink-0">
-                          {filters.return_status === 'returned' ? 'check_box' : 'check_box_outline_blank'}
+                          {filters.period_status === 'em_vigor' ? 'check_box' : 'check_box_outline_blank'}
                         </span>
-                        <span className="truncate">Apenas Finalizadas</span>
+                        <span className="truncate">Em vigor</span>
+                      </div>
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => setFilters(f => ({ ...f, period_status: f.period_status === 'futuro' ? '' : 'futuro' }))}
+                      className={`px-2.5 py-2.5 rounded-xl text-xs font-bold text-left transition-all flex items-center justify-between ${
+                        filters.period_status === 'futuro'
+                          ? 'bg-mustard-500 text-white shadow-md'
+                          : 'bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-700'
+                      }`}
+                    >
+                      <div className="flex items-center gap-1.5 min-w-0">
+                        <span className="material-symbols-outlined text-[18px] shrink-0">
+                          {filters.period_status === 'futuro' ? 'check_box' : 'check_box_outline_blank'}
+                        </span>
+                        <span className="truncate">Futuro</span>
                       </div>
                     </button>
                   </div>
                   <p className="text-[11px] text-slate-400 dark:text-slate-500">
-                    {filters.return_status === 'active'
-                      ? 'Ocultando contratos que já possuem data de retorno preenchida.'
-                      : filters.return_status === 'returned'
-                      ? 'Exibindo somente contratos já finalizados com data de retorno.'
-                      : 'Exibindo todos os contratos (em andamento e finalizados).'}
+                    {filters.period_status === 'encerrado'
+                      ? 'Exibindo períodos cujo o dia de hoje está depois do fim.'
+                      : filters.period_status === 'em_vigor'
+                      ? 'Exibindo períodos cujo o dia de hoje está entre o início e fim.'
+                      : filters.period_status === 'futuro'
+                      ? 'Exibindo períodos cujo o dia de hoje está antes do início.'
+                      : 'Exibindo todos os contratos (sem restrição de vigência).'}
                   </p>
                 </div>
 

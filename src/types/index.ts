@@ -447,6 +447,8 @@ export interface RentalInvoice {
   cost_training: number;
   total_value: number;
   current_period_value?: number;
+  current_period_start?: string;
+  current_period_end?: string;
   accumulated_total_value?: number;
   due_date: string;
   payment_method: string;

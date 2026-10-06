@@ -197,6 +197,19 @@ interface FormEquipmentItem extends RentalInvoiceEquipment {
   tempId: string;
 }
 
+export interface PeriodGroup {
+  key: string;
+  start: string;
+  end: string;
+  durationDays: number;
+  itemsWithIndex: { item: FormEquipmentItem; index: number }[];
+  totalRental: number;
+  totalAdditionals: number;
+  totalValue: number;
+  allReturned: boolean;
+  someReturned: boolean;
+}
+
 const createDefaultEquipmentItem = (): FormEquipmentItem => ({
   tempId: Math.random().toString(36).substring(2, 9),
   equipment_id: '',
@@ -237,6 +250,127 @@ const RentalEdit: React.FC = () => {
 
   // Multi-equipments list
   const [equipmentItems, setEquipmentItems] = useState<FormEquipmentItem[]>([]);
+
+  // Period grouping and expansion states
+  const [expandedPeriodKeys, setExpandedPeriodKeys] = useState<string[]>([]);
+
+  const periodGroups = useMemo<PeriodGroup[]>(() => {
+    const map = new Map<string, PeriodGroup>();
+
+    equipmentItems.forEach((item, index) => {
+      const start = item.billing_period_start || '';
+      const end = item.billing_period_end || '';
+      const key = `${start}__${end}`;
+
+      let group = map.get(key);
+      if (!group) {
+        let durationDays = 0;
+        if (start && end) {
+          const s = new Date(start + 'T00:00:00');
+          const e = new Date(end + 'T00:00:00');
+          const diff = Math.round((e.getTime() - s.getTime()) / (1000 * 60 * 60 * 24)) + 1;
+          durationDays = isNaN(diff) || diff < 0 ? 0 : diff;
+        }
+
+        group = {
+          key,
+          start,
+          end,
+          durationDays,
+          itemsWithIndex: [],
+          totalRental: 0,
+          totalAdditionals: 0,
+          totalValue: 0,
+          allReturned: true,
+          someReturned: false,
+        };
+        map.set(key, group);
+      }
+
+      group.itemsWithIndex.push({ item, index });
+      group.totalRental += Number(item.cost_rental) || 0;
+      const additionals =
+        (Number(item.cost_insurance) || 0) +
+        (Number(item.cost_freight) || 0) +
+        (Number(item.cost_rcd) || 0) +
+        (Number(item.cost_third_party) || 0) +
+        (Number(item.cost_training) || 0);
+      group.totalAdditionals += additionals;
+      group.totalValue += Number(item.total_value) || 0;
+
+      if (!item.return_date) {
+        group.allReturned = false;
+      } else {
+        group.someReturned = true;
+      }
+    });
+
+    const list = Array.from(map.values());
+    list.sort((a, b) => {
+      const aStart = a.start || '';
+      const bStart = b.start || '';
+      if (aStart !== bStart) {
+        if (!aStart) return 1;
+        if (!bStart) return -1;
+        return aStart.localeCompare(bStart);
+      }
+      const aEnd = a.end || '';
+      const bEnd = b.end || '';
+      if (!aEnd) return 1;
+      if (!bEnd) return -1;
+      return aEnd.localeCompare(bEnd);
+    });
+
+    return list;
+  }, [equipmentItems]);
+
+  const togglePeriod = (key: string) => {
+    setExpandedPeriodKeys((prev) => (prev.includes(key) ? [] : [key]));
+  };
+
+  const getPeriodBadge = (group: PeriodGroup, _groupIndex?: number) => {
+    const todayStr = new Intl.DateTimeFormat('en-CA', {
+      timeZone: 'America/Sao_Paulo',
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit'
+    }).format(new Date());
+
+    const hasRentalReturnDate = Boolean(rental?.return_date);
+
+    if (group.allReturned || hasRentalReturnDate) {
+      return {
+        label: 'Devolvido',
+        className: 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-300',
+      };
+    }
+    if (group.someReturned) {
+      return {
+        label: 'Parcial',
+        className: 'bg-amber-100 text-amber-800 dark:bg-amber-950/60 dark:text-amber-300',
+      };
+    }
+
+    const start = group.start ? group.start.split('T')[0] : '';
+    const end = group.end ? group.end.split('T')[0] : '';
+
+    if (start && start > todayStr) {
+      return {
+        label: 'Futuro',
+        className: 'bg-purple-100 text-purple-800 dark:bg-purple-950/60 dark:text-purple-300',
+      };
+    }
+    if (start && (!end || end >= todayStr) && start <= todayStr) {
+      return {
+        label: 'Em vigor',
+        className: 'bg-blue-100 text-blue-800 dark:bg-blue-950/50 dark:text-blue-300',
+      };
+    }
+    return {
+      label: 'Encerrado',
+      className: 'bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-400',
+    };
+  };
 
   // General fields
   const [generalData, setGeneralData] = useState({
@@ -807,6 +941,14 @@ const RentalEdit: React.FC = () => {
       updated[index] = current;
       return updated;
     });
+
+    if (field === 'billing_period_start' || field === 'billing_period_end') {
+      const current = equipmentItems[index];
+      const newStart = field === 'billing_period_start' ? value : current?.billing_period_start;
+      const newEnd = field === 'billing_period_end' ? value : current?.billing_period_end;
+      const newKey = `${newStart || ''}__${newEnd || ''}`;
+      setExpandedPeriodKeys((prev) => (prev.includes(newKey) ? prev : [...prev, newKey]));
+    }
   };
 
   const handleEquipmentSelect = (index: number, equipmentId: string) => {
@@ -1133,193 +1275,416 @@ const RentalEdit: React.FC = () => {
         <div className="lg:col-span-2 space-y-6">
           {activeTab === 'equipments' && (
             <div className="space-y-6">
+              {/* Header da Aba com contagem e ações */}
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-4 border-b border-slate-200 dark:border-slate-800">
+                <div>
+                  <h3 className="text-xs font-bold text-slate-900 dark:text-white uppercase tracking-wider">
+                    Equipamentos Vinculados ({equipmentItems.length})
+                  </h3>
+                  <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
+                    Agrupados em {periodGroups.length} {periodGroups.length === 1 ? 'período de locação' : 'períodos de locação'}
+                  </p>
+                </div>
+              </div>
 
-              {equipmentItems.map((item, index) => {
-                const currentEquipId = item.equipment_id;
-                const selectedInOtherTabs = equipmentItems
-                  .filter((_, i) => i !== index)
-                  .map(e => e.equipment_id);
-
-                const selectableEquips = allEquipments.filter(e =>
-                  e.status === 'Disponível' ||
-                  e.id === currentEquipId ||
-                  !selectedInOtherTabs.includes(e.id)
-                );
-
-                return (
+              {/* Seção Expandida do Período (Exibida ACIMA dos cards quando selecionado) */}
+              <AnimatePresence>
+                {expandedPeriodKeys.length > 0 && (
                   <motion.div
-                    key={item.tempId}
-                    initial={{ opacity: 0, y: 10 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm overflow-hidden"
+                    key="expanded-period-drawer"
+                    initial={{ opacity: 0, height: 0 }}
+                    animate={{
+                      opacity: 1,
+                      height: 'auto',
+                      transition: {
+                        height: { duration: 0.32, ease: [0.16, 1, 0.3, 1] },
+                        opacity: { duration: 0.25 },
+                      },
+                      transitionEnd: { overflow: 'visible' },
+                    }}
+                    exit={{
+                      opacity: 0,
+                      height: 0,
+                      overflow: 'hidden',
+                      transition: {
+                        height: { duration: 0.24, ease: [0.16, 1, 0.3, 1] },
+                        opacity: { duration: 0.15 },
+                      },
+                    }}
+                    style={{ overflow: 'hidden' }}
                   >
-                    <div className="p-4 border-b border-slate-100 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-800/20 flex items-center justify-between">
-                      <div className="flex items-center gap-2 flex-wrap">
-                        <span className="w-6 h-6 rounded-full bg-mustard-500 text-white text-xs font-bold flex items-center justify-center font-mono">
-                          {index + 1}
-                        </span>
-                        <span className="font-bold text-sm text-slate-900 dark:text-white">
-                          {item.equipment_name ? `${item.equipment_name} (${item.asset_number || 'S/N'})` : 'Novo Equipamento'}
-                        </span>
-                        {item.serial_number && (
-                          <span className="px-2 py-0.5 rounded-md bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 font-mono text-xs font-semibold border border-slate-200 dark:border-slate-700 flex items-center gap-1">
-                            <span className="text-[10px] text-slate-400 uppercase tracking-wider">Série:</span>
-                            <span>{item.serial_number}</span>
-                          </span>
-                        )}
-                        {item.notes?.includes('Prorrogação') ? (
-                          <span className="px-2 py-0.5 rounded-full bg-amber-100 dark:bg-amber-500/20 text-amber-700 dark:text-amber-400 text-xs font-bold border border-amber-200 dark:border-amber-500/30 flex items-center gap-1">
-                            <span className="material-symbols-outlined text-[14px]">more_time</span>
-                            <span>Prorrogação</span>
-                          </span>
-                        ) : equipmentItems.some((e, i) => i !== index && (e.equipment_id === item.equipment_id || (e.asset_number && e.asset_number === item.asset_number))) ? (
-                          <span className="px-2 py-0.5 rounded-full bg-blue-100 dark:bg-blue-500/20 text-blue-700 dark:text-blue-400 text-xs font-bold border border-blue-200 dark:border-blue-500/30 flex items-center gap-1">
-                            <span className="material-symbols-outlined text-[14px]">schedule</span>
-                            <span>Período Inicial</span>
-                          </span>
-                        ) : null}
-                      </div>
+                    <AnimatePresence mode="wait">
+                      {periodGroups
+                        .filter((g) => expandedPeriodKeys.includes(g.key))
+                        .map((group) => {
+                          const originalGroupIndex = periodGroups.findIndex((g) => g.key === group.key);
+                          const badge = getPeriodBadge(group, originalGroupIndex);
+                          return (
+                            <motion.div
+                              key={`expanded-${group.key}`}
+                              initial={{ opacity: 0, y: 8, scale: 0.995 }}
+                              animate={{ opacity: 1, y: 0, scale: 1 }}
+                              exit={{ opacity: 0, y: -6, scale: 0.995 }}
+                              transition={{ duration: 0.2, ease: 'easeOut' }}
+                              className="p-5 rounded-2xl border border-slate-200 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-800/30 space-y-4 mb-4 shadow-sm"
+                            >
+                              {/* Cabeçalho do Período Expandido */}
+                              <div className="flex flex-col sm:flex-row sm:items-center justify-between pb-3 border-b border-slate-200 dark:border-slate-800 gap-2">
+                                <div className="flex flex-wrap items-center gap-2">
+                                  <span className="w-5 h-5 rounded-full bg-mustard-500 text-white font-bold text-[10px] flex items-center justify-center">
+                                    #{originalGroupIndex + 1}
+                                  </span>
+                                  <span className="font-bold text-slate-900 dark:text-white text-xs uppercase tracking-wider">
+                                    Período: {group.start ? formatDate(group.start) : 'N/D'} até {group.end ? formatDate(group.end) : 'N/D'}
+                                  </span>
+                                  {group.durationDays > 0 && (
+                                    <span className="px-2 py-0.5 rounded-full text-[10px] font-mono font-semibold bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-300">
+                                      {group.durationDays} dias
+                                    </span>
+                                  )}
+                                  <span className="px-2 py-0.5 rounded-full text-[10px] font-semibold bg-mustard-100 dark:bg-mustard-500/20 text-mustard-700 dark:text-mustard-400 font-mono">
+                                    {group.itemsWithIndex.length} {group.itemsWithIndex.length === 1 ? 'item' : 'itens'}
+                                  </span>
+                                  <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${badge.className}`}>
+                                    {badge.label}
+                                  </span>
+                                </div>
 
-                      <div className="flex items-center gap-3">
-                        {item.equipment_id && (
-                          <button
-                            type="button"
-                            onClick={() => handleCreateServiceOrder(item.equipment_id)}
-                            disabled={creatingOsEquipmentId === item.equipment_id}
-                            className="px-3 py-1.5 bg-amber-50 dark:bg-amber-500/10 hover:bg-amber-100 dark:hover:bg-amber-500/20 text-amber-700 dark:text-amber-400 border border-amber-200 dark:border-amber-500/30 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 shadow-sm disabled:opacity-60"
-                            title="Abrir Ordem de Serviço Externa para este equipamento"
-                          >
-                            {creatingOsEquipmentId === item.equipment_id ? (
-                              <div className="w-3.5 h-3.5 border-2 border-amber-500 border-t-transparent rounded-full animate-spin" />
-                            ) : (
-                              <span className="material-symbols-outlined text-[16px]">construction</span>
-                            )}
-                            <span>Abrir OS</span>
-                          </button>
-                        )}
-                        <span className="text-xs font-bold text-mustard-600 dark:text-mustard-400 font-mono">
-                          Subtotal: {(Number(item.total_value) || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
-                        </span>
-                        {equipmentItems.length > 1 && (
-                          <button
-                            type="button"
-                            onClick={() => handleRemoveEquipment(index)}
-                            className="p-1.5 text-red-500 hover:bg-red-50 dark:hover:bg-red-500/10 rounded-lg transition-colors"
-                            title="Remover equipamento"
-                          >
-                            <span className="material-symbols-outlined text-[18px]">delete</span>
-                          </button>
-                        )}
-                      </div>
-                    </div>
-
-                    <div className="p-6 space-y-6">
-                      <SearchableSelect
-                        label="Equipamento"
-                        placeholder="Pesquise por nome, patrimônio, número de série ou modelo..."
-                        items={selectableEquips}
-                        selectedId={item.equipment_id}
-                        onSelect={(id) => handleEquipmentSelect(index, id)}
-                        getDisplayValue={(eq) => `${eq.asset_number} - ${eq.name}${eq.serial_number ? ` (Série: ${eq.serial_number})` : ''} (${eq.status})`}
-                        getSearchValue={(eq) => `${eq.name} ${eq.asset_number} ${eq.serial_number || ''} ${eq.type}`}
-                        required
-                      />
-
-                      {/* Informações detalhadas do equipamento selecionado */}
-                      {item.equipment_id && (
-                        <div className="flex flex-wrap items-center gap-4 p-3.5 bg-slate-50 dark:bg-slate-800/40 rounded-xl border border-slate-200/70 dark:border-slate-700/60 text-xs">
-                          {item.asset_number && (
-                            <div>
-                              <span className="text-slate-400 dark:text-slate-500 text-[10px] uppercase font-bold tracking-wider block">Patrimônio</span>
-                              <span className="font-mono font-bold text-slate-700 dark:text-slate-200">{item.asset_number}</span>
-                            </div>
-                          )}
-                          <div className="pl-4 border-l border-slate-200 dark:border-slate-700">
-                            <span className="text-slate-400 dark:text-slate-500 text-[10px] uppercase font-bold tracking-wider block">Nº de Série</span>
-                            <span className="font-mono font-bold text-slate-700 dark:text-slate-200">{item.serial_number || '-'}</span>
-                          </div>
-                          {item.equipment_type && (
-                            <div className="pl-4 border-l border-slate-200 dark:border-slate-700">
-                              <span className="text-slate-400 dark:text-slate-500 text-[10px] uppercase font-bold tracking-wider block">Tipo</span>
-                              <span className="font-semibold text-slate-700 dark:text-slate-200">{item.equipment_type}</span>
-                            </div>
-                          )}
-                          {item.equipment_size && (
-                            <div className="pl-4 border-l border-slate-200 dark:border-slate-700">
-                              <span className="text-slate-400 dark:text-slate-500 text-[10px] uppercase font-bold tracking-wider block">Altura</span>
-                              <span className="font-semibold text-slate-700 dark:text-slate-200">{item.equipment_size}</span>
-                            </div>
-                          )}
-                        </div>
-                      )}
-
-                      {/* Dates */}
-                      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                        <div className="space-y-1.5">
-                          <label className="text-xs font-bold text-slate-500 uppercase tracking-widest ml-1">Início da Locação *</label>
-                          <input
-                            required
-                            type="date"
-                            value={item.billing_period_start}
-                            onChange={(e) => handleEquipmentChange(index, 'billing_period_start', e.target.value)}
-                            className="w-full px-4 py-2.5 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-slate-900 dark:text-white text-sm outline-none focus:ring-2 focus:ring-mustard-500/10"
-                          />
-                        </div>
-                        <div className="space-y-1.5">
-                          <label className="text-xs font-bold text-slate-500 uppercase tracking-widest ml-1">Fim da Locação *</label>
-                          <input
-                            required
-                            type="date"
-                            value={item.billing_period_end}
-                            onChange={(e) => handleEquipmentChange(index, 'billing_period_end', e.target.value)}
-                            className="w-full px-4 py-2.5 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-slate-900 dark:text-white text-sm outline-none focus:ring-2 focus:ring-mustard-500/10"
-                          />
-                        </div>
-                        <div className="space-y-1.5">
-                          <label className="text-xs font-bold text-slate-500 uppercase tracking-widest ml-1">Data de Devolução</label>
-                          <input
-                            type="date"
-                            value={item.return_date || ''}
-                            onChange={(e) => handleEquipmentChange(index, 'return_date', e.target.value)}
-                            className="w-full px-4 py-2.5 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-slate-900 dark:text-white text-sm outline-none focus:ring-2 focus:ring-mustard-500/10"
-                          />
-                        </div>
-                      </div>
-
-                      {/* Cost Composition for this equipment */}
-                      <div>
-                        <label className="block text-xs font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wider mb-3">Custos deste Equipamento (R$)</label>
-                        <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
-                          {[
-                            { name: 'cost_rental', label: 'Locação' },
-                            { name: 'cost_insurance', label: 'Seguro' },
-                            { name: 'cost_freight', label: 'Frete' },
-                            { name: 'cost_rcd', label: 'RCD' },
-                            { name: 'cost_third_party', label: 'Terceiros' },
-                            { name: 'cost_training', label: 'Treinamento' },
-                          ].map(cost => (
-                            <div key={cost.name} className="space-y-1.5">
-                              <label className="text-[11px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider">{cost.label}</label>
-                              <div className="relative">
-                                <span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 text-xs font-bold">R$</span>
-                                <input
-                                  type="number"
-                                  step="0.01"
-                                  min="0"
-                                  value={(item as any)[cost.name] || ''}
-                                  onChange={(e) => handleEquipmentChange(index, cost.name, parseFloat(e.target.value) || 0)}
-                                  placeholder="0,00"
-                                  className="w-full pl-9 pr-3 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-xs text-slate-900 dark:text-white focus:ring-2 focus:ring-mustard-500/10 outline-none"
-                                />
+                                <div className="flex items-center gap-3">
+                                  <div className="text-right">
+                                    <span className="text-[10px] text-slate-400 block leading-none">Subtotal do Período</span>
+                                    <span className="font-bold font-mono text-slate-900 dark:text-white text-xs">
+                                      {group.totalValue.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
+                                    </span>
+                                  </div>
+                                  <button
+                                    type="button"
+                                    onClick={() => togglePeriod(group.key)}
+                                    className="p-1 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 rounded-md transition-colors cursor-pointer"
+                                    title="Recolher este período"
+                                  >
+                                    <span className="material-symbols-outlined text-[18px]">close</span>
+                                  </button>
+                                </div>
                               </div>
-                            </div>
-                          ))}
+
+                              {/* Itens de Equipamento deste Período */}
+                              <div className="space-y-4">
+                                {group.itemsWithIndex.map(({ item, index: originalIdx }) => (
+                                  <div
+                                    key={item.tempId}
+                                    className="p-4 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 space-y-4 text-xs shadow-sm"
+                                  >
+                                    <div className="flex flex-col sm:flex-row sm:items-center justify-between pb-3 border-b border-slate-100 dark:border-slate-800 gap-2">
+                                      <div className="flex items-center gap-2">
+                                        <span className="w-5 h-5 rounded-full bg-mustard-500 text-white font-bold text-[11px] flex items-center justify-center">
+                                          #{originalIdx + 1}
+                                        </span>
+                                        <span className="font-bold text-slate-900 dark:text-white text-xs">
+                                          {item.equipment_name || 'Equipamento'}
+                                        </span>
+                                        {item.asset_number && (
+                                          <span className="px-2 py-0.5 rounded text-[10px] font-mono bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 border border-slate-200 dark:border-slate-700">
+                                            {item.asset_number}
+                                          </span>
+                                        )}
+                                      </div>
+
+                                      <div className="flex items-center gap-2">
+                                        {item.equipment_id && (
+                                          <button
+                                            type="button"
+                                            onClick={() => handleCreateServiceOrder(item.equipment_id)}
+                                            disabled={creatingOsEquipmentId === item.equipment_id}
+                                            className="px-2.5 py-1 text-[11px] font-semibold bg-amber-50 dark:bg-amber-500/10 hover:bg-amber-100 dark:hover:bg-amber-500/20 text-amber-700 dark:text-amber-400 border border-amber-200 dark:border-amber-500/30 rounded-lg transition-colors cursor-pointer flex items-center gap-1.5"
+                                          >
+                                            {creatingOsEquipmentId === item.equipment_id ? (
+                                              <div className="w-3 h-3 border-2 border-amber-500 border-t-transparent rounded-full animate-spin" />
+                                            ) : (
+                                              <span className="material-symbols-outlined text-[14px]">construction</span>
+                                            )}
+                                            Abrir O.S.
+                                          </button>
+                                        )}
+                                        {equipmentItems.length > 1 && (
+                                          <button
+                                            type="button"
+                                            onClick={() => handleRemoveEquipment(originalIdx)}
+                                            className="p-1 text-slate-400 hover:text-rose-500 rounded-md transition-colors cursor-pointer"
+                                            title="Remover este equipamento"
+                                          >
+                                            <span className="material-symbols-outlined text-[18px]">delete</span>
+                                          </button>
+                                        )}
+                                      </div>
+                                    </div>
+
+                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                      <SearchableSelect
+                                        label="Equipamento"
+                                        placeholder="Selecione o equipamento..."
+                                        items={allEquipments}
+                                        selectedId={item.equipment_id}
+                                        onSelect={(eId) => handleEquipmentSelect(originalIdx, eId)}
+                                        getDisplayValue={(e) => `${e.asset_number ? `${e.asset_number} - ` : ''}${e.name}${e.serial_number ? ` (Série: ${e.serial_number})` : ''}`}
+                                        getSearchValue={(e) => `${e.name} ${e.asset_number || ''} ${e.serial_number || ''} ${e.type || ''}`}
+                                        required
+                                      />
+
+                                      <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
+                                        <div>
+                                          <label className="block text-slate-600 dark:text-slate-300 font-semibold mb-1">
+                                            Início *
+                                          </label>
+                                          <input
+                                            type="date"
+                                            required
+                                            value={item.billing_period_start}
+                                            onChange={(e) =>
+                                              handleEquipmentChange(originalIdx, 'billing_period_start', e.target.value)
+                                            }
+                                            className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-slate-900 dark:text-white text-xs outline-none focus:ring-2 focus:ring-mustard-500/20"
+                                          />
+                                        </div>
+                                        <div>
+                                          <label className="block text-slate-600 dark:text-slate-300 font-semibold mb-1">
+                                            Fim Previsto *
+                                          </label>
+                                          <input
+                                            type="date"
+                                            required
+                                            value={item.billing_period_end}
+                                            onChange={(e) =>
+                                              handleEquipmentChange(originalIdx, 'billing_period_end', e.target.value)
+                                            }
+                                            className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-slate-900 dark:text-white text-xs outline-none focus:ring-2 focus:ring-mustard-500/20"
+                                          />
+                                        </div>
+                                        <div>
+                                          <label className="block text-slate-600 dark:text-slate-300 font-semibold mb-1">
+                                            Devolução
+                                          </label>
+                                          <input
+                                            type="date"
+                                            value={item.return_date || ''}
+                                            onChange={(e) =>
+                                              handleEquipmentChange(originalIdx, 'return_date', e.target.value)
+                                            }
+                                            className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-slate-900 dark:text-white text-xs outline-none focus:ring-2 focus:ring-mustard-500/20"
+                                          />
+                                        </div>
+                                      </div>
+                                    </div>
+
+                                    {/* Composição de Valores */}
+                                    <div>
+                                      <span className="block text-[11px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wider mb-2">
+                                        Composição de Valores (R$)
+                                      </span>
+                                      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-7 gap-2.5">
+                                        <div>
+                                          <label className="block text-[11px] text-slate-500 mb-1">Locação (R$)</label>
+                                          <input
+                                            type="number"
+                                            step="0.01"
+                                            min="0"
+                                            value={item.cost_rental || ''}
+                                            onChange={(e) =>
+                                              handleEquipmentChange(originalIdx, 'cost_rental', parseFloat(e.target.value) || 0)
+                                            }
+                                            className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-slate-900 dark:text-white text-xs outline-none focus:ring-2 focus:ring-mustard-500/20"
+                                          />
+                                        </div>
+                                        <div>
+                                          <label className="block text-[11px] text-slate-500 mb-1">Seguro (R$)</label>
+                                          <input
+                                            type="number"
+                                            step="0.01"
+                                            min="0"
+                                            value={item.cost_insurance || ''}
+                                            onChange={(e) =>
+                                              handleEquipmentChange(originalIdx, 'cost_insurance', parseFloat(e.target.value) || 0)
+                                            }
+                                            className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-slate-900 dark:text-white text-xs outline-none focus:ring-2 focus:ring-mustard-500/20"
+                                          />
+                                        </div>
+                                        <div>
+                                          <label className="block text-[11px] text-slate-500 mb-1">Frete (R$)</label>
+                                          <input
+                                            type="number"
+                                            step="0.01"
+                                            min="0"
+                                            value={item.cost_freight || ''}
+                                            onChange={(e) =>
+                                              handleEquipmentChange(originalIdx, 'cost_freight', parseFloat(e.target.value) || 0)
+                                            }
+                                            className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-slate-900 dark:text-white text-xs outline-none focus:ring-2 focus:ring-mustard-500/20"
+                                          />
+                                        </div>
+                                        <div>
+                                          <label className="block text-[11px] text-slate-500 mb-1">RCD (R$)</label>
+                                          <input
+                                            type="number"
+                                            step="0.01"
+                                            min="0"
+                                            value={item.cost_rcd || ''}
+                                            onChange={(e) =>
+                                              handleEquipmentChange(originalIdx, 'cost_rcd', parseFloat(e.target.value) || 0)
+                                            }
+                                            className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-slate-900 dark:text-white text-xs outline-none focus:ring-2 focus:ring-mustard-500/20"
+                                          />
+                                        </div>
+                                        <div>
+                                          <label className="block text-[11px] text-slate-500 mb-1">Terceiros (R$)</label>
+                                          <input
+                                            type="number"
+                                            step="0.01"
+                                            min="0"
+                                            value={item.cost_third_party || ''}
+                                            onChange={(e) =>
+                                              handleEquipmentChange(originalIdx, 'cost_third_party', parseFloat(e.target.value) || 0)
+                                            }
+                                            className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-slate-900 dark:text-white text-xs outline-none focus:ring-2 focus:ring-mustard-500/20"
+                                          />
+                                        </div>
+                                        <div>
+                                          <label className="block text-[11px] text-slate-500 mb-1">Treinamento (R$)</label>
+                                          <input
+                                            type="number"
+                                            step="0.01"
+                                            min="0"
+                                            value={item.cost_training || ''}
+                                            onChange={(e) =>
+                                              handleEquipmentChange(originalIdx, 'cost_training', parseFloat(e.target.value) || 0)
+                                            }
+                                            className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-slate-900 dark:text-white text-xs outline-none focus:ring-2 focus:ring-mustard-500/20"
+                                          />
+                                        </div>
+                                        <div>
+                                          <label className="block text-[11px] text-slate-500 mb-1 font-bold">Subtotal</label>
+                                          <p className="px-3 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl font-bold text-slate-900 dark:text-white font-mono text-xs">
+                                            {(Number(item.total_value) || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
+                                          </p>
+                                        </div>
+                                      </div>
+                                    </div>
+                                  </div>
+                                ))}
+                              </div>
+                            </motion.div>
+                          );
+                        })}
+                    </AnimatePresence>
+                  </motion.div>
+                )}
+              </AnimatePresence>
+
+              {/* Grid Horizontal de Cards de Períodos */}
+              <div className="space-y-2">
+                {expandedPeriodKeys.length > 0 && (
+                  <div className="pt-2 flex items-center justify-between border-t border-slate-200 dark:border-slate-800">
+                    <span className="text-[11px] font-bold uppercase tracking-wider text-slate-400">
+                      Todos os Períodos de Locação ({periodGroups.length})
+                    </span>
+                    <span className="text-[11px] text-slate-400">
+                      Clique em um card para alternar a visualização acima
+                    </span>
+                  </div>
+                )}
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3.5">
+                  {periodGroups.map((group, groupIndex) => {
+                    const isExpanded = expandedPeriodKeys.includes(group.key);
+                    const badge = getPeriodBadge(group, groupIndex);
+                    return (
+                      <div
+                        key={group.key}
+                        onClick={() => togglePeriod(group.key)}
+                        className={`group relative p-3.5 rounded-2xl border transition-all cursor-pointer flex flex-col justify-between select-none ${isExpanded
+                            ? 'bg-white dark:bg-slate-900 border-mustard-500 shadow-md ring-2 ring-mustard-500/20'
+                            : 'bg-slate-50/70 dark:bg-slate-800/40 border-slate-200 dark:border-slate-800 hover:border-slate-400 dark:hover:border-slate-600 hover:bg-white dark:hover:bg-slate-800 shadow-sm'
+                          }`}
+                      >
+                        {/* Topo do card: número do período, duração e status */}
+                        <div className="flex items-center justify-between gap-1.5 mb-2">
+                          <div className="flex items-center gap-1.5 min-w-0">
+                            <span className="w-5 h-5 rounded-full bg-mustard-500 text-white font-bold text-[10px] flex items-center justify-center shrink-0">
+                              #{groupIndex + 1}
+                            </span>
+                            <span className="font-bold text-slate-900 dark:text-white text-xs truncate">
+                              {group.durationDays > 0 ? `${group.durationDays} dias` : 'Período'}
+                            </span>
+                          </div>
+                          <span
+                            className={`px-2 py-0.5 rounded-full text-[10px] font-bold shrink-0 ${badge.className}`}
+                          >
+                            {badge.label}
+                          </span>
+                        </div>
+
+                        {/* Datas do período */}
+                        <div className="text-[11px] font-mono text-slate-600 dark:text-slate-300 flex items-center gap-1.5 mb-2.5">
+                          <span className="material-symbols-outlined text-[14px] text-slate-400 shrink-0">
+                            calendar_month
+                          </span>
+                          <span className="truncate">
+                            {group.start ? formatDate(group.start) : 'N/D'} — {group.end ? formatDate(group.end) : 'N/D'}
+                          </span>
+                        </div>
+
+                        {/* Resumo dos equipamentos e total */}
+                        <div className="space-y-1 mb-2.5">
+                          <div className="text-[10px] uppercase font-semibold tracking-wider text-slate-400 flex items-center justify-between">
+                            <span>
+                              {group.itemsWithIndex.length}{' '}
+                              {group.itemsWithIndex.length === 1 ? 'Equipamento' : 'Equipamentos'}
+                            </span>
+                            <span className="font-mono text-slate-900 dark:text-white font-bold text-xs">
+                              {group.totalValue.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
+                            </span>
+                          </div>
+                          <div className="flex flex-wrap gap-1">
+                            {group.itemsWithIndex.slice(0, 2).map(({ item }) => (
+                              <span
+                                key={item.tempId}
+                                className="inline-block px-1.5 py-0.5 rounded bg-slate-100 dark:bg-slate-800 text-[10px] text-slate-600 dark:text-slate-300 font-medium truncate max-w-full"
+                                title={item.equipment_name || 'Equipamento'}
+                              >
+                                {item.equipment_name || 'Equipamento'}
+                              </span>
+                            ))}
+                            {group.itemsWithIndex.length > 2 && (
+                              <span className="inline-block px-1.5 py-0.5 rounded bg-slate-100 dark:bg-slate-800 text-[10px] text-slate-500 font-medium">
+                                +{group.itemsWithIndex.length - 2} mais
+                              </span>
+                            )}
+                          </div>
+                        </div>
+
+                        {/* Rodapé do card: Indicador de clique para expandir/recolher */}
+                        <div className="pt-2 border-t border-dashed border-slate-200 dark:border-slate-800 flex items-center justify-between text-[11px]">
+                          <span
+                            className={`font-semibold ${isExpanded
+                                ? 'text-mustard-600 dark:text-mustard-400'
+                                : 'text-slate-400 group-hover:text-slate-600 dark:group-hover:text-slate-200'
+                              }`}
+                          >
+                            {isExpanded ? 'Recolher detalhes' : 'Ver detalhes'}
+                          </span>
+                          <span
+                            className={`material-symbols-outlined text-[16px] transition-transform duration-200 ${isExpanded
+                                ? 'rotate-180 text-mustard-600 dark:text-mustard-400'
+                                : 'text-slate-400 group-hover:text-slate-600 dark:group-hover:text-slate-200'
+                              }`}
+                          >
+                            expand_less
+                          </span>
                         </div>
                       </div>
-                    </div>
-                  </motion.div>
-                );
-              })}
+                    );
+                  })}
+                </div>
+              </div>
             </div>
           )}
 
