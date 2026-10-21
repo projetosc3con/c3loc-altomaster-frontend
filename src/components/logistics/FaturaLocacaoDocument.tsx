@@ -531,8 +531,8 @@ export const FaturaLocacaoDocument: React.FC<FaturaLocacaoDocumentProps> = ({
               {notes !== undefined && notes !== null && notes.trim() !== ''
                 ? notes.trim()
                 : observations !== undefined && observations !== null && observations.trim() !== ''
-                ? observations.trim()
-                : form.notes || form.observations || contract.notes || contract.observations || snapshot.observations || snapshot.notes || deal.notes || 'PROPOSTA ASSINADA'}
+                  ? observations.trim()
+                  : form.notes || form.observations || contract.notes || contract.observations || snapshot.observations || snapshot.notes || deal.notes || 'PROPOSTA ASSINADA'}
             </Text>
           </View>
 
