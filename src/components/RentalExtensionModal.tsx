@@ -83,7 +83,7 @@ export const RentalExtensionModal: React.FC<RentalExtensionModalProps> = ({
       // Agrupar por máquina para encontrar o último período de cada equipamento
       const machineMap = new Map<string, RentalInvoiceEquipment & { tempId?: string }>();
       for (const eq of equipments) {
-        const key = eq.equipment_id || eq.equipment_name || Math.random().toString();
+        const key = eq.equipment_id || eq.asset_number || eq.equipment_name || Math.random().toString();
         const existing = machineMap.get(key);
         if (!existing) {
           machineMap.set(key, eq);
@@ -96,7 +96,18 @@ export const RentalExtensionModal: React.FC<RentalExtensionModalProps> = ({
         }
       }
 
-      const newExtensionItems: MachineExtensionItem[] = Array.from(machineMap.values()).map((eq) => {
+      // Filtrar apenas máquinas ativas (que NÃO foram devolvidas em seu último período)
+      const activeMachines = Array.from(machineMap.values()).filter(
+        (eq) => !eq.return_date || !String(eq.return_date).trim()
+      );
+
+      if (activeMachines.length === 0) {
+        setErrorMessage('Todas as máquinas desta locação já foram devolvidas.');
+        setItems([]);
+        return;
+      }
+
+      const newExtensionItems: MachineExtensionItem[] = activeMachines.map((eq) => {
         const lastStart = eq.billing_period_start ? String(eq.billing_period_start).split('T')[0] : '';
         const lastEnd = eq.billing_period_end ? String(eq.billing_period_end).split('T')[0] : '';
 

@@ -639,9 +639,35 @@ const RentalEdit: React.FC = () => {
   }, [payableBills]);
 
   const canExtend = useMemo(() => {
-    // Visível apenas para faturas sem return_date
+    // Se a locação como um todo já possui data de retorno finalizada, não pode prorrogar
     if (rental?.return_date) return false;
-    if (equipmentItems.some(item => Boolean(item.return_date))) return false;
+    if (!equipmentItems || equipmentItems.length === 0) return false;
+
+    // Agrupar por máquina para encontrar o último período de cada equipamento
+    const machineMap = new Map<string, FormEquipmentItem>();
+    for (const item of equipmentItems) {
+      const key = item.equipment_id || item.asset_number || item.equipment_name || item.id || (item as any).tempId;
+      const existing = machineMap.get(key);
+      if (!existing) {
+        machineMap.set(key, item);
+      } else {
+        const existingEnd = existing.billing_period_end ? String(existing.billing_period_end).split('T')[0] : '';
+        const currentEnd = item.billing_period_end ? String(item.billing_period_end).split('T')[0] : '';
+        if (currentEnd >= existingEnd) {
+          machineMap.set(key, item);
+        }
+      }
+    }
+
+    if (machineMap.size === 0) return false;
+
+    // Se todas as máquinas distintas da locação já foram devolvidas em seu último período, não pode prorrogar
+    const allReturned = Array.from(machineMap.values()).every(
+      (m) => Boolean(m.return_date && String(m.return_date).trim())
+    );
+    if (allReturned) return false;
+
+    // Há pelo menos uma máquina ativa ainda não devolvida
     return true;
   }, [rental, equipmentItems]);
 
@@ -1006,12 +1032,30 @@ const RentalEdit: React.FC = () => {
       const selectedClient = clients.find(c => c.id === generalData.client_id);
       if (!selectedClient) throw new Error('Selecione um cliente válido.');
 
-      // Se todos os equipamentos da locação tiverem data de retorno preenchida,
-      // a última (mais posterior) é definida como return_date da locação (rental_invoice)
-      const allHaveReturnDate = equipmentItems.length > 0 && equipmentItems.every(item => Boolean(item.return_date && item.return_date.trim()));
+      // Agrupar os equipamentos por máquina para encontrar o último período de cada máquina distinta
+      const machineMap = new Map<string, any>();
+      for (const item of equipmentItems) {
+        const key = item.equipment_id || item.asset_number || item.equipment_name || item.id || (item as any).tempId;
+        const existing = machineMap.get(key);
+        if (!existing) {
+          machineMap.set(key, item);
+        } else {
+          const existingEnd = existing.billing_period_end ? String(existing.billing_period_end).split('T')[0] : '';
+          const currentEnd = item.billing_period_end ? String(item.billing_period_end).split('T')[0] : '';
+          if (currentEnd >= existingEnd) {
+            machineMap.set(key, item);
+          }
+        }
+      }
+
+      // Só preenche a data de retorno da locação como um todo quando a última máquina for retornada
+      const distinctMachines = Array.from(machineMap.values());
+      const allHaveReturnDate =
+        distinctMachines.length > 0 &&
+        distinctMachines.every(item => Boolean(item.return_date && item.return_date.trim()));
       let computedReturnDate: string | null = null;
       if (allHaveReturnDate) {
-        const sortedReturnDates = equipmentItems
+        const sortedReturnDates = distinctMachines
           .map(item => (item.return_date ? item.return_date.trim().split('T')[0] : ''))
           .filter(Boolean)
           .sort((a, b) => a.localeCompare(b));

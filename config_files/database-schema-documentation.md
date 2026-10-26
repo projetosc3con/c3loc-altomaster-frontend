@@ -1,10 +1,21 @@
-# Estrutura do Banco de Dados - RentDesk
+# Estrutura do Banco de Dados - C3Loc - Altomaster
 
-Este documento descreve a estrutura de tabelas, relacionamentos, chaves primárias/estrangeiras, gatilhos (triggers) e funções do banco de dados PostgreSQL/Supabase do projeto **RentDesk**.
+Este documento descreve a estrutura completa de tabelas, relacionamentos, chaves primárias/estrangeiras, índices, regras de segurança RLS (Row Level Security), tipos enumerados, gatilhos (*triggers*) e funções armazenadas do banco de dados PostgreSQL/Supabase do projeto **C3Loc - Altomaster**.
+
+### Metadados do Ambiente Supabase
+* **Projeto:** C3Loc - Altomaster
+* **Project ID / Reference:** `qnpebqoxxxjcdorlhame`
+* **Host do Banco:** `db.qnpebqoxxxjcdorlhame.supabase.co`
+* **Região:** `sa-east-1` (São Paulo, Brasil)
+* **Motor do Banco:** PostgreSQL 17 (`17.6.1.165`)
+* **Status do Projeto:** Ativo e Saudável (`ACTIVE_HEALTHY`)
+* **Total de Tabelas no Schema `public`:** 57
+
+---
 
 ## Sumário das Tabelas
 
-Abaixo estão listadas as 52 tabelas ativas no esquema `public` do banco de dados:
+Abaixo estão listadas todas as 57 tabelas ativas no esquema `public` do banco de dados:
 
 - [`asaas_webhook_logs`](#asaas-webhook-logs)
 - [`bills`](#bills)
@@ -57,6 +68,11 @@ Abaixo estão listadas as 52 tabelas ativas no esquema `public` do banco de dado
 - [`service_order_rcd`](#service-order-rcd)
 - [`service_orders`](#service-orders)
 - [`stock_movements`](#stock-movements)
+- [`training_assignments`](#training-assignments)
+- [`training_categories`](#training-categories)
+- [`training_topic_catalog`](#training-topic-catalog)
+- [`training_topics`](#training-topics)
+- [`trainings`](#trainings)
 - [`users_profiles`](#users-profiles)
 
 ---
@@ -99,6 +115,23 @@ Abaixo estão listadas as 52 tabelas ativas no esquema `public` do banco de dado
   CREATE INDEX idx_asaas_webhook_logs_processed ON public.asaas_webhook_logs USING btree (processed) WHERE (processed = false)
   ```
 
+#### Políticas de Segurança (Row Level Security - RLS)
+
+* **`Authenticated users can insert webhook logs`**
+  * **Comando:** `INSERT` | **Permissivo:** `PERMISSIVE` | **Roles:** `{authenticated}`
+  * **Condição de Escrita (WITH CHECK):** `true`
+* **`Authenticated users can update webhook logs`**
+  * **Comando:** `UPDATE` | **Permissivo:** `PERMISSIVE` | **Roles:** `{authenticated}`
+  * **Condição de Leitura/Acesso (USING):** `true`
+  * **Condição de Escrita (WITH CHECK):** `true`
+* **`Authenticated users can view webhook logs`**
+  * **Comando:** `SELECT` | **Permissivo:** `PERMISSIVE` | **Roles:** `{authenticated}`
+  * **Condição de Leitura/Acesso (USING):** `true`
+* **`Service role can manage webhook logs`**
+  * **Comando:** `ALL` | **Permissivo:** `PERMISSIVE` | **Roles:** `{service_role}`
+  * **Condição de Leitura/Acesso (USING):** `true`
+  * **Condição de Escrita (WITH CHECK):** `true`
+
 ---
 
 ### bills
@@ -111,8 +144,8 @@ Abaixo estão listadas as 52 tabelas ativas no esquema `public` do banco de dado
 | Coluna | Tipo | Nulável | Padrão | Restrições / Notas |
 | :--- | :--- | :---: | :--- | :--- |
 | `id` | `uuid` | Não | `gen_random_uuid()` | 🔑 PK |
-| `origin` | `text` | Não | - |  |
-| `type` | `text` | Não | `'receivable'::text` |  |
+| `origin` | `text` | Não | - | Check: `origin = ANY (ARRAY['ASAAS'::text, 'MANUAL'::text, 'NFE'::text])` |
+| `type` | `text` | Não | `'receivable'::text` | Check: `type = ANY (ARRAY['receivable'::text, 'payable'::text])` |
 | `rental_invoice_id` | `uuid` | Sim | - | FK -> `rental_invoices.id` |
 | `payment_id` | `uuid` | Sim | - | FK -> `payments.id` |
 | `client_id` | `uuid` | Sim | - | FK -> `clients.id` |
@@ -125,7 +158,7 @@ Abaixo estão listadas as 52 tabelas ativas no esquema `public` do banco de dado
 | `pix_end_to_end_id` | `text` | Sim | - |  |
 | `bank_transaction_date` | `date` | Sim | - |  |
 | `bank_raw_snapshot` | `jsonb` | Sim | - |  |
-| `status` | `text` | Não | `'Pendente'::text` |  |
+| `status` | `text` | Não | `'Pendente'::text` | Check: `status = ANY (ARRAY['Pendente'::text, 'Atrasado'::text, 'Recebido'::text, 'Pago'::text, 'Divergente'::text, 'No prazo'::text])` |
 | `reconciled_at` | `timestamp with time zone` | Sim | - |  |
 | `created_by` | `uuid` | Sim | - | FK -> `users_profiles.id` |
 | `created_at` | `timestamp with time zone` | Não | `now()` |  |
@@ -135,13 +168,14 @@ Abaixo estão listadas as 52 tabelas ativas no esquema `public` do banco de dado
 
 #### Relacionamentos de Saída (Chaves Estrangeiras Referenciadas)
 
-* A coluna `client_id` aponta para [`clients.id`](#clients)`(id)` (Constraint: `bills_client_id_fkey`)
-* A coluna `created_by` aponta para [`users_profiles.id`](#users-profiles)`(id)` (Constraint: `bills_created_by_fkey`)
 * A coluna `payment_id` aponta para [`payments.id`](#payments)`(id)` (Constraint: `bills_payment_id_fkey`)
+* A coluna `created_by` aponta para [`users_profiles.id`](#users-profiles)`(id)` (Constraint: `bills_created_by_fkey`)
+* A coluna `client_id` aponta para [`clients.id`](#clients)`(id)` (Constraint: `bills_client_id_fkey`)
 * A coluna `rental_invoice_id` aponta para [`rental_invoices.id`](#rental-invoices)`(id)` (Constraint: `bills_rental_invoice_id_fkey`)
 
 #### Relacionamentos de Entrada (Tabelas que Referenciam esta)
 
+* [`rental_billing_invoices.bill_id`](#rental-billing-invoices)`(bill_id)` aponta para a coluna local `id` (Constraint: `rental_billing_invoices_bill_id_fkey`)
 * [`rental_billing_invoices.bill_id`](#rental-billing-invoices)`(bill_id)` aponta para a coluna local `id` (Constraint: `rental_billing_invoices_bill_id_fkey`)
 
 #### Índices (Indexes)
@@ -150,6 +184,13 @@ Abaixo estão listadas as 52 tabelas ativas no esquema `public` do banco de dado
   ```sql
   CREATE UNIQUE INDEX bills_pkey ON public.bills USING btree (id)
   ```
+
+#### Políticas de Segurança (Row Level Security - RLS)
+
+* **`Allow CRUD for authenticated users`**
+  * **Comando:** `ALL` | **Permissivo:** `PERMISSIVE` | **Roles:** `{authenticated}`
+  * **Condição de Leitura/Acesso (USING):** `true`
+  * **Condição de Escrita (WITH CHECK):** `true`
 
 ---
 
@@ -185,6 +226,14 @@ Abaixo estão listadas as 52 tabelas ativas no esquema `public` do banco de dado
 #### Relacionamentos de Entrada (Tabelas que Referenciam esta)
 
 * [`bills.client_id`](#bills)`(client_id)` aponta para a coluna local `id` (Constraint: `bills_client_id_fkey`)
+* [`crm_deals.client_id`](#crm-deals)`(client_id)` aponta para a coluna local `id` (Constraint: `crm_deals_client_id_fkey`)
+* [`crm_leads.converted_client_id`](#crm-leads)`(converted_client_id)` aponta para a coluna local `id` (Constraint: `crm_leads_converted_client_id_fkey`)
+* [`hr_employee_integrations.client_id`](#hr-employee-integrations)`(client_id)` aponta para a coluna local `id` (Constraint: `hr_employee_integrations_client_id_fkey`)
+* [`payments.client_id`](#payments)`(client_id)` aponta para a coluna local `id` (Constraint: `payments_client_id_fkey`)
+* [`service_order_rcd.client_id`](#service-order-rcd)`(client_id)` aponta para a coluna local `id` (Constraint: `service_order_rcd_client_id_fkey`)
+* [`rental_invoices.client_id`](#rental-invoices)`(client_id)` aponta para a coluna local `id` (Constraint: `rental_invoices_client_id_fkey`)
+* [`bills.client_id`](#bills)`(client_id)` aponta para a coluna local `id` (Constraint: `bills_client_id_fkey`)
+* [`crm_contacts.client_id`](#crm-contacts)`(client_id)` aponta para a coluna local `id` (Constraint: `crm_contacts_client_id_fkey`)
 * [`crm_contacts.client_id`](#crm-contacts)`(client_id)` aponta para a coluna local `id` (Constraint: `crm_contacts_client_id_fkey`)
 * [`crm_deals.client_id`](#crm-deals)`(client_id)` aponta para a coluna local `id` (Constraint: `crm_deals_client_id_fkey`)
 * [`crm_leads.converted_client_id`](#crm-leads)`(converted_client_id)` aponta para a coluna local `id` (Constraint: `crm_leads_converted_client_id_fkey`)
@@ -204,6 +253,13 @@ Abaixo estão listadas as 52 tabelas ativas no esquema `public` do banco de dado
   CREATE UNIQUE INDEX clients_pkey ON public.clients USING btree (id)
   ```
 
+#### Políticas de Segurança (Row Level Security - RLS)
+
+* **`Allow CRUD for authenticated users`**
+  * **Comando:** `ALL` | **Permissivo:** `PERMISSIVE` | **Roles:** `{authenticated}`
+  * **Condição de Leitura/Acesso (USING):** `true`
+  * **Condição de Escrita (WITH CHECK):** `true`
+
 #### Gatilhos (Triggers)
 
 * **`update_clients_updated_at`**
@@ -216,7 +272,7 @@ Abaixo estão listadas as 52 tabelas ativas no esquema `public` do banco de dado
 ### crm_contacts
 
 * **Segurança de Nível de Linha (RLS):** Habilitada (Enabled)
-* **Propósito:** Contatos associados a leads ou clientes do CRM, indicando contato principal, telefone e e-mail.
+* **Propósito:** Contatos associados a leads ou clientes do CRM, indicando contato principal, cargo, departamento, telefone e e-mail.
 
 #### Colunas
 
@@ -238,11 +294,14 @@ Abaixo estão listadas as 52 tabelas ativas no esquema `public` do banco de dado
 
 #### Relacionamentos de Saída (Chaves Estrangeiras Referenciadas)
 
-* A coluna `client_id` aponta para [`clients.id`](#clients)`(id)` (Constraint: `crm_contacts_client_id_fkey`)
 * A coluna `lead_id` aponta para [`crm_leads.id`](#crm-leads)`(id)` (Constraint: `crm_contacts_lead_id_fkey`)
+* A coluna `client_id` aponta para [`clients.id`](#clients)`(id)` (Constraint: `crm_contacts_client_id_fkey`)
 
 #### Relacionamentos de Entrada (Tabelas que Referenciam esta)
 
+* [`crm_deal_activities.contact_id`](#crm-deal-activities)`(contact_id)` aponta para a coluna local `id` (Constraint: `crm_deal_activities_contact_id_fkey`)
+* [`crm_deals.primary_contact_id`](#crm-deals)`(primary_contact_id)` aponta para a coluna local `id` (Constraint: `crm_deals_primary_contact_id_fkey`)
+* [`crm_tasks.contact_id`](#crm-tasks)`(contact_id)` aponta para a coluna local `id` (Constraint: `crm_tasks_contact_id_fkey`)
 * [`crm_deal_activities.contact_id`](#crm-deal-activities)`(contact_id)` aponta para a coluna local `id` (Constraint: `crm_deal_activities_contact_id_fkey`)
 * [`crm_deals.primary_contact_id`](#crm-deals)`(primary_contact_id)` aponta para a coluna local `id` (Constraint: `crm_deals_primary_contact_id_fkey`)
 * [`crm_tasks.contact_id`](#crm-tasks)`(contact_id)` aponta para a coluna local `id` (Constraint: `crm_tasks_contact_id_fkey`)
@@ -262,12 +321,18 @@ Abaixo estão listadas as 52 tabelas ativas no esquema `public` do banco de dado
   CREATE INDEX idx_crm_contacts_lead ON public.crm_contacts USING btree (lead_id) WHERE (lead_id IS NOT NULL)
   ```
 
+#### Políticas de Segurança (Row Level Security - RLS)
+
+* **`crm_contacts_access`**
+  * **Comando:** `ALL` | **Permissivo:** `PERMISSIVE` | **Roles:** `{public}`
+  * **Condição de Leitura/Acesso (USING):** `true`
+
 ---
 
 ### crm_deal_activities
 
 * **Segurança de Nível de Linha (RLS):** Habilitada (Enabled)
-* **Propósito:** Histórico de atividades, interações e avanços de etapas nas negociações do CRM.
+* **Propósito:** Histórico de atividades, interações, anotações e mudanças de fase de uma negociação no CRM.
 
 #### Colunas
 
@@ -287,10 +352,10 @@ Abaixo estão listadas as 52 tabelas ativas no esquema `public` do banco de dado
 #### Relacionamentos de Saída (Chaves Estrangeiras Referenciadas)
 
 * A coluna `contact_id` aponta para [`crm_contacts.id`](#crm-contacts)`(id)` (Constraint: `crm_deal_activities_contact_id_fkey`)
-* A coluna `deal_id` aponta para [`crm_deals.id`](#crm-deals)`(id)` (Constraint: `crm_deal_activities_deal_id_fkey`)
 * A coluna `performed_by` aponta para [`users_profiles.id`](#users-profiles)`(id)` (Constraint: `crm_deal_activities_performed_by_fkey`)
 * A coluna `stage_from_id` aponta para [`crm_pipeline_stages.id`](#crm-pipeline-stages)`(id)` (Constraint: `crm_deal_activities_stage_from_id_fkey`)
 * A coluna `stage_to_id` aponta para [`crm_pipeline_stages.id`](#crm-pipeline-stages)`(id)` (Constraint: `crm_deal_activities_stage_to_id_fkey`)
+* A coluna `deal_id` aponta para [`crm_deals.id`](#crm-deals)`(id)` (Constraint: `crm_deal_activities_deal_id_fkey`)
 
 #### Índices (Indexes)
 
@@ -307,19 +372,25 @@ Abaixo estão listadas as 52 tabelas ativas no esquema `public` do banco de dado
   CREATE INDEX idx_crm_activities_deal ON public.crm_deal_activities USING btree (deal_id)
   ```
 
+#### Políticas de Segurança (Row Level Security - RLS)
+
+* **`crm_activities_access`**
+  * **Comando:** `ALL` | **Permissivo:** `PERMISSIVE` | **Roles:** `{public}`
+  * **Condição de Leitura/Acesso (USING):** `true`
+
 ---
 
 ### crm_deal_contract_forms
 
 * **Segurança de Nível de Linha (RLS):** Habilitada (Enabled)
-* **Propósito:** Formulários detalhados de contratação do CRM contendo equipamentos, valores negociados, prazos e condições comerciais antes da geração do contrato.
+* **Propósito:** Formulário completo com parâmetros comerciais, operacionais e de cobrança preenchidos antes de gerar o contrato formal.
 
 #### Colunas
 
 | Coluna | Tipo | Nulável | Padrão | Restrições / Notas |
 | :--- | :--- | :---: | :--- | :--- |
 | `id` | `uuid` | Não | `gen_random_uuid()` | 🔑 PK |
-| `deal_id` | `uuid` | Não | - | ✨ Unique; FK -> `crm_deals.id` |
+| `deal_id` | `uuid` | Não | - | ✨ Unique \| FK -> `crm_deals.id` |
 | `contract_date` | `date` | Não | - |  |
 | `locatario_company_name` | `text` | Não | - |  |
 | `locatario_cnpj` | `text` | Não | - |  |
@@ -351,11 +422,13 @@ Abaixo estão listadas as 52 tabelas ativas no esquema `public` do banco de dado
 #### Relacionamentos de Saída (Chaves Estrangeiras Referenciadas)
 
 * A coluna `created_by` aponta para [`users_profiles.id`](#users-profiles)`(id)` (Constraint: `crm_deal_contract_forms_created_by_fkey`)
-* A coluna `deal_id` aponta para [`crm_deals.id`](#crm-deals)`(id)` (Constraint: `crm_deal_contract_forms_deal_id_fkey`)
 * A coluna `updated_by` aponta para [`users_profiles.id`](#users-profiles)`(id)` (Constraint: `crm_deal_contract_forms_updated_by_fkey`)
+* A coluna `deal_id` aponta para [`crm_deals.id`](#crm-deals)`(id)` (Constraint: `crm_deal_contract_forms_deal_id_fkey`)
 
 #### Relacionamentos de Entrada (Tabelas que Referenciam esta)
 
+* [`crm_deal_contracts.contract_form_id`](#crm-deal-contracts)`(contract_form_id)` aponta para a coluna local `id` (Constraint: `crm_deal_contracts_contract_form_id_fkey`)
+* [`crm_deals.contract_form_id`](#crm-deals)`(contract_form_id)` aponta para a coluna local `id` (Constraint: `crm_deals_contract_form_id_fkey`)
 * [`crm_deal_contracts.contract_form_id`](#crm-deal-contracts)`(contract_form_id)` aponta para a coluna local `id` (Constraint: `crm_deal_contracts_contract_form_id_fkey`)
 * [`crm_deals.contract_form_id`](#crm-deals)`(contract_form_id)` aponta para a coluna local `id` (Constraint: `crm_deals_contract_form_id_fkey`)
 
@@ -378,12 +451,18 @@ Abaixo estão listadas as 52 tabelas ativas no esquema `public` do banco de dado
   CREATE INDEX idx_deal_contract_forms_status ON public.crm_deal_contract_forms USING btree (form_status)
   ```
 
+#### Políticas de Segurança (Row Level Security - RLS)
+
+* **`Allow CRUD for authenticated users`**
+  * **Comando:** `ALL` | **Permissivo:** `PERMISSIVE` | **Roles:** `{public}`
+  * **Condição de Leitura/Acesso (USING):** `(auth.role() = 'authenticated'::text)`
+
 ---
 
 ### crm_deal_contracts
 
 * **Segurança de Nível de Linha (RLS):** Habilitada (Enabled)
-* **Propósito:** Contratos gerados e assinados vinculados aos negócios do CRM, armazenando o snapshot da proposta, numeração oficial e URLs de documentos.
+* **Propósito:** Contratos gerados a partir de negociações ganhas, versionamento, controle de assinaturas digitais, snapshots dos termos e faturamento.
 
 #### Colunas
 
@@ -417,6 +496,9 @@ Abaixo estão listadas as 52 tabelas ativas no esquema `public` do banco de dado
 
 #### Relacionamentos de Entrada (Tabelas que Referenciam esta)
 
+* [`rental_invoice_equipments.deal_contract_id`](#rental-invoice-equipments)`(deal_contract_id)` aponta para a coluna local `id` (Constraint: `rental_invoice_equipments_deal_contract_id_fkey`)
+* [`logistics_triage_photos.contract_id`](#logistics-triage-photos)`(contract_id)` aponta para a coluna local `id` (Constraint: `logistics_triage_photos_contract_id_fkey`)
+* [`crm_deals.active_contract_id`](#crm-deals)`(active_contract_id)` aponta para a coluna local `id` (Constraint: `crm_deals_active_contract_id_fkey`)
 * [`crm_deals.active_contract_id`](#crm-deals)`(active_contract_id)` aponta para a coluna local `id` (Constraint: `crm_deals_active_contract_id_fkey`)
 * [`logistics_triage_photos.contract_id`](#logistics-triage-photos)`(contract_id)` aponta para a coluna local `id` (Constraint: `logistics_triage_photos_contract_id_fkey`)
 * [`rental_invoice_equipments.deal_contract_id`](#rental-invoice-equipments)`(deal_contract_id)` aponta para a coluna local `id` (Constraint: `rental_invoice_equipments_deal_contract_id_fkey`)
@@ -448,12 +530,18 @@ Abaixo estão listadas as 52 tabelas ativas no esquema `public` do banco de dado
   CREATE INDEX idx_deal_contracts_status ON public.crm_deal_contracts USING btree (status)
   ```
 
+#### Políticas de Segurança (Row Level Security - RLS)
+
+* **`Allow CRUD for authenticated users`**
+  * **Comando:** `ALL` | **Permissivo:** `PERMISSIVE` | **Roles:** `{public}`
+  * **Condição de Leitura/Acesso (USING):** `(auth.role() = 'authenticated'::text)`
+
 ---
 
 ### crm_deals
 
 * **Segurança de Nível de Linha (RLS):** Habilitada (Enabled)
-* **Propósito:** Negócios (deals) do funil comercial, incluindo valores, probabilidade, fase do pipeline e cliente/lead associado.
+* **Propósito:** Negociações/oportunidades no pipeline comercial do CRM, valores, probabilidade, fase atual e vínculo com clientes e contratos.
 
 #### Colunas
 
@@ -468,7 +556,7 @@ Abaixo estão listadas as 52 tabelas ativas no esquema `public` do banco de dado
 | `primary_contact_id` | `uuid` | Sim | - | FK -> `crm_contacts.id` |
 | `owner_id` | `uuid` | Não | - | FK -> `users_profiles.id` |
 | `value` | `numeric` | Sim | - |  |
-| `probability_pct` | `integer` | Sim | - |  |
+| `probability_pct` | `integer` | Sim | - | Check: `probability_pct >= 0 AND probability_pct <= 100` |
 | `expected_close_date` | `date` | Sim | - |  |
 | `closed_at` | `timestamp with time zone` | Sim | - |  |
 | `lost_reason` | `text` | Sim | - |  |
@@ -481,21 +569,26 @@ Abaixo estão listadas as 52 tabelas ativas no esquema `public` do banco de dado
 
 #### Relacionamentos de Saída (Chaves Estrangeiras Referenciadas)
 
-* A coluna `active_contract_id` aponta para [`crm_deal_contracts.id`](#crm-deal-contracts)`(id)` (Constraint: `crm_deals_active_contract_id_fkey`)
 * A coluna `client_id` aponta para [`clients.id`](#clients)`(id)` (Constraint: `crm_deals_client_id_fkey`)
 * A coluna `contract_form_id` aponta para [`crm_deal_contract_forms.id`](#crm-deal-contract-forms)`(id)` (Constraint: `crm_deals_contract_form_id_fkey`)
 * A coluna `lead_id` aponta para [`crm_leads.id`](#crm-leads)`(id)` (Constraint: `crm_deals_lead_id_fkey`)
 * A coluna `owner_id` aponta para [`users_profiles.id`](#users-profiles)`(id)` (Constraint: `crm_deals_owner_id_fkey`)
 * A coluna `pipeline_id` aponta para [`crm_pipelines.id`](#crm-pipelines)`(id)` (Constraint: `crm_deals_pipeline_id_fkey`)
 * A coluna `primary_contact_id` aponta para [`crm_contacts.id`](#crm-contacts)`(id)` (Constraint: `crm_deals_primary_contact_id_fkey`)
-* A coluna `rental_invoice_id` aponta para [`rental_invoices.id`](#rental-invoices)`(id)` (Constraint: `crm_deals_rental_invoice_id_fkey`)
 * A coluna `stage_id` aponta para [`crm_pipeline_stages.id`](#crm-pipeline-stages)`(id)` (Constraint: `crm_deals_stage_id_fkey`)
+* A coluna `rental_invoice_id` aponta para [`rental_invoices.id`](#rental-invoices)`(id)` (Constraint: `crm_deals_rental_invoice_id_fkey`)
+* A coluna `active_contract_id` aponta para [`crm_deal_contracts.id`](#crm-deal-contracts)`(id)` (Constraint: `crm_deals_active_contract_id_fkey`)
 
 #### Relacionamentos de Entrada (Tabelas que Referenciam esta)
 
 * [`crm_deal_activities.deal_id`](#crm-deal-activities)`(deal_id)` aponta para a coluna local `id` (Constraint: `crm_deal_activities_deal_id_fkey`)
 * [`crm_deal_contract_forms.deal_id`](#crm-deal-contract-forms)`(deal_id)` aponta para a coluna local `id` (Constraint: `crm_deal_contract_forms_deal_id_fkey`)
 * [`crm_deal_contracts.deal_id`](#crm-deal-contracts)`(deal_id)` aponta para a coluna local `id` (Constraint: `crm_deal_contracts_deal_id_fkey`)
+* [`crm_tasks.deal_id`](#crm-tasks)`(deal_id)` aponta para a coluna local `id` (Constraint: `crm_tasks_deal_id_fkey`)
+* [`crm_deal_activities.deal_id`](#crm-deal-activities)`(deal_id)` aponta para a coluna local `id` (Constraint: `crm_deal_activities_deal_id_fkey`)
+* [`crm_deal_contract_forms.deal_id`](#crm-deal-contract-forms)`(deal_id)` aponta para a coluna local `id` (Constraint: `crm_deal_contract_forms_deal_id_fkey`)
+* [`crm_deal_contracts.deal_id`](#crm-deal-contracts)`(deal_id)` aponta para a coluna local `id` (Constraint: `crm_deal_contracts_deal_id_fkey`)
+* [`rental_invoices.deal_id`](#rental-invoices)`(deal_id)` aponta para a coluna local `id` (Constraint: `rental_invoices_deal_id_fkey`)
 * [`crm_tasks.deal_id`](#crm-tasks)`(deal_id)` aponta para a coluna local `id` (Constraint: `crm_tasks_deal_id_fkey`)
 * [`rental_invoices.deal_id`](#rental-invoices)`(deal_id)` aponta para a coluna local `id` (Constraint: `rental_invoices_deal_id_fkey`)
 
@@ -530,12 +623,27 @@ Abaixo estão listadas as 52 tabelas ativas no esquema `public` do banco de dado
   CREATE INDEX idx_crm_deals_stage ON public.crm_deals USING btree (stage_id)
   ```
 
+#### Políticas de Segurança (Row Level Security - RLS)
+
+* **`crm_deals_delete`**
+  * **Comando:** `DELETE` | **Permissivo:** `PERMISSIVE` | **Roles:** `{public}`
+  * **Condição de Leitura/Acesso (USING):** `((( SELECT users_profiles.access_level FROM users_profiles WHERE (users_profiles.id = auth.uid())) = ANY (ARRAY['Administrador'::access_level_type, 'Gerente'::access_level_type])) OR (owner_id = auth.uid()))`
+* **`crm_deals_insert`**
+  * **Comando:** `INSERT` | **Permissivo:** `PERMISSIVE` | **Roles:** `{public}`
+  * **Condição de Escrita (WITH CHECK):** `true`
+* **`crm_deals_select`**
+  * **Comando:** `SELECT` | **Permissivo:** `PERMISSIVE` | **Roles:** `{public}`
+  * **Condição de Leitura/Acesso (USING):** `((( SELECT users_profiles.access_level FROM users_profiles WHERE (users_profiles.id = auth.uid())) = ANY (ARRAY['Administrador'::access_level_type, 'Gerente'::access_level_type, 'Comercial'::access_level_type])) OR (owner_id = auth.uid()))`
+* **`crm_deals_update`**
+  * **Comando:** `UPDATE` | **Permissivo:** `PERMISSIVE` | **Roles:** `{public}`
+  * **Condição de Leitura/Acesso (USING):** `((( SELECT users_profiles.access_level FROM users_profiles WHERE (users_profiles.id = auth.uid())) = ANY (ARRAY['Administrador'::access_level_type, 'Gerente'::access_level_type])) OR (owner_id = auth.uid()))`
+
 ---
 
 ### crm_leads
 
 * **Segurança de Nível de Linha (RLS):** Habilitada (Enabled)
-* **Propósito:** Leads e oportunidades pré-qualificadas no módulo de CRM.
+* **Propósito:** Captação inicial de prospects no CRM com potencial estimado, segmento, status de conversão e proprietário.
 
 #### Colunas
 
@@ -565,6 +673,9 @@ Abaixo estão listadas as 52 tabelas ativas no esquema `public` do banco de dado
 * [`crm_contacts.lead_id`](#crm-contacts)`(lead_id)` aponta para a coluna local `id` (Constraint: `crm_contacts_lead_id_fkey`)
 * [`crm_deals.lead_id`](#crm-deals)`(lead_id)` aponta para a coluna local `id` (Constraint: `crm_deals_lead_id_fkey`)
 * [`crm_tasks.lead_id`](#crm-tasks)`(lead_id)` aponta para a coluna local `id` (Constraint: `crm_tasks_lead_id_fkey`)
+* [`crm_contacts.lead_id`](#crm-contacts)`(lead_id)` aponta para a coluna local `id` (Constraint: `crm_contacts_lead_id_fkey`)
+* [`crm_deals.lead_id`](#crm-deals)`(lead_id)` aponta para a coluna local `id` (Constraint: `crm_deals_lead_id_fkey`)
+* [`crm_tasks.lead_id`](#crm-tasks)`(lead_id)` aponta para a coluna local `id` (Constraint: `crm_tasks_lead_id_fkey`)
 
 #### Índices (Indexes)
 
@@ -585,12 +696,27 @@ Abaixo estão listadas as 52 tabelas ativas no esquema `public` do banco de dado
   CREATE INDEX idx_crm_leads_status ON public.crm_leads USING btree (status)
   ```
 
+#### Políticas de Segurança (Row Level Security - RLS)
+
+* **`crm_leads_delete`**
+  * **Comando:** `DELETE` | **Permissivo:** `PERMISSIVE` | **Roles:** `{public}`
+  * **Condição de Leitura/Acesso (USING):** `((( SELECT users_profiles.access_level FROM users_profiles WHERE (users_profiles.id = auth.uid())) = ANY (ARRAY['Administrador'::access_level_type, 'Gerente'::access_level_type])) OR (owner_id = auth.uid()))`
+* **`crm_leads_insert`**
+  * **Comando:** `INSERT` | **Permissivo:** `PERMISSIVE` | **Roles:** `{public}`
+  * **Condição de Escrita (WITH CHECK):** `true`
+* **`crm_leads_select`**
+  * **Comando:** `SELECT` | **Permissivo:** `PERMISSIVE` | **Roles:** `{public}`
+  * **Condição de Leitura/Acesso (USING):** `((( SELECT users_profiles.access_level FROM users_profiles WHERE (users_profiles.id = auth.uid())) = ANY (ARRAY['Administrador'::access_level_type, 'Gerente'::access_level_type, 'Comercial'::access_level_type])) OR (owner_id = auth.uid()))`
+* **`crm_leads_update`**
+  * **Comando:** `UPDATE` | **Permissivo:** `PERMISSIVE` | **Roles:** `{public}`
+  * **Condição de Leitura/Acesso (USING):** `((( SELECT users_profiles.access_level FROM users_profiles WHERE (users_profiles.id = auth.uid())) = ANY (ARRAY['Administrador'::access_level_type, 'Gerente'::access_level_type])) OR (owner_id = auth.uid()))`
+
 ---
 
 ### crm_pipeline_stages
 
 * **Segurança de Nível de Linha (RLS):** Habilitada (Enabled)
-* **Propósito:** Etapas de cada funil comercial (pipeline), com percentual de probabilidade e flags de ganho/perda.
+* **Propósito:** Etapas de cada funil comercial (pipeline), ordenação, probabilidades e marcação de Ganho/Perdido.
 
 #### Colunas
 
@@ -602,7 +728,7 @@ Abaixo estão listadas as 52 tabelas ativas no esquema `public` do banco de dado
 | `position` | `integer` | Não | - |  |
 | `is_won` | `boolean` | Não | `false` |  |
 | `is_lost` | `boolean` | Não | `false` |  |
-| `probability_pct` | `integer` | Sim | - |  |
+| `probability_pct` | `integer` | Sim | - | Check: `probability_pct >= 0 AND probability_pct <= 100` |
 | `created_at` | `timestamp with time zone` | Não | `now()` |  |
 
 #### Relacionamentos de Saída (Chaves Estrangeiras Referenciadas)
@@ -614,6 +740,9 @@ Abaixo estão listadas as 52 tabelas ativas no esquema `public` do banco de dado
 * [`crm_deal_activities.stage_from_id`](#crm-deal-activities)`(stage_from_id)` aponta para a coluna local `id` (Constraint: `crm_deal_activities_stage_from_id_fkey`)
 * [`crm_deal_activities.stage_to_id`](#crm-deal-activities)`(stage_to_id)` aponta para a coluna local `id` (Constraint: `crm_deal_activities_stage_to_id_fkey`)
 * [`crm_deals.stage_id`](#crm-deals)`(stage_id)` aponta para a coluna local `id` (Constraint: `crm_deals_stage_id_fkey`)
+* [`crm_deals.stage_id`](#crm-deals)`(stage_id)` aponta para a coluna local `id` (Constraint: `crm_deals_stage_id_fkey`)
+* [`crm_deal_activities.stage_to_id`](#crm-deal-activities)`(stage_to_id)` aponta para a coluna local `id` (Constraint: `crm_deal_activities_stage_to_id_fkey`)
+* [`crm_deal_activities.stage_from_id`](#crm-deal-activities)`(stage_from_id)` aponta para a coluna local `id` (Constraint: `crm_deal_activities_stage_from_id_fkey`)
 
 #### Índices (Indexes)
 
@@ -626,12 +755,18 @@ Abaixo estão listadas as 52 tabelas ativas no esquema `public` do banco de dado
   CREATE INDEX idx_crm_stages_pipeline ON public.crm_pipeline_stages USING btree (pipeline_id)
   ```
 
+#### Políticas de Segurança (Row Level Security - RLS)
+
+* **`crm_pipeline_stages_access`**
+  * **Comando:** `ALL` | **Permissivo:** `PERMISSIVE` | **Roles:** `{public}`
+  * **Condição de Leitura/Acesso (USING):** `true`
+
 ---
 
 ### crm_pipelines
 
 * **Segurança de Nível de Linha (RLS):** Habilitada (Enabled)
-* **Propósito:** Funis de vendas (pipelines) configurados no sistema.
+* **Propósito:** Funis de vendas do CRM (ex: Locação Padrão, Vendas, Serviços).
 
 #### Colunas
 
@@ -648,6 +783,8 @@ Abaixo estão listadas as 52 tabelas ativas no esquema `public` do banco de dado
 
 * [`crm_deals.pipeline_id`](#crm-deals)`(pipeline_id)` aponta para a coluna local `id` (Constraint: `crm_deals_pipeline_id_fkey`)
 * [`crm_pipeline_stages.pipeline_id`](#crm-pipeline-stages)`(pipeline_id)` aponta para a coluna local `id` (Constraint: `crm_pipeline_stages_pipeline_id_fkey`)
+* [`crm_pipeline_stages.pipeline_id`](#crm-pipeline-stages)`(pipeline_id)` aponta para a coluna local `id` (Constraint: `crm_pipeline_stages_pipeline_id_fkey`)
+* [`crm_deals.pipeline_id`](#crm-deals)`(pipeline_id)` aponta para a coluna local `id` (Constraint: `crm_deals_pipeline_id_fkey`)
 
 #### Índices (Indexes)
 
@@ -660,12 +797,18 @@ Abaixo estão listadas as 52 tabelas ativas no esquema `public` do banco de dado
   CREATE UNIQUE INDEX crm_pipelines_pkey ON public.crm_pipelines USING btree (id)
   ```
 
+#### Políticas de Segurança (Row Level Security - RLS)
+
+* **`crm_pipelines_access`**
+  * **Comando:** `ALL` | **Permissivo:** `PERMISSIVE` | **Roles:** `{public}`
+  * **Condição de Leitura/Acesso (USING):** `true`
+
 ---
 
 ### crm_task_types
 
 * **Segurança de Nível de Linha (RLS):** Habilitada (Enabled)
-* **Propósito:** Tipos de tarefas e atividades comerciais no CRM (ex: Ligação, Reunião, Visita).
+* **Propósito:** Tipos de tarefas e compromissos do CRM (Reunião, Ligação, Visita Técnica, Envio de Proposta).
 
 #### Colunas
 
@@ -679,6 +822,7 @@ Abaixo estão listadas as 52 tabelas ativas no esquema `public` do banco de dado
 #### Relacionamentos de Entrada (Tabelas que Referenciam esta)
 
 * [`crm_tasks.task_type_id`](#crm-tasks)`(task_type_id)` aponta para a coluna local `id` (Constraint: `crm_tasks_task_type_id_fkey`)
+* [`crm_tasks.task_type_id`](#crm-tasks)`(task_type_id)` aponta para a coluna local `id` (Constraint: `crm_tasks_task_type_id_fkey`)
 
 #### Índices (Indexes)
 
@@ -691,12 +835,18 @@ Abaixo estão listadas as 52 tabelas ativas no esquema `public` do banco de dado
   CREATE UNIQUE INDEX crm_task_types_pkey ON public.crm_task_types USING btree (id)
   ```
 
+#### Políticas de Segurança (Row Level Security - RLS)
+
+* **`crm_task_types_access`**
+  * **Comando:** `ALL` | **Permissivo:** `PERMISSIVE` | **Roles:** `{public}`
+  * **Condição de Leitura/Acesso (USING):** `true`
+
 ---
 
 ### crm_tasks
 
 * **Segurança de Nível de Linha (RLS):** Habilitada (Enabled)
-* **Propósito:** Tarefas agendadas e pendências de acompanhamento comercial atribuídas aos usuários.
+* **Propósito:** Tarefas e compromissos comerciais vinculados a negócios, leads ou contatos, com prazos, prioridade e status.
 
 #### Colunas
 
@@ -721,12 +871,12 @@ Abaixo estão listadas as 52 tabelas ativas no esquema `public` do banco de dado
 
 #### Relacionamentos de Saída (Chaves Estrangeiras Referenciadas)
 
-* A coluna `assigned_to` aponta para [`users_profiles.id`](#users-profiles)`(id)` (Constraint: `crm_tasks_assigned_to_fkey`)
-* A coluna `contact_id` aponta para [`crm_contacts.id`](#crm-contacts)`(id)` (Constraint: `crm_tasks_contact_id_fkey`)
-* A coluna `created_by` aponta para [`users_profiles.id`](#users-profiles)`(id)` (Constraint: `crm_tasks_created_by_fkey`)
-* A coluna `deal_id` aponta para [`crm_deals.id`](#crm-deals)`(id)` (Constraint: `crm_tasks_deal_id_fkey`)
 * A coluna `lead_id` aponta para [`crm_leads.id`](#crm-leads)`(id)` (Constraint: `crm_tasks_lead_id_fkey`)
 * A coluna `task_type_id` aponta para [`crm_task_types.id`](#crm-task-types)`(id)` (Constraint: `crm_tasks_task_type_id_fkey`)
+* A coluna `contact_id` aponta para [`crm_contacts.id`](#crm-contacts)`(id)` (Constraint: `crm_tasks_contact_id_fkey`)
+* A coluna `assigned_to` aponta para [`users_profiles.id`](#users-profiles)`(id)` (Constraint: `crm_tasks_assigned_to_fkey`)
+* A coluna `created_by` aponta para [`users_profiles.id`](#users-profiles)`(id)` (Constraint: `crm_tasks_created_by_fkey`)
+* A coluna `deal_id` aponta para [`crm_deals.id`](#crm-deals)`(id)` (Constraint: `crm_tasks_deal_id_fkey`)
 
 #### Índices (Indexes)
 
@@ -755,12 +905,27 @@ Abaixo estão listadas as 52 tabelas ativas no esquema `public` do banco de dado
   CREATE INDEX idx_crm_tasks_status ON public.crm_tasks USING btree (status)
   ```
 
+#### Políticas de Segurança (Row Level Security - RLS)
+
+* **`crm_tasks_delete`**
+  * **Comando:** `DELETE` | **Permissivo:** `PERMISSIVE` | **Roles:** `{public}`
+  * **Condição de Leitura/Acesso (USING):** `((( SELECT users_profiles.access_level FROM users_profiles WHERE (users_profiles.id = auth.uid())) = ANY (ARRAY['Administrador'::access_level_type, 'Gerente'::access_level_type])) OR (assigned_to = auth.uid()) OR (created_by = auth.uid()))`
+* **`crm_tasks_insert`**
+  * **Comando:** `INSERT` | **Permissivo:** `PERMISSIVE` | **Roles:** `{public}`
+  * **Condição de Escrita (WITH CHECK):** `true`
+* **`crm_tasks_select`**
+  * **Comando:** `SELECT` | **Permissivo:** `PERMISSIVE` | **Roles:** `{public}`
+  * **Condição de Leitura/Acesso (USING):** `((( SELECT users_profiles.access_level FROM users_profiles WHERE (users_profiles.id = auth.uid())) = ANY (ARRAY['Administrador'::access_level_type, 'Gerente'::access_level_type, 'Comercial'::access_level_type])) OR (assigned_to = auth.uid()) OR (created_by = auth.uid()))`
+* **`crm_tasks_update`**
+  * **Comando:** `UPDATE` | **Permissivo:** `PERMISSIVE` | **Roles:** `{public}`
+  * **Condição de Leitura/Acesso (USING):** `((( SELECT users_profiles.access_level FROM users_profiles WHERE (users_profiles.id = auth.uid())) = ANY (ARRAY['Administrador'::access_level_type, 'Gerente'::access_level_type])) OR (assigned_to = auth.uid()) OR (created_by = auth.uid()))`
+
 ---
 
 ### equipment_documents
 
 * **Segurança de Nível de Linha (RLS):** Habilitada (Enabled)
-* **Propósito:** Armazenamento e controle de documentos técnicos, manuais, certificados e laudos atrelados a cada equipamento cadastrado.
+* **Propósito:** Armazenamento e gestão de documentos, manuais, ARTs, laudos técnicos e certificados dos equipamentos com data de vencimento.
 
 #### Colunas
 
@@ -776,13 +941,13 @@ Abaixo estão listadas as 52 tabelas ativas no esquema `public` do banco de dado
 | `updated_at` | `timestamp with time zone` | Não | `now()` |  |
 | `created_by` | `uuid` | Sim | - | FK -> `users_profiles.id` |
 | `updated_by` | `uuid` | Sim | - | FK -> `users_profiles.id` |
-| `due_date` | `date` | Sim | - | Data de vencimento / validade do documento |
+| `due_date` | `date` | Sim | - |  |
 
 #### Relacionamentos de Saída (Chaves Estrangeiras Referenciadas)
 
-* A coluna `created_by` aponta para [`users_profiles.id`](#users-profiles)`(id)` (Constraint: `equipment_documents_created_by_fkey`)
-* A coluna `equipment_id` aponta para [`equipments.id`](#equipments)`(id)` (Constraint: `equipment_documents_equipment_id_fkey`)
 * A coluna `updated_by` aponta para [`users_profiles.id`](#users-profiles)`(id)` (Constraint: `equipment_documents_updated_by_fkey`)
+* A coluna `equipment_id` aponta para [`equipments.id`](#equipments)`(id)` (Constraint: `equipment_documents_equipment_id_fkey`)
+* A coluna `created_by` aponta para [`users_profiles.id`](#users-profiles)`(id)` (Constraint: `equipment_documents_created_by_fkey`)
 
 #### Índices (Indexes)
 
@@ -790,14 +955,21 @@ Abaixo estão listadas as 52 tabelas ativas no esquema `public` do banco de dado
   ```sql
   CREATE UNIQUE INDEX equipment_documents_pkey ON public.equipment_documents USING btree (id)
   ```
-* **`idx_equipment_documents_equipment_id`**
-  ```sql
-  CREATE INDEX idx_equipment_documents_equipment_id ON public.equipment_documents USING btree (equipment_id)
-  ```
 * **`idx_equipment_documents_due_date`**
   ```sql
   CREATE INDEX idx_equipment_documents_due_date ON public.equipment_documents USING btree (due_date)
   ```
+* **`idx_equipment_documents_equipment_id`**
+  ```sql
+  CREATE INDEX idx_equipment_documents_equipment_id ON public.equipment_documents USING btree (equipment_id)
+  ```
+
+#### Políticas de Segurança (Row Level Security - RLS)
+
+* **`Allow CRUD for authenticated users`**
+  * **Comando:** `ALL` | **Permissivo:** `PERMISSIVE` | **Roles:** `{authenticated}`
+  * **Condição de Leitura/Acesso (USING):** `true`
+  * **Condição de Escrita (WITH CHECK):** `true`
 
 ---
 
@@ -823,8 +995,8 @@ Abaixo estão listadas as 52 tabelas ativas no esquema `public` do banco de dado
 
 #### Relacionamentos de Saída (Chaves Estrangeiras Referenciadas)
 
-* A coluna `created_by` aponta para [`users_profiles.id`](#users-profiles)`(id)` (Constraint: `equipment_hour_meter_logs_created_by_fkey`)
 * A coluna `equipment_id` aponta para [`equipments.id`](#equipments)`(id)` (Constraint: `equipment_hour_meter_logs_equipment_id_fkey`)
+* A coluna `created_by` aponta para [`users_profiles.id`](#users-profiles)`(id)` (Constraint: `equipment_hour_meter_logs_created_by_fkey`)
 
 #### Índices (Indexes)
 
@@ -841,12 +1013,19 @@ Abaixo estão listadas as 52 tabelas ativas no esquema `public` do banco de dado
   CREATE INDEX idx_hour_meter_logs_equipment_id ON public.equipment_hour_meter_logs USING btree (equipment_id)
   ```
 
+#### Políticas de Segurança (Row Level Security - RLS)
+
+* **`Allow CRUD for authenticated users`**
+  * **Comando:** `ALL` | **Permissivo:** `PERMISSIVE` | **Roles:** `{authenticated}`
+  * **Condição de Leitura/Acesso (USING):** `true`
+  * **Condição de Escrita (WITH CHECK):** `true`
+
 ---
 
 ### equipments
 
 * **Segurança de Nível de Linha (RLS):** Habilitada (Enabled)
-* **Propósito:** Inventário e cadastro de ativos/equipamentos da frota de locação (plataformas pantográficas, articuladas, etc.), com dados patrimoniais, horímetro e status.
+* **Propósito:** Inventário de maquinários e plataformas elevatórias (PEMTs), patrimônio, modelo, especificações técnicas, horímetro atual e status operacional.
 
 #### Colunas
 
@@ -859,7 +1038,7 @@ Abaixo estão listadas as 52 tabelas ativas no esquema `public` do banco de dado
 | `model` | `text` | Sim | - |  |
 | `serial_number` | `text` | Sim | - |  |
 | `height` | `numeric` | Sim | - |  |
-| `status` | `USER-DEFINED (equipment_status_type)` | Sim | `'Disponível'::equipment_status_type` | Valores: ["Disponível", "Locado", "Em Manutenção", "Inativo"] |
+| `status` | `USER-DEFINED` | Sim | `'Disponível'::equipment_status_type` |  |
 | `manufacture_year` | `integer` | Sim | - |  |
 | `value` | `numeric` | Sim | - |  |
 | `unit` | `text` | Sim | `'un'::text` |  |
@@ -889,6 +1068,13 @@ Abaixo estão listadas as 52 tabelas ativas no esquema `public` do banco de dado
 
 * [`equipment_documents.equipment_id`](#equipment-documents)`(equipment_id)` aponta para a coluna local `id` (Constraint: `equipment_documents_equipment_id_fkey`)
 * [`equipment_hour_meter_logs.equipment_id`](#equipment-hour-meter-logs)`(equipment_id)` aponta para a coluna local `id` (Constraint: `equipment_hour_meter_logs_equipment_id_fkey`)
+* [`service_orders.equipment_id`](#service-orders)`(equipment_id)` aponta para a coluna local `id` (Constraint: `service_orders_equipment_id_fkey`)
+* [`rental_invoices.equipment_id`](#rental-invoices)`(equipment_id)` aponta para a coluna local `id` (Constraint: `rental_invoices_equipment_id_fkey`)
+* [`rental_invoice_equipments.equipment_id`](#rental-invoice-equipments)`(equipment_id)` aponta para a coluna local `id` (Constraint: `rental_invoice_equipments_equipment_id_fkey`)
+* [`logistics_triage_photos.equipment_id`](#logistics-triage-photos)`(equipment_id)` aponta para a coluna local `id` (Constraint: `logistics_triage_photos_equipment_id_fkey`)
+* [`equipment_documents.equipment_id`](#equipment-documents)`(equipment_id)` aponta para a coluna local `id` (Constraint: `equipment_documents_equipment_id_fkey`)
+* [`equipment_hour_meter_logs.equipment_id`](#equipment-hour-meter-logs)`(equipment_id)` aponta para a coluna local `id` (Constraint: `equipment_hour_meter_logs_equipment_id_fkey`)
+* [`service_order_rcd.equipment_id`](#service-order-rcd)`(equipment_id)` aponta para a coluna local `id` (Constraint: `service_order_rcd_equipment_id_fkey`)
 * [`logistics_triage_photos.equipment_id`](#logistics-triage-photos)`(equipment_id)` aponta para a coluna local `id` (Constraint: `logistics_triage_photos_equipment_id_fkey`)
 * [`rental_invoice_equipments.equipment_id`](#rental-invoice-equipments)`(equipment_id)` aponta para a coluna local `id` (Constraint: `rental_invoice_equipments_equipment_id_fkey`)
 * [`rental_invoices.equipment_id`](#rental-invoices)`(equipment_id)` aponta para a coluna local `id` (Constraint: `rental_invoices_equipment_id_fkey`)
@@ -906,6 +1092,13 @@ Abaixo estão listadas as 52 tabelas ativas no esquema `public` do banco de dado
   CREATE UNIQUE INDEX equipments_pkey ON public.equipments USING btree (id)
   ```
 
+#### Políticas de Segurança (Row Level Security - RLS)
+
+* **`Allow CRUD for authenticated users`**
+  * **Comando:** `ALL` | **Permissivo:** `PERMISSIVE` | **Roles:** `{authenticated}`
+  * **Condição de Leitura/Acesso (USING):** `true`
+  * **Condição de Escrita (WITH CHECK):** `true`
+
 #### Gatilhos (Triggers)
 
 * **`update_equipments_updated_at`**
@@ -918,7 +1111,7 @@ Abaixo estão listadas as 52 tabelas ativas no esquema `public` do banco de dado
 ### erp_company_settings
 
 * **Segurança de Nível de Linha (RLS):** Habilitada (Enabled)
-* **Propósito:** Configurações corporativas da locadora (razão social, CNPJ, IE, endereço, dados bancários para PIX e boleto).
+* **Propósito:** Configurações corporativas gerais da empresa locadora (Alto Master), dados fiscais, dados bancários, chaves PIX e credenciais de integração Asaas.
 
 #### Colunas
 
@@ -952,12 +1145,18 @@ Abaixo estão listadas as 52 tabelas ativas no esquema `public` do banco de dado
   CREATE UNIQUE INDEX erp_company_settings_pkey ON public.erp_company_settings USING btree (id)
   ```
 
+#### Políticas de Segurança (Row Level Security - RLS)
+
+* **`Allow CRUD for authenticated users`**
+  * **Comando:** `ALL` | **Permissivo:** `PERMISSIVE` | **Roles:** `{public}`
+  * **Condição de Leitura/Acesso (USING):** `(auth.role() = 'authenticated'::text)`
+
 ---
 
 ### hr_document_types
 
 * **Segurança de Nível de Linha (RLS):** Habilitada (Enabled)
-* **Propósito:** Tipos de documentos trabalhistas e de compliance do RH.
+* **Propósito:** Tipos de documentos trabalhistas e cadastrais exigidos para colaboradores (RG, CNH, ASO, Comprovante de Residência, etc.).
 
 #### Colunas
 
@@ -974,6 +1173,8 @@ Abaixo estão listadas as 52 tabelas ativas no esquema `public` do banco de dado
 
 #### Relacionamentos de Entrada (Tabelas que Referenciam esta)
 
+* [`hr_position_document_types.document_type_id`](#hr-position-document-types)`(document_type_id)` aponta para a coluna local `id` (Constraint: `hr_position_document_types_document_type_id_fkey`)
+* [`hr_employee_documents.document_type_id`](#hr-employee-documents)`(document_type_id)` aponta para a coluna local `id` (Constraint: `hr_employee_documents_document_type_id_fkey`)
 * [`hr_employee_documents.document_type_id`](#hr-employee-documents)`(document_type_id)` aponta para a coluna local `id` (Constraint: `hr_employee_documents_document_type_id_fkey`)
 * [`hr_position_document_types.document_type_id`](#hr-position-document-types)`(document_type_id)` aponta para a coluna local `id` (Constraint: `hr_position_document_types_document_type_id_fkey`)
 
@@ -988,12 +1189,21 @@ Abaixo estão listadas as 52 tabelas ativas no esquema `public` do banco de dado
   CREATE UNIQUE INDEX hr_document_types_pkey ON public.hr_document_types USING btree (id)
   ```
 
+#### Políticas de Segurança (Row Level Security - RLS)
+
+* **`Full access for HR Admins on hr_document_types`**
+  * **Comando:** `ALL` | **Permissivo:** `PERMISSIVE` | **Roles:** `{public}`
+  * **Condição de Leitura/Acesso (USING):** `is_hr_admin()`
+* **`Read access for all authenticated users on hr_document_types`**
+  * **Comando:** `SELECT` | **Permissivo:** `PERMISSIVE` | **Roles:** `{public}`
+  * **Condição de Leitura/Acesso (USING):** `true`
+
 ---
 
 ### hr_employee_documents
 
 * **Segurança de Nível de Linha (RLS):** Habilitada (Enabled)
-* **Propósito:** Documentos anexados aos colaboradores, com controle de validade e status.
+* **Propósito:** Documentos anexados aos colaboradores, números de registro, datas de emissão/validade, arquivos e status de conformidade.
 
 #### Colunas
 
@@ -1014,9 +1224,9 @@ Abaixo estão listadas as 52 tabelas ativas no esquema `public` do banco de dado
 
 #### Relacionamentos de Saída (Chaves Estrangeiras Referenciadas)
 
+* A coluna `user_id` aponta para [`users_profiles.id`](#users-profiles)`(id)` (Constraint: `hr_employee_documents_user_id_fkey`)
 * A coluna `document_type_id` aponta para [`hr_document_types.id`](#hr-document-types)`(id)` (Constraint: `hr_employee_documents_document_type_id_fkey`)
 * A coluna `registered_by` aponta para [`users_profiles.id`](#users-profiles)`(id)` (Constraint: `hr_employee_documents_registered_by_fkey`)
-* A coluna `user_id` aponta para [`users_profiles.id`](#users-profiles)`(id)` (Constraint: `hr_employee_documents_user_id_fkey`)
 
 #### Índices (Indexes)
 
@@ -1037,12 +1247,21 @@ Abaixo estão listadas as 52 tabelas ativas no esquema `public` do banco de dado
   CREATE INDEX idx_employee_documents_user ON public.hr_employee_documents USING btree (user_id)
   ```
 
+#### Políticas de Segurança (Row Level Security - RLS)
+
+* **`Full access for HR Admins on hr_employee_documents`**
+  * **Comando:** `ALL` | **Permissivo:** `PERMISSIVE` | **Roles:** `{public}`
+  * **Condição de Leitura/Acesso (USING):** `is_hr_admin()`
+* **`View own records or HR Admin access on hr_employee_documents`**
+  * **Comando:** `SELECT` | **Permissivo:** `PERMISSIVE` | **Roles:** `{public}`
+  * **Condição de Leitura/Acesso (USING):** `((auth.uid() = user_id) OR is_hr_admin())`
+
 ---
 
 ### hr_employee_integrations
 
 * **Segurança de Nível de Linha (RLS):** Habilitada (Enabled)
-* **Propósito:** Controle de integrações de segurança realizadas por funcionários em clientes.
+* **Propósito:** Controle de integrações de segurança e ambientação de colaboradores em clientes (ex: Vale, Cargill, obras industriais).
 
 #### Colunas
 
@@ -1064,10 +1283,10 @@ Abaixo estão listadas as 52 tabelas ativas no esquema `public` do banco de dado
 
 #### Relacionamentos de Saída (Chaves Estrangeiras Referenciadas)
 
+* A coluna `user_id` aponta para [`users_profiles.id`](#users-profiles)`(id)` (Constraint: `hr_employee_integrations_user_id_fkey`)
 * A coluna `client_id` aponta para [`clients.id`](#clients)`(id)` (Constraint: `hr_employee_integrations_client_id_fkey`)
 * A coluna `integration_type_id` aponta para [`hr_integration_types.id`](#hr-integration-types)`(id)` (Constraint: `hr_employee_integrations_integration_type_id_fkey`)
 * A coluna `registered_by` aponta para [`users_profiles.id`](#users-profiles)`(id)` (Constraint: `hr_employee_integrations_registered_by_fkey`)
-* A coluna `user_id` aponta para [`users_profiles.id`](#users-profiles)`(id)` (Constraint: `hr_employee_integrations_user_id_fkey`)
 
 #### Índices (Indexes)
 
@@ -1088,12 +1307,21 @@ Abaixo estão listadas as 52 tabelas ativas no esquema `public` do banco de dado
   CREATE INDEX idx_employee_integrations_user ON public.hr_employee_integrations USING btree (user_id)
   ```
 
+#### Políticas de Segurança (Row Level Security - RLS)
+
+* **`Full access for HR Admins on hr_employee_integrations`**
+  * **Comando:** `ALL` | **Permissivo:** `PERMISSIVE` | **Roles:** `{public}`
+  * **Condição de Leitura/Acesso (USING):** `is_hr_admin()`
+* **`View own records or HR Admin access on hr_employee_integrations`**
+  * **Comando:** `SELECT` | **Permissivo:** `PERMISSIVE` | **Roles:** `{public}`
+  * **Condição de Leitura/Acesso (USING):** `((auth.uid() = user_id) OR is_hr_admin())`
+
 ---
 
 ### hr_employee_positions
 
 * **Segurança de Nível de Linha (RLS):** Habilitada (Enabled)
-* **Propósito:** Histórico de cargos e níveis salariais ocupados por cada colaborador.
+* **Propósito:** Histórico de cargos, níveis e salários dos colaboradores, registrando promoções, transferências e enquadramento.
 
 #### Colunas
 
@@ -1113,9 +1341,9 @@ Abaixo estão listadas as 52 tabelas ativas no esquema `public` do banco de dado
 
 #### Relacionamentos de Saída (Chaves Estrangeiras Referenciadas)
 
+* A coluna `registered_by` aponta para [`users_profiles.id`](#users-profiles)`(id)` (Constraint: `hr_employee_positions_registered_by_fkey`)
 * A coluna `level_id` aponta para [`hr_job_levels.id`](#hr-job-levels)`(id)` (Constraint: `hr_employee_positions_level_id_fkey`)
 * A coluna `position_id` aponta para [`hr_positions.id`](#hr-positions)`(id)` (Constraint: `hr_employee_positions_position_id_fkey`)
-* A coluna `registered_by` aponta para [`users_profiles.id`](#users-profiles)`(id)` (Constraint: `hr_employee_positions_registered_by_fkey`)
 * A coluna `user_id` aponta para [`users_profiles.id`](#users-profiles)`(id)` (Constraint: `hr_employee_positions_user_id_fkey`)
 
 #### Índices (Indexes)
@@ -1133,12 +1361,30 @@ Abaixo estão listadas as 52 tabelas ativas no esquema `public` do banco de dado
   CREATE INDEX idx_employee_positions_user ON public.hr_employee_positions USING btree (user_id)
   ```
 
+#### Políticas de Segurança (Row Level Security - RLS)
+
+* **`Allow insert access to authenticated users`**
+  * **Comando:** `INSERT` | **Permissivo:** `PERMISSIVE` | **Roles:** `{public}`
+  * **Condição de Escrita (WITH CHECK):** `(auth.role() = 'authenticated'::text)`
+* **`Allow read access to authenticated users`**
+  * **Comando:** `SELECT` | **Permissivo:** `PERMISSIVE` | **Roles:** `{public}`
+  * **Condição de Leitura/Acesso (USING):** `(auth.role() = 'authenticated'::text)`
+* **`Allow update access to authenticated users`**
+  * **Comando:** `UPDATE` | **Permissivo:** `PERMISSIVE` | **Roles:** `{public}`
+  * **Condição de Leitura/Acesso (USING):** `(auth.role() = 'authenticated'::text)`
+* **`Full access for HR Admins on hr_employee_positions`**
+  * **Comando:** `ALL` | **Permissivo:** `PERMISSIVE` | **Roles:** `{public}`
+  * **Condição de Leitura/Acesso (USING):** `is_hr_admin()`
+* **`View own records or HR Admin access on hr_employee_positions`**
+  * **Comando:** `SELECT` | **Permissivo:** `PERMISSIVE` | **Roles:** `{public}`
+  * **Condição de Leitura/Acesso (USING):** `((auth.uid() = user_id) OR is_hr_admin())`
+
 ---
 
 ### hr_employee_trainings
 
 * **Segurança de Nível de Linha (RLS):** Habilitada (Enabled)
-* **Propósito:** Treinamentos e certificações obrigatórias de cada colaborador, com validade e status.
+* **Propósito:** Treinamentos realizados por colaboradores (NRs, operação de máquinas, segurança), com data de validade e certificados.
 
 #### Colunas
 
@@ -1185,12 +1431,21 @@ Abaixo estão listadas as 52 tabelas ativas no esquema `public` do banco de dado
   CREATE INDEX idx_employee_trainings_user ON public.hr_employee_trainings USING btree (user_id)
   ```
 
+#### Políticas de Segurança (Row Level Security - RLS)
+
+* **`Full access for HR Admins on hr_employee_trainings`**
+  * **Comando:** `ALL` | **Permissivo:** `PERMISSIVE` | **Roles:** `{public}`
+  * **Condição de Leitura/Acesso (USING):** `is_hr_admin()`
+* **`View own records or HR Admin access on hr_employee_trainings`**
+  * **Comando:** `SELECT` | **Permissivo:** `PERMISSIVE` | **Roles:** `{public}`
+  * **Condição de Leitura/Acesso (USING):** `((auth.uid() = user_id) OR is_hr_admin())`
+
 ---
 
 ### hr_epi_catalog
 
 * **Segurança de Nível de Linha (RLS):** Habilitada (Enabled)
-* **Propósito:** Catálogo de Equipamentos de Proteção Individual (EPIs), com CA e validade.
+* **Propósito:** Catálogo de Equipamentos de Proteção Individual (EPIs), com número de CA (Certificado de Aprovação), validade e periodicidade.
 
 #### Colunas
 
@@ -1206,6 +1461,7 @@ Abaixo estão listadas as 52 tabelas ativas no esquema `public` do banco de dado
 #### Relacionamentos de Entrada (Tabelas que Referenciam esta)
 
 * [`hr_epi_record_items.epi_id`](#hr-epi-record-items)`(epi_id)` aponta para a coluna local `id` (Constraint: `hr_epi_record_items_epi_id_fkey`)
+* [`hr_epi_record_items.epi_id`](#hr-epi-record-items)`(epi_id)` aponta para a coluna local `id` (Constraint: `hr_epi_record_items_epi_id_fkey`)
 
 #### Índices (Indexes)
 
@@ -1218,20 +1474,29 @@ Abaixo estão listadas as 52 tabelas ativas no esquema `public` do banco de dado
   CREATE UNIQUE INDEX hr_epi_catalog_pkey ON public.hr_epi_catalog USING btree (id)
   ```
 
+#### Políticas de Segurança (Row Level Security - RLS)
+
+* **`epi_catalog_manage`**
+  * **Comando:** `ALL` | **Permissivo:** `PERMISSIVE` | **Roles:** `{public}`
+  * **Condição de Leitura/Acesso (USING):** `(EXISTS ( SELECT 1 FROM users_profiles WHERE ((users_profiles.id = auth.uid()) AND (users_profiles.access_level = ANY (ARRAY['Administrador'::access_level_type, 'Gerente'::access_level_type, 'Recursos Humanos'::access_level_type])))))`
+* **`epi_catalog_select`**
+  * **Comando:** `SELECT` | **Permissivo:** `PERMISSIVE` | **Roles:** `{public}`
+  * **Condição de Leitura/Acesso (USING):** `true`
+
 ---
 
 ### hr_epi_record_items
 
 * **Segurança de Nível de Linha (RLS):** Habilitada (Enabled)
-* **Propósito:** Itens de EPI entregues ao colaborador em cada termo de entrega.
+* **Propósito:** Itens específicos entregues em uma ficha de EPI (quantidade, tamanho, CA e termo de responsabilidade).
 
 #### Colunas
 
 | Coluna | Tipo | Nulável | Padrão | Restrições / Notas |
 | :--- | :--- | :---: | :--- | :--- |
 | `id` | `uuid` | Não | `gen_random_uuid()` | 🔑 PK |
-| `epi_record_id` | `uuid` | Não | - | ✨ Unique (uq_epi_in_record); FK -> `hr_epi_records.id` |
-| `epi_id` | `uuid` | Não | - | ✨ Unique (uq_epi_in_record); FK -> `hr_epi_catalog.id` |
+| `epi_record_id` | `uuid` | Não | - | FK -> `hr_epi_records.id` |
+| `epi_id` | `uuid` | Não | - | FK -> `hr_epi_catalog.id` |
 | `quantity` | `integer` | Não | `1` |  |
 | `notes` | `text` | Sim | - |  |
 
@@ -1259,12 +1524,21 @@ Abaixo estão listadas as 52 tabelas ativas no esquema `public` do banco de dado
   CREATE UNIQUE INDEX uq_epi_in_record ON public.hr_epi_record_items USING btree (epi_record_id, epi_id)
   ```
 
+#### Políticas de Segurança (Row Level Security - RLS)
+
+* **`epi_record_items_manage`**
+  * **Comando:** `ALL` | **Permissivo:** `PERMISSIVE` | **Roles:** `{public}`
+  * **Condição de Leitura/Acesso (USING):** `(EXISTS ( SELECT 1 FROM users_profiles WHERE ((users_profiles.id = auth.uid()) AND (users_profiles.access_level = ANY (ARRAY['Administrador'::access_level_type, 'Gerente'::access_level_type, 'Recursos Humanos'::access_level_type])))))`
+* **`epi_record_items_select`**
+  * **Comando:** `SELECT` | **Permissivo:** `PERMISSIVE` | **Roles:** `{public}`
+  * **Condição de Leitura/Acesso (USING):** `(EXISTS ( SELECT 1 FROM hr_epi_records er WHERE ((er.id = hr_epi_record_items.epi_record_id) AND ((er.user_id = auth.uid()) OR (EXISTS ( SELECT 1 FROM users_profiles up WHERE ((up.id = auth.uid()) AND (up.access_level = ANY (ARRAY['Administrador'::access_level_type, 'Gerente'::access_level_type, 'Recursos Humanos'::access_level_type])))))))))`
+
 ---
 
 ### hr_epi_records
 
 * **Segurança de Nível de Linha (RLS):** Habilitada (Enabled)
-* **Propósito:** Fichas/termos de entrega de EPI assinados pelos colaboradores.
+* **Propósito:** Fichas de entrega e devolução de EPIs aos colaboradores com data e confirmação de recebimento.
 
 #### Colunas
 
@@ -1281,11 +1555,12 @@ Abaixo estão listadas as 52 tabelas ativas no esquema `public` do banco de dado
 
 #### Relacionamentos de Saída (Chaves Estrangeiras Referenciadas)
 
-* A coluna `uploaded_by` aponta para [`users_profiles.id`](#users-profiles)`(id)` (Constraint: `hr_epi_records_uploaded_by_fkey`)
 * A coluna `user_id` aponta para [`users_profiles.id`](#users-profiles)`(id)` (Constraint: `hr_epi_records_user_id_fkey`)
+* A coluna `uploaded_by` aponta para [`users_profiles.id`](#users-profiles)`(id)` (Constraint: `hr_epi_records_uploaded_by_fkey`)
 
 #### Relacionamentos de Entrada (Tabelas que Referenciam esta)
 
+* [`hr_epi_record_items.epi_record_id`](#hr-epi-record-items)`(epi_record_id)` aponta para a coluna local `id` (Constraint: `hr_epi_record_items_epi_record_id_fkey`)
 * [`hr_epi_record_items.epi_record_id`](#hr-epi-record-items)`(epi_record_id)` aponta para a coluna local `id` (Constraint: `hr_epi_record_items_epi_record_id_fkey`)
 
 #### Índices (Indexes)
@@ -1303,12 +1578,21 @@ Abaixo estão listadas as 52 tabelas ativas no esquema `public` do banco de dado
   CREATE INDEX idx_epi_records_user ON public.hr_epi_records USING btree (user_id)
   ```
 
+#### Políticas de Segurança (Row Level Security - RLS)
+
+* **`epi_records_manage`**
+  * **Comando:** `ALL` | **Permissivo:** `PERMISSIVE` | **Roles:** `{public}`
+  * **Condição de Leitura/Acesso (USING):** `(EXISTS ( SELECT 1 FROM users_profiles WHERE ((users_profiles.id = auth.uid()) AND (users_profiles.access_level = ANY (ARRAY['Administrador'::access_level_type, 'Gerente'::access_level_type, 'Recursos Humanos'::access_level_type])))))`
+* **`epi_records_select`**
+  * **Comando:** `SELECT` | **Permissivo:** `PERMISSIVE` | **Roles:** `{public}`
+  * **Condição de Leitura/Acesso (USING):** `((user_id = auth.uid()) OR (EXISTS ( SELECT 1 FROM users_profiles WHERE ((users_profiles.id = auth.uid()) AND (users_profiles.access_level = ANY (ARRAY['Administrador'::access_level_type, 'Gerente'::access_level_type, 'Recursos Humanos'::access_level_type]))))))`
+
 ---
 
 ### hr_integration_types
 
 * **Segurança de Nível de Linha (RLS):** Habilitada (Enabled)
-* **Propósito:** Tipos de integrações de segurança exigidas por clientes para entrada em obra.
+* **Propósito:** Tipos e modelos de integração exigidos por clientes e contratantes.
 
 #### Colunas
 
@@ -1325,6 +1609,7 @@ Abaixo estão listadas as 52 tabelas ativas no esquema `public` do banco de dado
 #### Relacionamentos de Entrada (Tabelas que Referenciam esta)
 
 * [`hr_employee_integrations.integration_type_id`](#hr-employee-integrations)`(integration_type_id)` aponta para a coluna local `id` (Constraint: `hr_employee_integrations_integration_type_id_fkey`)
+* [`hr_employee_integrations.integration_type_id`](#hr-employee-integrations)`(integration_type_id)` aponta para a coluna local `id` (Constraint: `hr_employee_integrations_integration_type_id_fkey`)
 
 #### Índices (Indexes)
 
@@ -1337,12 +1622,21 @@ Abaixo estão listadas as 52 tabelas ativas no esquema `public` do banco de dado
   CREATE UNIQUE INDEX hr_integration_types_pkey ON public.hr_integration_types USING btree (id)
   ```
 
+#### Políticas de Segurança (Row Level Security - RLS)
+
+* **`Full access for HR Admins on hr_integration_types`**
+  * **Comando:** `ALL` | **Permissivo:** `PERMISSIVE` | **Roles:** `{public}`
+  * **Condição de Leitura/Acesso (USING):** `is_hr_admin()`
+* **`Read access for all authenticated users on hr_integration_types`**
+  * **Comando:** `SELECT` | **Permissivo:** `PERMISSIVE` | **Roles:** `{public}`
+  * **Condição de Leitura/Acesso (USING):** `true`
+
 ---
 
 ### hr_job_levels
 
 * **Segurança de Nível de Linha (RLS):** Habilitada (Enabled)
-* **Propósito:** Níveis de carreira de RH (ex: Júnior, Pleno, Sênior).
+* **Propósito:** Níveis de carreira vinculados aos cargos (ex: Júnior, Pleno, Sênior, I, II, III).
 
 #### Colunas
 
@@ -1358,6 +1652,8 @@ Abaixo estão listadas as 52 tabelas ativas no esquema `public` do banco de dado
 
 * [`hr_employee_positions.level_id`](#hr-employee-positions)`(level_id)` aponta para a coluna local `id` (Constraint: `hr_employee_positions_level_id_fkey`)
 * [`hr_salary_ranges.level_id`](#hr-salary-ranges)`(level_id)` aponta para a coluna local `id` (Constraint: `hr_salary_ranges_level_id_fkey`)
+* [`hr_employee_positions.level_id`](#hr-employee-positions)`(level_id)` aponta para a coluna local `id` (Constraint: `hr_employee_positions_level_id_fkey`)
+* [`hr_salary_ranges.level_id`](#hr-salary-ranges)`(level_id)` aponta para a coluna local `id` (Constraint: `hr_salary_ranges_level_id_fkey`)
 
 #### Índices (Indexes)
 
@@ -1366,28 +1662,46 @@ Abaixo estão listadas as 52 tabelas ativas no esquema `public` do banco de dado
   CREATE UNIQUE INDEX hr_job_levels_pkey ON public.hr_job_levels USING btree (id)
   ```
 
+#### Políticas de Segurança (Row Level Security - RLS)
+
+* **`Allow insert access to authenticated users`**
+  * **Comando:** `INSERT` | **Permissivo:** `PERMISSIVE` | **Roles:** `{public}`
+  * **Condição de Escrita (WITH CHECK):** `(auth.role() = 'authenticated'::text)`
+* **`Allow read access to authenticated users`**
+  * **Comando:** `SELECT` | **Permissivo:** `PERMISSIVE` | **Roles:** `{public}`
+  * **Condição de Leitura/Acesso (USING):** `(auth.role() = 'authenticated'::text)`
+* **`Allow update access to authenticated users`**
+  * **Comando:** `UPDATE` | **Permissivo:** `PERMISSIVE` | **Roles:** `{public}`
+  * **Condição de Leitura/Acesso (USING):** `(auth.role() = 'authenticated'::text)`
+* **`Full access for HR Admins on hr_job_levels`**
+  * **Comando:** `ALL` | **Permissivo:** `PERMISSIVE` | **Roles:** `{public}`
+  * **Condição de Leitura/Acesso (USING):** `is_hr_admin()`
+* **`Read access for all authenticated users on hr_job_levels`**
+  * **Comando:** `SELECT` | **Permissivo:** `PERMISSIVE` | **Roles:** `{public}`
+  * **Condição de Leitura/Acesso (USING):** `true`
+
 ---
 
 ### hr_position_document_types
 
 * **Segurança de Nível de Linha (RLS):** Habilitada (Enabled)
-* **Propósito:** Mapeamento de documentos obrigatórios por cargo no RH.
+* **Propósito:** Mapeamento de tipos de documentos obrigatórios exigidos para o exercício de cada cargo.
 
 #### Colunas
 
 | Coluna | Tipo | Nulável | Padrão | Restrições / Notas |
 | :--- | :--- | :---: | :--- | :--- |
 | `id` | `uuid` | Não | `gen_random_uuid()` | 🔑 PK |
-| `position_id` | `uuid` | Não | - | ✨ Unique (hr_position_document_types_position_id_document_type_id_key); FK -> `hr_positions.id` |
-| `document_type_id` | `uuid` | Não | - | ✨ Unique (hr_position_document_types_position_id_document_type_id_key); FK -> `hr_document_types.id` |
+| `position_id` | `uuid` | Não | - | FK -> `hr_positions.id` |
+| `document_type_id` | `uuid` | Não | - | FK -> `hr_document_types.id` |
 | `mandatory` | `boolean` | Não | `true` |  |
 | `notes` | `text` | Sim | - |  |
 | `created_at` | `timestamp with time zone` | Não | `now()` |  |
 
 #### Relacionamentos de Saída (Chaves Estrangeiras Referenciadas)
 
-* A coluna `document_type_id` aponta para [`hr_document_types.id`](#hr-document-types)`(id)` (Constraint: `hr_position_document_types_document_type_id_fkey`)
 * A coluna `position_id` aponta para [`hr_positions.id`](#hr-positions)`(id)` (Constraint: `hr_position_document_types_position_id_fkey`)
+* A coluna `document_type_id` aponta para [`hr_document_types.id`](#hr-document-types)`(id)` (Constraint: `hr_position_document_types_document_type_id_fkey`)
 
 #### Índices (Indexes)
 
@@ -1408,12 +1722,22 @@ Abaixo estão listadas as 52 tabelas ativas no esquema `public` do banco de dado
   CREATE INDEX idx_pos_doc_types_position ON public.hr_position_document_types USING btree (position_id)
   ```
 
+#### Políticas de Segurança (Row Level Security - RLS)
+
+* **`Admins and managers can manage position document types`**
+  * **Comando:** `ALL` | **Permissivo:** `PERMISSIVE` | **Roles:** `{authenticated}`
+  * **Condição de Leitura/Acesso (USING):** `(EXISTS ( SELECT 1 FROM users_profiles WHERE ((users_profiles.id = auth.uid()) AND (users_profiles.access_level = ANY (ARRAY['Administrador'::access_level_type, 'Gerente'::access_level_type])))))`
+  * **Condição de Escrita (WITH CHECK):** `(EXISTS ( SELECT 1 FROM users_profiles WHERE ((users_profiles.id = auth.uid()) AND (users_profiles.access_level = ANY (ARRAY['Administrador'::access_level_type, 'Gerente'::access_level_type])))))`
+* **`Authenticated users can view position document types`**
+  * **Comando:** `SELECT` | **Permissivo:** `PERMISSIVE` | **Roles:** `{authenticated}`
+  * **Condição de Leitura/Acesso (USING):** `true`
+
 ---
 
 ### hr_positions
 
 * **Segurança de Nível de Linha (RLS):** Habilitada (Enabled)
-* **Propósito:** Cargos e funções da empresa.
+* **Propósito:** Cargos e funções da estrutura organizacional da empresa (ex: Operador, Mecânico, Assistente Administrativo).
 
 #### Colunas
 
@@ -1432,6 +1756,9 @@ Abaixo estão listadas as 52 tabelas ativas no esquema `public` do banco de dado
 
 * [`hr_employee_positions.position_id`](#hr-employee-positions)`(position_id)` aponta para a coluna local `id` (Constraint: `hr_employee_positions_position_id_fkey`)
 * [`hr_position_document_types.position_id`](#hr-position-document-types)`(position_id)` aponta para a coluna local `id` (Constraint: `hr_position_document_types_position_id_fkey`)
+* [`hr_employee_positions.position_id`](#hr-employee-positions)`(position_id)` aponta para a coluna local `id` (Constraint: `hr_employee_positions_position_id_fkey`)
+* [`hr_position_document_types.position_id`](#hr-position-document-types)`(position_id)` aponta para a coluna local `id` (Constraint: `hr_position_document_types_position_id_fkey`)
+* [`hr_salary_ranges.position_id`](#hr-salary-ranges)`(position_id)` aponta para a coluna local `id` (Constraint: `hr_salary_ranges_position_id_fkey`)
 * [`hr_salary_ranges.position_id`](#hr-salary-ranges)`(position_id)` aponta para a coluna local `id` (Constraint: `hr_salary_ranges_position_id_fkey`)
 
 #### Índices (Indexes)
@@ -1441,12 +1768,30 @@ Abaixo estão listadas as 52 tabelas ativas no esquema `public` do banco de dado
   CREATE UNIQUE INDEX hr_positions_pkey ON public.hr_positions USING btree (id)
   ```
 
+#### Políticas de Segurança (Row Level Security - RLS)
+
+* **`Allow insert access to authenticated users`**
+  * **Comando:** `INSERT` | **Permissivo:** `PERMISSIVE` | **Roles:** `{public}`
+  * **Condição de Escrita (WITH CHECK):** `(auth.role() = 'authenticated'::text)`
+* **`Allow read access to authenticated users`**
+  * **Comando:** `SELECT` | **Permissivo:** `PERMISSIVE` | **Roles:** `{public}`
+  * **Condição de Leitura/Acesso (USING):** `(auth.role() = 'authenticated'::text)`
+* **`Allow update access to authenticated users`**
+  * **Comando:** `UPDATE` | **Permissivo:** `PERMISSIVE` | **Roles:** `{public}`
+  * **Condição de Leitura/Acesso (USING):** `(auth.role() = 'authenticated'::text)`
+* **`Full access for HR Admins on hr_positions`**
+  * **Comando:** `ALL` | **Permissivo:** `PERMISSIVE` | **Roles:** `{public}`
+  * **Condição de Leitura/Acesso (USING):** `is_hr_admin()`
+* **`Read access for all authenticated users on hr_positions`**
+  * **Comando:** `SELECT` | **Permissivo:** `PERMISSIVE` | **Roles:** `{public}`
+  * **Condição de Leitura/Acesso (USING):** `true`
+
 ---
 
 ### hr_salary_ranges
 
 * **Segurança de Nível de Linha (RLS):** Habilitada (Enabled)
-* **Propósito:** Faixas salariais por cargo e nível no RH.
+* **Propósito:** Tabelas salariais por cargo e nível para governança e controle de remuneração.
 
 #### Colunas
 
@@ -1475,12 +1820,30 @@ Abaixo estão listadas as 52 tabelas ativas no esquema `public` do banco de dado
   CREATE UNIQUE INDEX hr_salary_ranges_pkey ON public.hr_salary_ranges USING btree (id)
   ```
 
+#### Políticas de Segurança (Row Level Security - RLS)
+
+* **`Allow insert access to authenticated users`**
+  * **Comando:** `INSERT` | **Permissivo:** `PERMISSIVE` | **Roles:** `{public}`
+  * **Condição de Escrita (WITH CHECK):** `(auth.role() = 'authenticated'::text)`
+* **`Allow read access to authenticated users`**
+  * **Comando:** `SELECT` | **Permissivo:** `PERMISSIVE` | **Roles:** `{public}`
+  * **Condição de Leitura/Acesso (USING):** `(auth.role() = 'authenticated'::text)`
+* **`Allow update access to authenticated users`**
+  * **Comando:** `UPDATE` | **Permissivo:** `PERMISSIVE` | **Roles:** `{public}`
+  * **Condição de Leitura/Acesso (USING):** `(auth.role() = 'authenticated'::text)`
+* **`Full access for HR Admins on hr_salary_ranges`**
+  * **Comando:** `ALL` | **Permissivo:** `PERMISSIVE` | **Roles:** `{public}`
+  * **Condição de Leitura/Acesso (USING):** `is_hr_admin()`
+* **`Read access for all authenticated users on hr_salary_ranges`**
+  * **Comando:** `SELECT` | **Permissivo:** `PERMISSIVE` | **Roles:** `{public}`
+  * **Condição de Leitura/Acesso (USING):** `true`
+
 ---
 
 ### hr_time_records
 
 * **Segurança de Nível de Linha (RLS):** Habilitada (Enabled)
-* **Propósito:** Registros de ponto eletrônico e controle de jornada dos funcionários.
+* **Propósito:** Registros de ponto diário dos colaboradores (marcações de entrada, almoço e saída), controle de horas extras e faltas.
 
 #### Colunas
 
@@ -1488,10 +1851,10 @@ Abaixo estão listadas as 52 tabelas ativas no esquema `public` do banco de dado
 | :--- | :--- | :---: | :--- | :--- |
 | `id` | `uuid` | Não | `gen_random_uuid()` | 🔑 PK |
 | `user_id` | `uuid` | Não | - | FK -> `users_profiles.id` |
-| `record_type` | `text` | Não | - |  |
+| `record_type` | `text` | Não | - | Check: `record_type = ANY (ARRAY['Entrada'::text, 'Saída Almoço'::text, 'Retorno Almoço'::text, 'Saída'::text])` |
 | `recorded_at` | `timestamp with time zone` | Não | `now()` |  |
 | `record_date` | `date` | Não | `CURRENT_DATE` |  |
-| `origin` | `text` | Não | `'Sistema'::text` |  |
+| `origin` | `text` | Não | `'Sistema'::text` | Check: `origin = ANY (ARRAY['Sistema'::text, 'Manual'::text])` |
 | `justification` | `text` | Sim | - |  |
 | `adjusted_by` | `uuid` | Sim | - | FK -> `users_profiles.id` |
 | `created_at` | `timestamp with time zone` | Não | `now()` |  |
@@ -1516,26 +1879,38 @@ Abaixo estão listadas as 52 tabelas ativas no esquema `public` do banco de dado
   CREATE INDEX idx_time_records_user_date ON public.hr_time_records USING btree (user_id, record_date)
   ```
 
+#### Políticas de Segurança (Row Level Security - RLS)
+
+* **`time_records_insert_manual`**
+  * **Comando:** `INSERT` | **Permissivo:** `PERMISSIVE` | **Roles:** `{public}`
+  * **Condição de Escrita (WITH CHECK):** `((EXISTS ( SELECT 1 FROM users_profiles WHERE ((users_profiles.id = auth.uid()) AND (users_profiles.access_level = ANY (ARRAY['Administrador'::access_level_type, 'Gerente'::access_level_type, 'Recursos Humanos'::access_level_type]))))) AND (origin = 'Manual'::text))`
+* **`time_records_insert_sistema`**
+  * **Comando:** `INSERT` | **Permissivo:** `PERMISSIVE` | **Roles:** `{public}`
+  * **Condição de Escrita (WITH CHECK):** `((user_id = auth.uid()) AND (origin = 'Sistema'::text))`
+* **`time_records_select`**
+  * **Comando:** `SELECT` | **Permissivo:** `PERMISSIVE` | **Roles:** `{public}`
+  * **Condição de Leitura/Acesso (USING):** `((user_id = auth.uid()) OR (EXISTS ( SELECT 1 FROM users_profiles WHERE ((users_profiles.id = auth.uid()) AND (users_profiles.access_level = ANY (ARRAY['Administrador'::access_level_type, 'Gerente'::access_level_type, 'Recursos Humanos'::access_level_type]))))))`
+
 ---
 
 ### hr_timesheet_reports
 
 * **Segurança de Nível de Linha (RLS):** Habilitada (Enabled)
-* **Propósito:** Relatórios consolidados de espelho de ponto mensal com aprovações.
+* **Propósito:** Fechamentos mensais de folha de ponto consolidados por colaborador e período.
 
 #### Colunas
 
 | Coluna | Tipo | Nulável | Padrão | Restrições / Notas |
 | :--- | :--- | :---: | :--- | :--- |
 | `id` | `uuid` | Não | `gen_random_uuid()` | 🔑 PK |
-| `user_id` | `uuid` | Não | - | ✨ Unique (uq_timesheet_user_period); FK -> `users_profiles.id` |
-| `period_start` | `date` | Não | - | ✨ Unique (uq_timesheet_user_period) |
-| `period_end` | `date` | Não | - | ✨ Unique (uq_timesheet_user_period) |
+| `user_id` | `uuid` | Não | - | FK -> `users_profiles.id` |
+| `period_start` | `date` | Não | - |  |
+| `period_end` | `date` | Não | - |  |
 | `total_days_worked` | `integer` | Não | `0` |  |
 | `total_hours_worked` | `numeric` | Não | `0` |  |
 | `total_overtime_hours` | `numeric` | Não | `0` |  |
 | `total_absence_days` | `integer` | Não | `0` |  |
-| `status` | `text` | Não | `'Gerada'::text` |  |
+| `status` | `text` | Não | `'Gerada'::text` | Check: `status = ANY (ARRAY['Gerada'::text, 'Aprovada'::text, 'Contestada'::text])` |
 | `file_url` | `text` | Sim | - |  |
 | `generated_by` | `uuid` | Não | - | FK -> `users_profiles.id` |
 | `approved_by` | `uuid` | Sim | - | FK -> `users_profiles.id` |
@@ -1569,12 +1944,21 @@ Abaixo estão listadas as 52 tabelas ativas no esquema `public` do banco de dado
   CREATE UNIQUE INDEX uq_timesheet_user_period ON public.hr_timesheet_reports USING btree (user_id, period_start, period_end)
   ```
 
+#### Políticas de Segurança (Row Level Security - RLS)
+
+* **`timesheet_reports_manage`**
+  * **Comando:** `ALL` | **Permissivo:** `PERMISSIVE` | **Roles:** `{public}`
+  * **Condição de Leitura/Acesso (USING):** `(EXISTS ( SELECT 1 FROM users_profiles WHERE ((users_profiles.id = auth.uid()) AND (users_profiles.access_level = ANY (ARRAY['Administrador'::access_level_type, 'Gerente'::access_level_type, 'Recursos Humanos'::access_level_type])))))`
+* **`timesheet_reports_select`**
+  * **Comando:** `SELECT` | **Permissivo:** `PERMISSIVE` | **Roles:** `{public}`
+  * **Condição de Leitura/Acesso (USING):** `((user_id = auth.uid()) OR (EXISTS ( SELECT 1 FROM users_profiles WHERE ((users_profiles.id = auth.uid()) AND (users_profiles.access_level = ANY (ARRAY['Administrador'::access_level_type, 'Gerente'::access_level_type, 'Recursos Humanos'::access_level_type]))))))`
+
 ---
 
 ### hr_training_catalog
 
 * **Segurança de Nível de Linha (RLS):** Habilitada (Enabled)
-* **Propósito:** Catálogo de cursos e treinamentos (NR-35, NR-11, etc.).
+* **Propósito:** Catálogo de treinamentos e capacitações corporativas (NR-11, NR-12, NR-18, NR-35, etc.).
 
 #### Colunas
 
@@ -1595,6 +1979,7 @@ Abaixo estão listadas as 52 tabelas ativas no esquema `public` do banco de dado
 #### Relacionamentos de Entrada (Tabelas que Referenciam esta)
 
 * [`hr_employee_trainings.training_id`](#hr-employee-trainings)`(training_id)` aponta para a coluna local `id` (Constraint: `hr_employee_trainings_training_id_fkey`)
+* [`hr_employee_trainings.training_id`](#hr-employee-trainings)`(training_id)` aponta para a coluna local `id` (Constraint: `hr_employee_trainings_training_id_fkey`)
 
 #### Índices (Indexes)
 
@@ -1603,29 +1988,38 @@ Abaixo estão listadas as 52 tabelas ativas no esquema `public` do banco de dado
   CREATE UNIQUE INDEX hr_training_catalog_pkey ON public.hr_training_catalog USING btree (id)
   ```
 
+#### Políticas de Segurança (Row Level Security - RLS)
+
+* **`Full access for HR Admins on hr_training_catalog`**
+  * **Comando:** `ALL` | **Permissivo:** `PERMISSIVE` | **Roles:** `{public}`
+  * **Condição de Leitura/Acesso (USING):** `is_hr_admin()`
+* **`Read access for all authenticated users on hr_training_catalog`**
+  * **Comando:** `SELECT` | **Permissivo:** `PERMISSIVE` | **Roles:** `{public}`
+  * **Condição de Leitura/Acesso (USING):** `true`
+
 ---
 
 ### hr_vacation_approvals
 
 * **Segurança de Nível de Linha (RLS):** Habilitada (Enabled)
-* **Propósito:** Aprovações das solicitações de férias por gestores e diretoria.
+* **Propósito:** Fluxo de aprovação de solicitações de férias por gestores e RH com parecer e motivo de eventual recusa.
 
 #### Colunas
 
 | Coluna | Tipo | Nulável | Padrão | Restrições / Notas |
 | :--- | :--- | :---: | :--- | :--- |
 | `id` | `uuid` | Não | `gen_random_uuid()` | 🔑 PK |
-| `vacation_request_id` | `uuid` | Não | - | ✨ Unique (uq_approval_per_approver); FK -> `hr_vacation_requests.id` |
-| `approver_id` | `uuid` | Não | - | ✨ Unique (uq_approval_per_approver); FK -> `users_profiles.id` |
-| `status` | `text` | Não | `'Pendente'::text` |  |
+| `vacation_request_id` | `uuid` | Não | - | FK -> `hr_vacation_requests.id` |
+| `approver_id` | `uuid` | Não | - | FK -> `users_profiles.id` |
+| `status` | `text` | Não | `'Pendente'::text` | Check: `status = ANY (ARRAY['Pendente'::text, 'Aprovado'::text, 'Rejeitado'::text])` |
 | `rejection_reason` | `text` | Sim | - |  |
 | `decided_at` | `timestamp with time zone` | Sim | - |  |
 | `created_at` | `timestamp with time zone` | Não | `now()` |  |
 
 #### Relacionamentos de Saída (Chaves Estrangeiras Referenciadas)
 
-* A coluna `approver_id` aponta para [`users_profiles.id`](#users-profiles)`(id)` (Constraint: `hr_vacation_approvals_approver_id_fkey`)
 * A coluna `vacation_request_id` aponta para [`hr_vacation_requests.id`](#hr-vacation-requests)`(id)` (Constraint: `hr_vacation_approvals_vacation_request_id_fkey`)
+* A coluna `approver_id` aponta para [`users_profiles.id`](#users-profiles)`(id)` (Constraint: `hr_vacation_approvals_approver_id_fkey`)
 
 #### Índices (Indexes)
 
@@ -1650,11 +2044,23 @@ Abaixo estão listadas as 52 tabelas ativas no esquema `public` do banco de dado
   CREATE UNIQUE INDEX uq_approval_per_approver ON public.hr_vacation_approvals USING btree (vacation_request_id, approver_id)
   ```
 
+#### Políticas de Segurança (Row Level Security - RLS)
+
+* **`vacation_approvals_insert`**
+  * **Comando:** `INSERT` | **Permissivo:** `PERMISSIVE` | **Roles:** `{public}`
+  * **Condição de Escrita (WITH CHECK):** `true`
+* **`vacation_approvals_select`**
+  * **Comando:** `SELECT` | **Permissivo:** `PERMISSIVE` | **Roles:** `{public}`
+  * **Condição de Leitura/Acesso (USING):** `((approver_id = auth.uid()) OR (EXISTS ( SELECT 1 FROM hr_vacation_requests vr WHERE ((vr.id = hr_vacation_approvals.vacation_request_id) AND (vr.user_id = auth.uid())))) OR (EXISTS ( SELECT 1 FROM users_profiles WHERE ((users_profiles.id = auth.uid()) AND (users_profiles.access_level = ANY (ARRAY['Administrador'::access_level_type, 'Gerente'::access_level_type, 'Recursos Humanos'::access_level_type]))))))`
+* **`vacation_approvals_update`**
+  * **Comando:** `UPDATE` | **Permissivo:** `PERMISSIVE` | **Roles:** `{public}`
+  * **Condição de Leitura/Acesso (USING):** `(approver_id = auth.uid())`
+
 #### Gatilhos (Triggers)
 
 * **`trg_vacation_approval_status`**
   ```sql
-  CREATE TRIGGER trg_vacation_approval_status AFTER INSERT OR UPDATE ON public.hr_vacation_approvals FOR EACH ROW EXECUTE FUNCTION fn_update_vacation_request_status()
+  CREATE TRIGGER trg_vacation_approval_status AFTER INSERT, UPDATE ON public.hr_vacation_approvals FOR EACH ROW EXECUTE FUNCTION fn_update_vacation_request_status()
   ```
 
 ---
@@ -1662,18 +2068,18 @@ Abaixo estão listadas as 52 tabelas ativas no esquema `public` do banco de dado
 ### hr_vacation_installments
 
 * **Segurança de Nível de Linha (RLS):** Habilitada (Enabled)
-* **Propósito:** Parcelas de gozo de férias (até 3 períodos conforme legislação).
+* **Propósito:** Parcelamento de períodos de férias em até 3 períodos conforme legislação trabalhista (CLT).
 
 #### Colunas
 
 | Coluna | Tipo | Nulável | Padrão | Restrições / Notas |
 | :--- | :--- | :---: | :--- | :--- |
 | `id` | `uuid` | Não | `gen_random_uuid()` | 🔑 PK |
-| `vacation_request_id` | `uuid` | Não | - | ✨ Unique (uq_installment_number); FK -> `hr_vacation_requests.id` |
-| `installment_number` | `integer` | Não | - | ✨ Unique (uq_installment_number) |
+| `vacation_request_id` | `uuid` | Não | - | FK -> `hr_vacation_requests.id` |
+| `installment_number` | `integer` | Não | - |  |
 | `start_date` | `date` | Não | - |  |
 | `end_date` | `date` | Não | - |  |
-| `duration_days` | `integer` | Não | - |  |
+| `duration_days` | `integer` | Não | - | Check: `duration_days >= 5` |
 | `created_at` | `timestamp with time zone` | Não | `now()` |  |
 
 #### Relacionamentos de Saída (Chaves Estrangeiras Referenciadas)
@@ -1695,12 +2101,21 @@ Abaixo estão listadas as 52 tabelas ativas no esquema `public` do banco de dado
   CREATE UNIQUE INDEX uq_installment_number ON public.hr_vacation_installments USING btree (vacation_request_id, installment_number)
   ```
 
+#### Políticas de Segurança (Row Level Security - RLS)
+
+* **`vacation_installments_insert`**
+  * **Comando:** `INSERT` | **Permissivo:** `PERMISSIVE` | **Roles:** `{public}`
+  * **Condição de Escrita (WITH CHECK):** `true`
+* **`vacation_installments_select`**
+  * **Comando:** `SELECT` | **Permissivo:** `PERMISSIVE` | **Roles:** `{public}`
+  * **Condição de Leitura/Acesso (USING):** `(EXISTS ( SELECT 1 FROM hr_vacation_requests vr WHERE ((vr.id = hr_vacation_installments.vacation_request_id) AND ((vr.user_id = auth.uid()) OR (EXISTS ( SELECT 1 FROM users_profiles up WHERE ((up.id = auth.uid()) AND (up.access_level = ANY (ARRAY['Administrador'::access_level_type, 'Gerente'::access_level_type, 'Recursos Humanos'::access_level_type])))))))))`
+
 ---
 
 ### hr_vacation_requests
 
 * **Segurança de Nível de Linha (RLS):** Habilitada (Enabled)
-* **Propósito:** Solicitações de férias dos colaboradores.
+* **Propósito:** Solicitações de férias registradas pelos colaboradores ou RH, controle de período aquisitivo e gozo.
 
 #### Colunas
 
@@ -1711,10 +2126,10 @@ Abaixo estão listadas as 52 tabelas ativas no esquema `public` do banco de dado
 | `entitlement_period_start` | `date` | Não | - |  |
 | `entitlement_period_end` | `date` | Não | - |  |
 | `total_entitled_days` | `integer` | Não | `30` |  |
-| `installments_count` | `integer` | Não | - |  |
-| `days_sold` | `integer` | Não | `0` |  |
+| `installments_count` | `integer` | Não | - | Check: `installments_count >= 1 AND installments_count <= 3` |
+| `days_sold` | `integer` | Não | `0` | Check: `days_sold >= 0 AND days_sold <= 10` |
 | `total_days_requested` | `integer` | Não | - |  |
-| `status` | `text` | Não | `'Pendente'::text` |  |
+| `status` | `text` | Não | `'Pendente'::text` | Check: `status = ANY (ARRAY['Pendente'::text, 'Em Aprovação'::text, 'Aprovada'::text, 'Rejeitada'::text, 'Cancelada'::text])` |
 | `rejection_reason` | `text` | Sim | - |  |
 | `notes` | `text` | Sim | - |  |
 | `created_at` | `timestamp with time zone` | Não | `now()` |  |
@@ -1726,6 +2141,8 @@ Abaixo estão listadas as 52 tabelas ativas no esquema `public` do banco de dado
 
 #### Relacionamentos de Entrada (Tabelas que Referenciam esta)
 
+* [`hr_vacation_approvals.vacation_request_id`](#hr-vacation-approvals)`(vacation_request_id)` aponta para a coluna local `id` (Constraint: `hr_vacation_approvals_vacation_request_id_fkey`)
+* [`hr_vacation_installments.vacation_request_id`](#hr-vacation-installments)`(vacation_request_id)` aponta para a coluna local `id` (Constraint: `hr_vacation_installments_vacation_request_id_fkey`)
 * [`hr_vacation_approvals.vacation_request_id`](#hr-vacation-approvals)`(vacation_request_id)` aponta para a coluna local `id` (Constraint: `hr_vacation_approvals_vacation_request_id_fkey`)
 * [`hr_vacation_installments.vacation_request_id`](#hr-vacation-installments)`(vacation_request_id)` aponta para a coluna local `id` (Constraint: `hr_vacation_installments_vacation_request_id_fkey`)
 
@@ -1744,12 +2161,24 @@ Abaixo estão listadas as 52 tabelas ativas no esquema `public` do banco de dado
   CREATE INDEX idx_vacation_requests_user ON public.hr_vacation_requests USING btree (user_id)
   ```
 
+#### Políticas de Segurança (Row Level Security - RLS)
+
+* **`vacation_requests_insert`**
+  * **Comando:** `INSERT` | **Permissivo:** `PERMISSIVE` | **Roles:** `{public}`
+  * **Condição de Escrita (WITH CHECK):** `(user_id = auth.uid())`
+* **`vacation_requests_select`**
+  * **Comando:** `SELECT` | **Permissivo:** `PERMISSIVE` | **Roles:** `{public}`
+  * **Condição de Leitura/Acesso (USING):** `((user_id = auth.uid()) OR (EXISTS ( SELECT 1 FROM users_profiles WHERE ((users_profiles.id = auth.uid()) AND (users_profiles.access_level = ANY (ARRAY['Administrador'::access_level_type, 'Gerente'::access_level_type, 'Recursos Humanos'::access_level_type]))))))`
+* **`vacation_requests_update`**
+  * **Comando:** `UPDATE` | **Permissivo:** `PERMISSIVE` | **Roles:** `{public}`
+  * **Condição de Leitura/Acesso (USING):** `((user_id = auth.uid()) OR (EXISTS ( SELECT 1 FROM users_profiles WHERE ((users_profiles.id = auth.uid()) AND (users_profiles.access_level = ANY (ARRAY['Administrador'::access_level_type, 'Gerente'::access_level_type, 'Recursos Humanos'::access_level_type]))))))`
+
 ---
 
 ### invoice_nfse
 
 * **Segurança de Nível de Linha (RLS):** Habilitada (Enabled)
-* **Propósito:** Notas Fiscais de Serviços Eletrônicas (NFS-e) emitidas ou vinculadas a faturas.
+* **Propósito:** Armazenamento de notas fiscais de serviço eletrônicas (NFS-e) emitidas para locações ou manutenções.
 
 #### Colunas
 
@@ -1783,12 +2212,19 @@ Abaixo estão listadas as 52 tabelas ativas no esquema `public` do banco de dado
   CREATE UNIQUE INDEX invoice_nfse_pkey ON public.invoice_nfse USING btree (id)
   ```
 
+#### Políticas de Segurança (Row Level Security - RLS)
+
+* **`Allow CRUD for authenticated users`**
+  * **Comando:** `ALL` | **Permissivo:** `PERMISSIVE` | **Roles:** `{authenticated}`
+  * **Condição de Leitura/Acesso (USING):** `true`
+  * **Condição de Escrita (WITH CHECK):** `true`
+
 ---
 
 ### invoice_year_counters
 
 * **Segurança de Nível de Linha (RLS):** Habilitada (Enabled)
-* **Propósito:** Controle sequencial anual para numeração de contratos/faturas de locação.
+* **Propósito:** Controle atômico e concorrente da numeração sequencial anual de faturas e notas de débito.
 
 #### Colunas
 
@@ -1804,32 +2240,42 @@ Abaixo estão listadas as 52 tabelas ativas no esquema `public` do banco de dado
   CREATE UNIQUE INDEX invoice_year_counters_pkey ON public.invoice_year_counters USING btree (year)
   ```
 
+#### Políticas de Segurança (Row Level Security - RLS)
+
+* **`Authenticated users can manage invoice counters`**
+  * **Comando:** `ALL` | **Permissivo:** `PERMISSIVE` | **Roles:** `{authenticated}`
+  * **Condição de Leitura/Acesso (USING):** `true`
+  * **Condição de Escrita (WITH CHECK):** `true`
+* **`Authenticated users can read invoice counters`**
+  * **Comando:** `SELECT` | **Permissivo:** `PERMISSIVE` | **Roles:** `{authenticated}`
+  * **Condição de Leitura/Acesso (USING):** `true`
+
 ---
 
 ### logistics_triage_photos
 
 * **Segurança de Nível de Linha (RLS):** Habilitada (Enabled)
-* **Propósito:** Fotos de triagem e vistoria de entrega/devolução de equipamentos na logística.
+* **Propósito:** Fotos obrigatórias de checklist e vistoria física das 22 posições das máquinas na triagem de entrega e devolução.
 
 #### Colunas
 
 | Coluna | Tipo | Nulável | Padrão | Restrições / Notas |
 | :--- | :--- | :---: | :--- | :--- |
 | `id` | `uuid` | Não | `gen_random_uuid()` | 🔑 PK |
-| `contract_id` | `uuid` | Não | - | ✨ Unique (logistics_triage_photos_contract_equipment_position_key); FK -> `crm_deal_contracts.id` |
-| `position` | `integer` | Não | - | ✨ Unique (logistics_triage_photos_contract_equipment_position_key) |
+| `contract_id` | `uuid` | Não | - | FK -> `crm_deal_contracts.id` |
+| `position` | `integer` | Não | - |  |
 | `label` | `text` | Não | - |  |
 | `file_path` | `text` | Não | - |  |
 | `file_url` | `text` | Sim | - |  |
 | `uploaded_by` | `uuid` | Sim | - | FK -> `users_profiles.id` |
 | `uploaded_at` | `timestamp with time zone` | Sim | `now()` |  |
-| `equipment_id` | `uuid` | Sim | - | ✨ Unique (logistics_triage_photos_contract_equipment_position_key); FK -> `equipments.id` |
+| `equipment_id` | `uuid` | Sim | - | FK -> `equipments.id` |
 
 #### Relacionamentos de Saída (Chaves Estrangeiras Referenciadas)
 
-* A coluna `contract_id` aponta para [`crm_deal_contracts.id`](#crm-deal-contracts)`(id)` (Constraint: `logistics_triage_photos_contract_id_fkey`)
-* A coluna `equipment_id` aponta para [`equipments.id`](#equipments)`(id)` (Constraint: `logistics_triage_photos_equipment_id_fkey`)
 * A coluna `uploaded_by` aponta para [`users_profiles.id`](#users-profiles)`(id)` (Constraint: `logistics_triage_photos_uploaded_by_fkey`)
+* A coluna `equipment_id` aponta para [`equipments.id`](#equipments)`(id)` (Constraint: `logistics_triage_photos_equipment_id_fkey`)
+* A coluna `contract_id` aponta para [`crm_deal_contracts.id`](#crm-deal-contracts)`(id)` (Constraint: `logistics_triage_photos_contract_id_fkey`)
 
 #### Índices (Indexes)
 
@@ -1846,12 +2292,19 @@ Abaixo estão listadas as 52 tabelas ativas no esquema `public` do banco de dado
   CREATE UNIQUE INDEX logistics_triage_photos_pkey ON public.logistics_triage_photos USING btree (id)
   ```
 
+#### Políticas de Segurança (Row Level Security - RLS)
+
+* **`Allow CRUD for authenticated users`**
+  * **Comando:** `ALL` | **Permissivo:** `PERMISSIVE` | **Roles:** `{public}`
+  * **Condição de Leitura/Acesso (USING):** `(auth.role() = 'authenticated'::text)`
+  * **Condição de Escrita (WITH CHECK):** `(auth.role() = 'authenticated'::text)`
+
 ---
 
 ### nfe_imports
 
 * **Segurança de Nível de Linha (RLS):** Habilitada (Enabled)
-* **Propósito:** Histórico, compliance e auditoria de todas as Notas Fiscais Eletrônicas (NF-e de entrada ou saída) importadas em XML no sistema, prevenindo duplicidade de chave de acesso e mantendo rastreabilidade total.
+* **Propósito:** Importações de notas fiscais eletrônicas (XML de NF-e) para registro de compra de peças e equipamentos.
 
 #### Colunas
 
@@ -1893,12 +2346,19 @@ Abaixo estão listadas as 52 tabelas ativas no esquema `public` do banco de dado
   CREATE UNIQUE INDEX nfe_imports_pkey ON public.nfe_imports USING btree (id)
   ```
 
+#### Políticas de Segurança (Row Level Security - RLS)
+
+* **`Allow authenticated full access to nfe_imports`**
+  * **Comando:** `ALL` | **Permissivo:** `PERMISSIVE` | **Roles:** `{authenticated}`
+  * **Condição de Leitura/Acesso (USING):** `true`
+  * **Condição de Escrita (WITH CHECK):** `true`
+
 ---
 
 ### parts
 
 * **Segurança de Nível de Linha (RLS):** Habilitada (Enabled)
-* **Propósito:** Catálogo e estoque de peças, componentes e insumos para manutenção.
+* **Propósito:** Catálogo de peças de reposição, componentes, filtros e materiais de consumo com controle de estoque e custos.
 
 #### Colunas
 
@@ -1913,7 +2373,7 @@ Abaixo estão listadas as 52 tabelas ativas no esquema `public` do banco de dado
 | `notes` | `text` | Sim | - |  |
 | `created_at` | `timestamp with time zone` | Sim | `now()` |  |
 | `updated_at` | `timestamp with time zone` | Sim | `now()` |  |
-| `category` | `text` | Não | `'Peça'::text` |  |
+| `category` | `text` | Não | `'Peça'::text` | Check: `category = ANY (ARRAY['Peça'::text, 'Consumo'::text, 'EPI'::text, 'Outros'::text])` |
 | `unit` | `text` | Não | `'UN'::text` |  |
 | `invoice_number` | `text` | Sim | - |  |
 | `nfe_access_key` | `text` | Sim | - |  |
@@ -1921,7 +2381,7 @@ Abaixo estão listadas as 52 tabelas ativas no esquema `public` do banco de dado
 | `supplier_cnpj` | `text` | Sim | - |  |
 | `ncm` | `text` | Sim | - |  |
 | `cfop` | `text` | Sim | - |  |
-| `total_value` | `numeric` | Sim | - |  |
+| `total_value` | `numeric` | Sim | `(quantity * unit_value)` |  |
 | `created_by` | `uuid` | Sim | - | FK -> `users_profiles.id` |
 
 #### Relacionamentos de Saída (Chaves Estrangeiras Referenciadas)
@@ -1930,6 +2390,8 @@ Abaixo estão listadas as 52 tabelas ativas no esquema `public` do banco de dado
 
 #### Relacionamentos de Entrada (Tabelas que Referenciam esta)
 
+* [`service_order_parts.part_id`](#service-order-parts)`(part_id)` aponta para a coluna local `id` (Constraint: `service_order_parts_part_id_fkey`)
+* [`stock_movements.part_id`](#stock-movements)`(part_id)` aponta para a coluna local `id` (Constraint: `stock_movements_part_id_fkey`)
 * [`service_order_parts.part_id`](#service-order-parts)`(part_id)` aponta para a coluna local `id` (Constraint: `service_order_parts_part_id_fkey`)
 * [`stock_movements.part_id`](#stock-movements)`(part_id)` aponta para a coluna local `id` (Constraint: `stock_movements_part_id_fkey`)
 
@@ -1944,6 +2406,13 @@ Abaixo estão listadas as 52 tabelas ativas no esquema `public` do banco de dado
   CREATE UNIQUE INDEX parts_pkey ON public.parts USING btree (id)
   ```
 
+#### Políticas de Segurança (Row Level Security - RLS)
+
+* **`Allow CRUD for authenticated users`**
+  * **Comando:** `ALL` | **Permissivo:** `PERMISSIVE` | **Roles:** `{authenticated}`
+  * **Condição de Leitura/Acesso (USING):** `true`
+  * **Condição de Escrita (WITH CHECK):** `true`
+
 #### Gatilhos (Triggers)
 
 * **`update_parts_updated_at`**
@@ -1956,7 +2425,7 @@ Abaixo estão listadas as 52 tabelas ativas no esquema `public` do banco de dado
 ### payments
 
 * **Segurança de Nível de Linha (RLS):** Habilitada (Enabled)
-* **Propósito:** Registro de transações e cobranças geradas via gateway de pagamento (Asaas/Boleto).
+* **Propósito:** Registro de transações de pagamento via Asaas (Boleto, PIX, Cartão) e status de liquidação financeira.
 
 #### Colunas
 
@@ -1980,11 +2449,12 @@ Abaixo estão listadas as 52 tabelas ativas no esquema `public` do banco de dado
 
 #### Relacionamentos de Saída (Chaves Estrangeiras Referenciadas)
 
-* A coluna `client_id` aponta para [`clients.id`](#clients)`(id)` (Constraint: `payments_client_id_fkey`)
 * A coluna `invoice_id` aponta para [`rental_invoices.id`](#rental-invoices)`(id)` (Constraint: `payments_invoice_id_fkey`)
+* A coluna `client_id` aponta para [`clients.id`](#clients)`(id)` (Constraint: `payments_client_id_fkey`)
 
 #### Relacionamentos de Entrada (Tabelas que Referenciam esta)
 
+* [`bills.payment_id`](#bills)`(payment_id)` aponta para a coluna local `id` (Constraint: `bills_payment_id_fkey`)
 * [`bills.payment_id`](#bills)`(payment_id)` aponta para a coluna local `id` (Constraint: `bills_payment_id_fkey`)
 
 #### Índices (Indexes)
@@ -2014,12 +2484,28 @@ Abaixo estão listadas as 52 tabelas ativas no esquema `public` do banco de dado
   CREATE UNIQUE INDEX payments_pkey ON public.payments USING btree (id)
   ```
 
+#### Políticas de Segurança (Row Level Security - RLS)
+
+* **`Authenticated users can delete payments`**
+  * **Comando:** `DELETE` | **Permissivo:** `PERMISSIVE` | **Roles:** `{authenticated}`
+  * **Condição de Leitura/Acesso (USING):** `true`
+* **`Authenticated users can insert payments`**
+  * **Comando:** `INSERT` | **Permissivo:** `PERMISSIVE` | **Roles:** `{authenticated}`
+  * **Condição de Escrita (WITH CHECK):** `true`
+* **`Authenticated users can update payments`**
+  * **Comando:** `UPDATE` | **Permissivo:** `PERMISSIVE` | **Roles:** `{authenticated}`
+  * **Condição de Leitura/Acesso (USING):** `true`
+  * **Condição de Escrita (WITH CHECK):** `true`
+* **`Authenticated users can view payments`**
+  * **Comando:** `SELECT` | **Permissivo:** `PERMISSIVE` | **Roles:** `{authenticated}`
+  * **Condição de Leitura/Acesso (USING):** `true`
+
 ---
 
 ### rental_billing_invoices
 
 * **Segurança de Nível de Linha (RLS):** Habilitada (Enabled)
-* **Propósito:** Faturas oficiais de locação emitidas pelo sistema (com numeração sequencial anual atômica int_seq/ano, ex: "49/2026"), contendo dados do cliente, discriminação dos equipamentos faturados, PDF e vínculo com o contas a receber (bills).
+* **Propósito:** Emissões oficiais de Notas de Débito / Faturas de Locação com numeração sequencial anual atômica, datas de vigência e links dos PDFs gerados.
 
 #### Colunas
 
@@ -2027,11 +2513,11 @@ Abaixo estão listadas as 52 tabelas ativas no esquema `public` do banco de dado
 | :--- | :--- | :---: | :--- | :--- |
 | `id` | `uuid` | Não | `gen_random_uuid()` | 🔑 PK |
 | `invoice_number` | `text` | Não | - | ✨ Unique |
-| `year` | `integer` | Não | - | ✨ Unique (uq_rental_billing_invoices_year_seq) |
-| `sequence_number` | `integer` | Não | - | ✨ Unique (uq_rental_billing_invoices_year_seq) |
+| `year` | `integer` | Não | - |  |
+| `sequence_number` | `integer` | Não | - |  |
 | `rental_invoice_id` | `uuid` | Não | - | FK -> `rental_invoices.id` |
 | `bill_id` | `uuid` | Sim | - | FK -> `bills.id` |
-| `invoice_type` | `text` | Não | `'INITIAL'::text` |  |
+| `invoice_type` | `text` | Não | `'INITIAL'::text` | Check: `invoice_type = ANY (ARRAY['INITIAL'::text, 'EXTENSION'::text, 'MANUAL'::text, 'TEST'::text])` |
 | `pdf_url` | `text` | Sim | - |  |
 | `period_start` | `date` | Sim | - |  |
 | `period_end` | `date` | Sim | - |  |
@@ -2044,8 +2530,8 @@ Abaixo estão listadas as 52 tabelas ativas no esquema `public` do banco de dado
 #### Relacionamentos de Saída (Chaves Estrangeiras Referenciadas)
 
 * A coluna `bill_id` aponta para [`bills.id`](#bills)`(id)` (Constraint: `rental_billing_invoices_bill_id_fkey`)
-* A coluna `created_by` aponta para [`users_profiles.id`](#users-profiles)`(id)` (Constraint: `rental_billing_invoices_created_by_fkey`)
 * A coluna `rental_invoice_id` aponta para [`rental_invoices.id`](#rental-invoices)`(id)` (Constraint: `rental_billing_invoices_rental_invoice_id_fkey`)
+* A coluna `created_by` aponta para [`users_profiles.id`](#users-profiles)`(id)` (Constraint: `rental_billing_invoices_created_by_fkey`)
 
 #### Índices (Indexes)
 
@@ -2074,12 +2560,28 @@ Abaixo estão listadas as 52 tabelas ativas no esquema `public` do banco de dado
   CREATE UNIQUE INDEX uq_rental_billing_invoices_year_seq ON public.rental_billing_invoices USING btree (year, sequence_number)
   ```
 
+#### Políticas de Segurança (Row Level Security - RLS)
+
+* **`rental_billing_invoices_delete`**
+  * **Comando:** `DELETE` | **Permissivo:** `PERMISSIVE` | **Roles:** `{authenticated}`
+  * **Condição de Leitura/Acesso (USING):** `true`
+* **`rental_billing_invoices_insert`**
+  * **Comando:** `INSERT` | **Permissivo:** `PERMISSIVE` | **Roles:** `{authenticated}`
+  * **Condição de Escrita (WITH CHECK):** `true`
+* **`rental_billing_invoices_select`**
+  * **Comando:** `SELECT` | **Permissivo:** `PERMISSIVE` | **Roles:** `{authenticated}`
+  * **Condição de Leitura/Acesso (USING):** `true`
+* **`rental_billing_invoices_update`**
+  * **Comando:** `UPDATE` | **Permissivo:** `PERMISSIVE` | **Roles:** `{authenticated}`
+  * **Condição de Leitura/Acesso (USING):** `true`
+  * **Condição de Escrita (WITH CHECK):** `true`
+
 ---
 
 ### rental_invoice_equipments
 
 * **Segurança de Nível de Linha (RLS):** Habilitada (Enabled)
-* **Propósito:** Itens de equipamentos vinculados a cada locação/contrato, discriminando períodos específicos de locação e prorrogações individuais por máquina, valores de locação, seguro, frete, RCD, terceiros e treinamento.
+* **Propósito:** Equipamentos físicos alocados em cada contrato/fatura com seus respectivos valores unitários de locação, frete, seguro e RCD.
 
 #### Colunas
 
@@ -2132,12 +2634,19 @@ Abaixo estão listadas as 52 tabelas ativas no esquema `public` do banco de dado
   CREATE UNIQUE INDEX rental_invoice_equipments_pkey ON public.rental_invoice_equipments USING btree (id)
   ```
 
+#### Políticas de Segurança (Row Level Security - RLS)
+
+* **`Permitir acesso completo a usuarios autenticados`**
+  * **Comando:** `ALL` | **Permissivo:** `PERMISSIVE` | **Roles:** `{authenticated}`
+  * **Condição de Leitura/Acesso (USING):** `true`
+  * **Condição de Escrita (WITH CHECK):** `true`
+
 ---
 
 ### rental_invoice_sequence
 
 * **Segurança de Nível de Linha (RLS):** Desabilitada (Disabled)
-* **Propósito:** Controle sequencial atômico anual para geração e emissão de faturas de locação.
+* **Propósito:** Tabela de controle de sequência numérica anual para contratos e faturas de locação.
 
 #### Colunas
 
@@ -2159,7 +2668,7 @@ Abaixo estão listadas as 52 tabelas ativas no esquema `public` do banco de dado
 ### rental_invoices
 
 * **Segurança de Nível de Linha (RLS):** Habilitada (Enabled)
-* **Propósito:** Contratos e pedidos principais de locação de equipamentos, com períodos globais, valores consolidados, cliente e endereço de entrega.
+* **Propósito:** Faturas e contratos de locação em execução, equipamentos locados, cliente, vigência e valores cobrados.
 
 #### Colunas
 
@@ -2177,7 +2686,7 @@ Abaixo estão listadas as 52 tabelas ativas no esquema `public` do banco de dado
 | `work_site` | `text` | Sim | - |  |
 | `billing_period_start` | `date` | Sim | - |  |
 | `billing_period_end` | `date` | Sim | - |  |
-| `billing_status` | `USER-DEFINED (billing_status_type)` | Sim | `'Pendente'::billing_status_type` | Valores: ["Pendente", "Faturado", "Emitida", "Cancelada"] |
+| `billing_status` | `USER-DEFINED` | Sim | `'Pendente'::billing_status_type` |  |
 | `return_date` | `date` | Sim | - |  |
 | `cost_rental` | `numeric` | Sim | `0` |  |
 | `cost_insurance` | `numeric` | Sim | `0` |  |
@@ -2189,13 +2698,13 @@ Abaixo estão listadas as 52 tabelas ativas no esquema `public` do banco de dado
 | `due_date` | `date` | Sim | - |  |
 | `payment_method` | `text` | Sim | - |  |
 | `bank_reconciliation_date` | `date` | Sim | - |  |
-| `reconciliation_status` | `USER-DEFINED (reconciliation_status_type)` | Sim | `'Atrasado'::reconciliation_status_type` | Valores: ["Pendente", "Atrasado", "Recebido", "Divergente", "No prazo"] |
+| `reconciliation_status` | `USER-DEFINED` | Sim | `'Atrasado'::reconciliation_status_type` |  |
 | `notes` | `text` | Sim | - |  |
 | `created_at` | `timestamp with time zone` | Sim | `now()` |  |
 | `updated_at` | `timestamp with time zone` | Sim | `now()` |  |
 | `created_by` | `uuid` | Sim | - | FK -> `users_profiles.id` |
 | `invoice_number` | `text` | Sim | - |  |
-| `client_score` | `integer` | Sim | - |  |
+| `client_score` | `integer` | Sim | - | Check: `client_score >= 1 AND client_score <= 5` |
 | `billing_method` | `text` | Sim | `'ASAAS'::text` |  |
 | `document_type` | `text` | Sim | `'FATURA_LOCACAO'::text` |  |
 | `manual_due_date` | `date` | Sim | - |  |
@@ -2207,8 +2716,8 @@ Abaixo estão listadas as 52 tabelas ativas no esquema `public` do banco de dado
 
 * A coluna `client_id` aponta para [`clients.id`](#clients)`(id)` (Constraint: `rental_invoices_client_id_fkey`)
 * A coluna `created_by` aponta para [`users_profiles.id`](#users-profiles)`(id)` (Constraint: `rental_invoices_created_by_fkey`)
-* A coluna `deal_id` aponta para [`crm_deals.id`](#crm-deals)`(id)` (Constraint: `rental_invoices_deal_id_fkey`)
 * A coluna `equipment_id` aponta para [`equipments.id`](#equipments)`(id)` (Constraint: `rental_invoices_equipment_id_fkey`)
+* A coluna `deal_id` aponta para [`crm_deals.id`](#crm-deals)`(id)` (Constraint: `rental_invoices_deal_id_fkey`)
 
 #### Relacionamentos de Entrada (Tabelas que Referenciam esta)
 
@@ -2219,6 +2728,14 @@ Abaixo estão listadas as 52 tabelas ativas no esquema `public` do banco de dado
 * [`payments.invoice_id`](#payments)`(invoice_id)` aponta para a coluna local `id` (Constraint: `payments_invoice_id_fkey`)
 * [`rental_billing_invoices.rental_invoice_id`](#rental-billing-invoices)`(rental_invoice_id)` aponta para a coluna local `id` (Constraint: `rental_billing_invoices_rental_invoice_id_fkey`)
 * [`rental_invoice_equipments.rental_invoice_id`](#rental-invoice-equipments)`(rental_invoice_id)` aponta para a coluna local `id` (Constraint: `rental_invoice_equipments_rental_invoice_id_fkey`)
+* [`rental_billing_invoices.rental_invoice_id`](#rental-billing-invoices)`(rental_invoice_id)` aponta para a coluna local `id` (Constraint: `rental_billing_invoices_rental_invoice_id_fkey`)
+* [`bills.rental_invoice_id`](#bills)`(rental_invoice_id)` aponta para a coluna local `id` (Constraint: `bills_rental_invoice_id_fkey`)
+* [`crm_deal_contracts.rental_invoice_id`](#crm-deal-contracts)`(rental_invoice_id)` aponta para a coluna local `id` (Constraint: `crm_deal_contracts_rental_invoice_id_fkey`)
+* [`invoice_nfse.invoice_id`](#invoice-nfse)`(invoice_id)` aponta para a coluna local `id` (Constraint: `invoice_nfse_invoice_id_fkey`)
+* [`payments.invoice_id`](#payments)`(invoice_id)` aponta para a coluna local `id` (Constraint: `payments_invoice_id_fkey`)
+* [`crm_deals.rental_invoice_id`](#crm-deals)`(rental_invoice_id)` aponta para a coluna local `id` (Constraint: `crm_deals_rental_invoice_id_fkey`)
+* [`rental_invoice_equipments.rental_invoice_id`](#rental-invoice-equipments)`(rental_invoice_id)` aponta para a coluna local `id` (Constraint: `rental_invoice_equipments_rental_invoice_id_fkey`)
+* [`service_orders.rental_invoice_id`](#service-orders)`(rental_invoice_id)` aponta para a coluna local `id` (Constraint: `service_orders_rental_invoice_id_fkey`)
 * [`service_orders.rental_invoice_id`](#service-orders)`(rental_invoice_id)` aponta para a coluna local `id` (Constraint: `service_orders_rental_invoice_id_fkey`)
 
 #### Índices (Indexes)
@@ -2228,11 +2745,18 @@ Abaixo estão listadas as 52 tabelas ativas no esquema `public` do banco de dado
   CREATE UNIQUE INDEX rental_invoices_pkey ON public.rental_invoices USING btree (id)
   ```
 
+#### Políticas de Segurança (Row Level Security - RLS)
+
+* **`Allow CRUD for authenticated users`**
+  * **Comando:** `ALL` | **Permissivo:** `PERMISSIVE` | **Roles:** `{authenticated}`
+  * **Condição de Leitura/Acesso (USING):** `true`
+  * **Condição de Escrita (WITH CHECK):** `true`
+
 #### Gatilhos (Triggers)
 
 * **`tr_update_client_score`**
   ```sql
-  CREATE TRIGGER tr_update_client_score AFTER INSERT OR UPDATE ON public.rental_invoices FOR EACH ROW EXECUTE FUNCTION update_client_average_score()
+  CREATE TRIGGER tr_update_client_score AFTER INSERT, UPDATE ON public.rental_invoices FOR EACH ROW EXECUTE FUNCTION update_client_average_score()
   ```
 * **`trg_set_invoice_number`**
   ```sql
@@ -2248,7 +2772,7 @@ Abaixo estão listadas as 52 tabelas ativas no esquema `public` do banco de dado
 ### service_order_labor
 
 * **Segurança de Nível de Linha (RLS):** Habilitada (Enabled)
-* **Propósito:** Registro de mão de obra e horas técnicas aplicadas em Ordens de Serviço.
+* **Propósito:** Apontamento de mão de obra e horas técnicas aplicadas em cada Ordem de Serviço.
 
 #### Colunas
 
@@ -2274,12 +2798,19 @@ Abaixo estão listadas as 52 tabelas ativas no esquema `public` do banco de dado
   CREATE UNIQUE INDEX service_order_labor_pkey ON public.service_order_labor USING btree (id)
   ```
 
+#### Políticas de Segurança (Row Level Security - RLS)
+
+* **`Enable all access for authenticated users`**
+  * **Comando:** `ALL` | **Permissivo:** `PERMISSIVE` | **Roles:** `{authenticated}`
+  * **Condição de Leitura/Acesso (USING):** `true`
+  * **Condição de Escrita (WITH CHECK):** `true`
+
 ---
 
 ### service_order_parts
 
 * **Segurança de Nível de Linha (RLS):** Habilitada (Enabled)
-* **Propósito:** Peças e componentes utilizados na execução de Ordens de Serviço.
+* **Propósito:** Peças e insumos consumidos em cada Ordem de Serviço com baixa automática de estoque.
 
 #### Colunas
 
@@ -2305,19 +2836,26 @@ Abaixo estão listadas as 52 tabelas ativas no esquema `public` do banco de dado
   CREATE UNIQUE INDEX service_order_parts_pkey ON public.service_order_parts USING btree (id)
   ```
 
+#### Políticas de Segurança (Row Level Security - RLS)
+
+* **`Allow CRUD for authenticated users`**
+  * **Comando:** `ALL` | **Permissivo:** `PERMISSIVE` | **Roles:** `{authenticated}`
+  * **Condição de Leitura/Acesso (USING):** `true`
+  * **Condição de Escrita (WITH CHECK):** `true`
+
 ---
 
 ### service_order_rcd
 
 * **Segurança de Nível de Linha (RLS):** Desabilitada (Disabled)
-* **Propósito:** Relatório de Constatação de Danos (RCD) gerado a partir de Ordens de Serviço, com discriminação de peças e serviços avariados, valores de ressarcimento, condições de pagamento, parcelamento financeiro, termos assinados e faturamento atrelado.
+* **Propósito:** Registro de Cobrança de Danos (RCD) gerado por quebras ou avarias causadas pelo cliente durante a locação, com orçamento e faturamento.
 
 #### Colunas
 
 | Coluna | Tipo | Nulável | Padrão | Restrições / Notas |
 | :--- | :--- | :---: | :--- | :--- |
 | `id` | `uuid` | Não | `gen_random_uuid()` | 🔑 PK |
-| `service_order_id` | `uuid` | Não | - | ✨ Unique; FK -> `service_orders.id` |
+| `service_order_id` | `uuid` | Não | - | ✨ Unique \| FK -> `service_orders.id` |
 | `rcd_number` | `text` | Sim | - |  |
 | `issue_date` | `date` | Não | `CURRENT_DATE` |  |
 | `validity_date` | `date` | Sim | - |  |
@@ -2352,7 +2890,7 @@ Abaixo estão listadas as 52 tabelas ativas no esquema `public` do banco de dado
 | `signed_document_url` | `text` | Sim | - |  |
 | `signed_at` | `timestamp with time zone` | Sim | - |  |
 | `signed_by_name` | `text` | Sim | - |  |
-| `status` | `text` | Sim | `'Pendente'::text` |  |
+| `status` | `text` | Sim | `'Pendente'::text` | Check: `status = ANY (ARRAY['Rascunho'::text, 'Pendente'::text, 'Faturado'::text, 'Aprovado'::text, 'Cancelado'::text])` |
 | `created_at` | `timestamp with time zone` | Sim | `now()` |  |
 | `updated_at` | `timestamp with time zone` | Sim | `now()` |  |
 | `created_by` | `uuid` | Sim | - | FK -> `auth.users.id` |
@@ -2360,8 +2898,8 @@ Abaixo estão listadas as 52 tabelas ativas no esquema `public` do banco de dado
 #### Relacionamentos de Saída (Chaves Estrangeiras Referenciadas)
 
 * A coluna `client_id` aponta para [`clients.id`](#clients)`(id)` (Constraint: `service_order_rcd_client_id_fkey`)
-* A coluna `created_by` aponta para [`auth.users.id`](#auth.users)`(id)` (Constraint: `service_order_rcd_created_by_fkey`)
 * A coluna `equipment_id` aponta para [`equipments.id`](#equipments)`(id)` (Constraint: `service_order_rcd_equipment_id_fkey`)
+* A coluna `created_by` aponta para [`auth.users.id`](#auth.users)`(id)` (Constraint: `service_order_rcd_created_by_fkey`)
 * A coluna `service_order_id` aponta para [`service_orders.id`](#service-orders)`(id)` (Constraint: `service_order_rcd_service_order_id_fkey`)
 
 #### Índices (Indexes)
@@ -2380,7 +2918,7 @@ Abaixo estão listadas as 52 tabelas ativas no esquema `public` do banco de dado
 ### service_orders
 
 * **Segurança de Nível de Linha (RLS):** Habilitada (Enabled)
-* **Propósito:** Ordens de Serviço de manutenção preventiva, corretiva e triagem de equipamentos da frota.
+* **Propósito:** Ordens de Serviço de manutenção preventiva, corretiva e preparação de equipamentos para entrega.
 
 #### Colunas
 
@@ -2397,7 +2935,7 @@ Abaixo estão listadas as 52 tabelas ativas no esquema `public` do banco de dado
 | `executed_by` | `uuid` | Sim | - | FK -> `users_profiles.id` |
 | `execution_date` | `date` | Sim | - |  |
 | `execution_location` | `text` | Sim | - |  |
-| `status` | `USER-DEFINED (service_order_status_type)` | Sim | `'Aberta'::service_order_status_type` | Valores: ["Aberta", "Em Andamento", "Aguardando Peças", "Concluída", "Cancelada", "Encerrada com pendências"] |
+| `status` | `USER-DEFINED` | Sim | `'Aberta'::service_order_status_type` |  |
 | `description` | `text` | Sim | - |  |
 | `notes` | `text` | Sim | - |  |
 | `created_at` | `timestamp with time zone` | Sim | `now()` |  |
@@ -2443,14 +2981,17 @@ Abaixo estão listadas as 52 tabelas ativas no esquema `public` do banco de dado
 
 #### Relacionamentos de Saída (Chaves Estrangeiras Referenciadas)
 
-* A coluna `equipment_id` aponta para [`equipments.id`](#equipments)`(id)` (Constraint: `service_orders_equipment_id_fkey`)
-* A coluna `executed_by` aponta para [`users_profiles.id`](#users-profiles)`(id)` (Constraint: `service_orders_executed_by_fkey`)
 * A coluna `rental_invoice_id` aponta para [`rental_invoices.id`](#rental-invoices)`(id)` (Constraint: `service_orders_rental_invoice_id_fkey`)
+* A coluna `executed_by` aponta para [`users_profiles.id`](#users-profiles)`(id)` (Constraint: `service_orders_executed_by_fkey`)
+* A coluna `equipment_id` aponta para [`equipments.id`](#equipments)`(id)` (Constraint: `service_orders_equipment_id_fkey`)
 
 #### Relacionamentos de Entrada (Tabelas que Referenciam esta)
 
 * [`service_order_labor.service_order_id`](#service-order-labor)`(service_order_id)` aponta para a coluna local `id` (Constraint: `service_order_labor_service_order_id_fkey`)
 * [`service_order_parts.service_order_id`](#service-order-parts)`(service_order_id)` aponta para a coluna local `id` (Constraint: `service_order_parts_service_order_id_fkey`)
+* [`service_order_rcd.service_order_id`](#service-order-rcd)`(service_order_id)` aponta para a coluna local `id` (Constraint: `service_order_rcd_service_order_id_fkey`)
+* [`service_order_parts.service_order_id`](#service-order-parts)`(service_order_id)` aponta para a coluna local `id` (Constraint: `service_order_parts_service_order_id_fkey`)
+* [`service_order_labor.service_order_id`](#service-order-labor)`(service_order_id)` aponta para a coluna local `id` (Constraint: `service_order_labor_service_order_id_fkey`)
 * [`service_order_rcd.service_order_id`](#service-order-rcd)`(service_order_id)` aponta para a coluna local `id` (Constraint: `service_order_rcd_service_order_id_fkey`)
 
 #### Índices (Indexes)
@@ -2468,6 +3009,13 @@ Abaixo estão listadas as 52 tabelas ativas no esquema `public` do banco de dado
   CREATE UNIQUE INDEX service_orders_pkey ON public.service_orders USING btree (id)
   ```
 
+#### Políticas de Segurança (Row Level Security - RLS)
+
+* **`Allow CRUD for authenticated users`**
+  * **Comando:** `ALL` | **Permissivo:** `PERMISSIVE` | **Roles:** `{authenticated}`
+  * **Condição de Leitura/Acesso (USING):** `true`
+  * **Condição de Escrita (WITH CHECK):** `true`
+
 #### Gatilhos (Triggers)
 
 * **`update_service_orders_updated_at`**
@@ -2480,7 +3028,7 @@ Abaixo estão listadas as 52 tabelas ativas no esquema `public` do banco de dado
 ### stock_movements
 
 * **Segurança de Nível de Linha (RLS):** Habilitada (Enabled)
-* **Propósito:** Histórico e auditoria de todas as movimentações de entrada e saída de peças e insumos do estoque.
+* **Propósito:** Auditoria e histórico completo de movimentações de entrada, saída e ajuste de estoque de peças.
 
 #### Colunas
 
@@ -2488,12 +3036,12 @@ Abaixo estão listadas as 52 tabelas ativas no esquema `public` do banco de dado
 | :--- | :--- | :---: | :--- | :--- |
 | `id` | `uuid` | Não | `gen_random_uuid()` | 🔑 PK |
 | `part_id` | `uuid` | Não | - | FK -> `parts.id` |
-| `movement_type` | `text` | Não | - |  |
+| `movement_type` | `text` | Não | - | Check: `movement_type = ANY (ARRAY['ENTRADA'::text, 'SAIDA'::text, 'AJUSTE'::text])` |
 | `quantity` | `numeric` | Não | - |  |
 | `unit_value` | `numeric` | Sim | `0` |  |
 | `previous_stock` | `numeric` | Não | `0` |  |
 | `new_stock` | `numeric` | Não | `0` |  |
-| `reference_type` | `text` | Não | - |  |
+| `reference_type` | `text` | Não | - | Check: `reference_type = ANY (ARRAY['NFE_IMPORT'::text, 'SERVICE_ORDER'::text, 'MANUAL_ADJUSTMENT'::text])` |
 | `reference_id` | `text` | Sim | - |  |
 | `reference_label` | `text` | Sim | - |  |
 | `notes` | `text` | Sim | - |  |
@@ -2524,18 +3072,392 @@ Abaixo estão listadas as 52 tabelas ativas no esquema `public` do banco de dado
   CREATE UNIQUE INDEX stock_movements_pkey ON public.stock_movements USING btree (id)
   ```
 
+#### Políticas de Segurança (Row Level Security - RLS)
+
+* **`Allow authenticated full access to stock_movements`**
+  * **Comando:** `ALL` | **Permissivo:** `PERMISSIVE` | **Roles:** `{authenticated}`
+  * **Condição de Leitura/Acesso (USING):** `true`
+  * **Condição de Escrita (WITH CHECK):** `true`
+
 ---
 
-### users_profiles
+### training_assignments
 
 * **Segurança de Nível de Linha (RLS):** Habilitada (Enabled)
-* **Propósito:** Perfis de usuários do sistema integrados ao Supabase Auth, controlando níveis de acesso (RBAC), dados cadastrais e permissões.
+* **Propósito:** Atribuição de treinamentos de operação do ERP C3Loc a usuários do sistema. Controla o progresso de visualização do vídeo (`last_position_seconds` e `max_position_seconds`), percentual concluído (`progress_pct`), data limite (`due_date`) e status ('Pendente', 'Em Andamento', 'Concluído'). O status "Vencido" é avaliado dinamicamente quando `due_date < CURRENT_DATE` e `status != 'Concluído'`. Somente Administrador e Diretoria podem atribuir cursos, com a restrição de que usuários do perfil 'Diretoria' não podem gerir atribuições para si mesmos.
 
 #### Colunas
 
 | Coluna | Tipo | Nulável | Padrão | Restrições / Notas |
 | :--- | :--- | :---: | :--- | :--- |
-| `id` | `uuid` | Não | - | 🔑 PK; FK -> `auth.users.id` |
+| `id` | `uuid` | Não | `gen_random_uuid()` | 🔑 PK |
+| `training_id` | `uuid` | Não | - | FK -> `trainings.id` (ON DELETE CASCADE) |
+| `user_id` | `uuid` | Não | - | FK -> `users_profiles.id` (ON DELETE CASCADE) |
+| `status` | `text` | Não | `'Pendente'::text` | Check: `status = ANY (ARRAY['Pendente'::text, 'Em Andamento'::text, 'Concluído'::text])` |
+| `due_date` | `date` | Sim | - | Data de vencimento da conclusão do treinamento |
+| `progress_pct` | `numeric(5,2)` | Não | `0` | Check: `progress_pct >= 0 AND progress_pct <= 100` |
+| `last_position_seconds` | `integer` | Não | `0` | Onde o colaborador parou a reprodução (segundos) |
+| `max_position_seconds` | `integer` | Não | `0` | Posição máxima assistida (segundos) |
+| `started_at` | `timestamp with time zone` | Sim | - | Data/hora do início da primeira reprodução |
+| `completed_at` | `timestamp with time zone` | Sim | - | Data/hora da conclusão do treinamento |
+| `last_accessed_at` | `timestamp with time zone` | Sim | - | Data/hora da última sessão ativa |
+| `notes` | `text` | Sim | - | Observações ou feedback do instrutor/gestor |
+| `created_by` | `uuid` | Não | `auth.uid()` | FK -> `users_profiles.id` (Auditoria) |
+| `updated_by` | `uuid` | Sim | - | FK -> `users_profiles.id` (Auditoria) |
+| `created_at` | `timestamp with time zone` | Não | `now()` | Auditoria |
+| `updated_at` | `timestamp with time zone` | Não | `now()` | Auditoria |
+
+#### Relacionamentos de Saída (Chaves Estrangeiras Referenciadas)
+
+* A coluna `training_id` aponta para [`trainings.id`](#trainings)`(id)` (Constraint: `training_assignments_training_id_fkey`)
+* A coluna `user_id` aponta para [`users_profiles.id`](#users-profiles)`(id)` (Constraint: `training_assignments_user_id_fkey`)
+* A coluna `created_by` aponta para [`users_profiles.id`](#users-profiles)`(id)` (Constraint: `training_assignments_created_by_fkey`)
+* A coluna `updated_by` aponta para [`users_profiles.id`](#users-profiles)`(id)` (Constraint: `training_assignments_updated_by_fkey`)
+
+#### Índices (Indexes)
+
+* **`training_assignments_pkey`**
+  ```sql
+  CREATE UNIQUE INDEX training_assignments_pkey ON public.training_assignments USING btree (id)
+  ```
+* **`training_assignments_training_id_user_id_key`**
+  ```sql
+  CREATE UNIQUE INDEX training_assignments_training_id_user_id_key ON public.training_assignments USING btree (training_id, user_id)
+  ```
+* **`idx_training_assignments_user`**
+  ```sql
+  CREATE INDEX idx_training_assignments_user ON public.training_assignments USING btree (user_id)
+  ```
+* **`idx_training_assignments_training`**
+  ```sql
+  CREATE INDEX idx_training_assignments_training ON public.training_assignments USING btree (training_id)
+  ```
+* **`idx_training_assignments_status`**
+  ```sql
+  CREATE INDEX idx_training_assignments_status ON public.training_assignments USING btree (status)
+  ```
+* **`idx_training_assignments_due_date`**
+  ```sql
+  CREATE INDEX idx_training_assignments_due_date ON public.training_assignments USING btree (due_date) WHERE (status <> 'Concluído'::text AND due_date IS NOT NULL)
+  ```
+
+#### Políticas de Segurança (Row Level Security - RLS)
+
+* **`training_assignments_select`**
+  * **Comando:** `SELECT` | **Permissivo:** `PERMISSIVE` | **Roles:** `{authenticated}`
+  * **Condição de Leitura/Acesso (USING):** `((user_id = auth.uid()) OR is_training_manager())`
+* **`training_assignments_insert`**
+  * **Comando:** `INSERT` | **Permissivo:** `PERMISSIVE` | **Roles:** `{authenticated}`
+  * **Condição de Escrita (WITH CHECK):** `(can_manage_training_assignment(user_id) AND (created_by = auth.uid()))`
+* **`training_assignments_update`**
+  * **Comando:** `UPDATE` | **Permissivo:** `PERMISSIVE` | **Roles:** `{authenticated}`
+  * **Condição de Leitura/Acesso (USING):** `can_manage_training_assignment(user_id)`
+  * **Condição de Escrita (WITH CHECK):** `can_manage_training_assignment(user_id)`
+* **`training_assignments_delete`**
+  * **Comando:** `DELETE` | **Permissivo:** `PERMISSIVE` | **Roles:** `{authenticated}`
+  * **Condição de Leitura/Acesso (USING):** `can_manage_training_assignment(user_id)`
+
+#### Gatilhos (Triggers)
+
+* **`trg_training_assignments_audit`**
+  ```sql
+  CREATE TRIGGER trg_training_assignments_audit BEFORE INSERT OR UPDATE ON public.training_assignments FOR EACH ROW EXECUTE FUNCTION fn_training_set_audit_fields()
+  ```
+
+---
+
+### training_categories
+
+* **Segurança de Nível de Linha (RLS):** Habilitada (Enabled)
+* **Propósito:** Categorias dos treinamentos operacionais do ERP (ex.: Sistema C3Loc, Operacional, Comercial & CRM, Financeiro, Logística, Manutenção, Recursos Humanos).
+
+#### Colunas
+
+| Coluna | Tipo | Nulável | Padrão | Restrições / Notas |
+| :--- | :--- | :---: | :--- | :--- |
+| `id` | `uuid` | Não | `gen_random_uuid()` | 🔑 PK |
+| `name` | `text` | Não | - | ✨ Unique |
+| `description` | `text` | Sim | - |  |
+| `icon` | `text` | Sim | - | Nome do ícone Material Symbols |
+| `active` | `boolean` | Não | `true` |  |
+| `created_by` | `uuid` | Sim | `auth.uid()` | FK -> `users_profiles.id` |
+| `updated_by` | `uuid` | Sim | - | FK -> `users_profiles.id` |
+| `created_at` | `timestamp with time zone` | Não | `now()` |  |
+| `updated_at` | `timestamp with time zone` | Não | `now()` |  |
+
+#### Relacionamentos de Saída (Chaves Estrangeiras Referenciadas)
+
+* A coluna `created_by` aponta para [`users_profiles.id`](#users-profiles)`(id)` (Constraint: `training_categories_created_by_fkey`)
+* A coluna `updated_by` aponta para [`users_profiles.id`](#users-profiles)`(id)` (Constraint: `training_categories_updated_by_fkey`)
+
+#### Relacionamentos de Entrada (Tabelas que Referenciam esta)
+
+* [`trainings.category_id`](#trainings)`(category_id)` aponta para a coluna local `id` (Constraint: `trainings_category_id_fkey`)
+
+#### Índices (Indexes)
+
+* **`training_categories_pkey`**
+  ```sql
+  CREATE UNIQUE INDEX training_categories_pkey ON public.training_categories USING btree (id)
+  ```
+* **`training_categories_name_key`**
+  ```sql
+  CREATE UNIQUE INDEX training_categories_name_key ON public.training_categories USING btree (name)
+  ```
+
+#### Políticas de Segurança (Row Level Security - RLS)
+
+* **`training_categories_select`**
+  * **Comando:** `SELECT` | **Permissivo:** `PERMISSIVE` | **Roles:** `{authenticated}`
+  * **Condição de Leitura/Acesso (USING):** `true`
+* **`training_categories_insert`**
+  * **Comando:** `INSERT` | **Permissivo:** `PERMISSIVE` | **Roles:** `{authenticated}`
+  * **Condição de Escrita (WITH CHECK):** `is_training_manager()`
+* **`training_categories_update`**
+  * **Comando:** `UPDATE` | **Permissivo:** `PERMISSIVE` | **Roles:** `{authenticated}`
+  * **Condição de Leitura/Acesso (USING):** `is_training_manager()`
+  * **Condição de Escrita (WITH CHECK):** `is_training_manager()`
+* **`training_categories_delete`**
+  * **Comando:** `DELETE` | **Permissivo:** `PERMISSIVE` | **Roles:** `{authenticated}`
+  * **Condição de Leitura/Acesso (USING):** `is_training_manager()`
+
+#### Gatilhos (Triggers)
+
+* **`trg_training_categories_audit`**
+  ```sql
+  CREATE TRIGGER trg_training_categories_audit BEFORE INSERT OR UPDATE ON public.training_categories FOR EACH ROW EXECUTE FUNCTION fn_training_set_audit_fields()
+  ```
+
+---
+
+### training_topic_catalog
+
+* **Segurança de Nível de Linha (RLS):** Habilitada (Enabled)
+* **Propósito:** Catálogo padronizado de tópicos de capacitação do ERP que podem ser associados a múltiplos treinamentos.
+
+#### Colunas
+
+| Coluna | Tipo | Nulável | Padrão | Restrições / Notas |
+| :--- | :--- | :---: | :--- | :--- |
+| `id` | `uuid` | Não | `gen_random_uuid()` | 🔑 PK |
+| `name` | `text` | Não | - | Nome do tópico |
+| `description` | `text` | Sim | - |  |
+| `active` | `boolean` | Não | `true` |  |
+| `created_by` | `uuid` | Sim | `auth.uid()` | FK -> `users_profiles.id` |
+| `updated_by` | `uuid` | Sim | - | FK -> `users_profiles.id` |
+| `created_at` | `timestamp with time zone` | Não | `now()` |  |
+| `updated_at` | `timestamp with time zone` | Não | `now()` |  |
+
+#### Relacionamentos de Saída (Chaves Estrangeiras Referenciadas)
+
+* A coluna `created_by` aponta para [`users_profiles.id`](#users-profiles)`(id)` (Constraint: `training_topic_catalog_created_by_fkey`)
+* A coluna `updated_by` aponta para [`users_profiles.id`](#users-profiles)`(id)` (Constraint: `training_topic_catalog_updated_by_fkey`)
+
+#### Relacionamentos de Entrada (Tabelas que Referenciam esta)
+
+* [`training_topics.topic_id`](#training-topics)`(topic_id)` aponta para a coluna local `id` (Constraint: `training_topics_topic_id_fkey`)
+
+#### Índices (Indexes)
+
+* **`training_topic_catalog_pkey`**
+  ```sql
+  CREATE UNIQUE INDEX training_topic_catalog_pkey ON public.training_topic_catalog USING btree (id)
+  ```
+* **`training_topic_catalog_name_key`**
+  ```sql
+  CREATE UNIQUE INDEX training_topic_catalog_name_key ON public.training_topic_catalog USING btree (lower(name))
+  ```
+
+#### Políticas de Segurança (Row Level Security - RLS)
+
+* **`training_topic_catalog_select`**
+  * **Comando:** `SELECT` | **Permissivo:** `PERMISSIVE` | **Roles:** `{authenticated}`
+  * **Condição de Leitura/Acesso (USING):** `true`
+* **`training_topic_catalog_insert`**
+  * **Comando:** `INSERT` | **Permissivo:** `PERMISSIVE` | **Roles:** `{authenticated}`
+  * **Condição de Escrita (WITH CHECK):** `is_training_manager()`
+* **`training_topic_catalog_update`**
+  * **Comando:** `UPDATE` | **Permissivo:** `PERMISSIVE` | **Roles:** `{authenticated}`
+  * **Condição de Leitura/Acesso (USING):** `is_training_manager()`
+  * **Condição de Escrita (WITH CHECK):** `is_training_manager()`
+* **`training_topic_catalog_delete`**
+  * **Comando:** `DELETE` | **Permissivo:** `PERMISSIVE` | **Roles:** `{authenticated}`
+  * **Condição de Leitura/Acesso (USING):** `is_training_manager()`
+
+#### Gatilhos (Triggers)
+
+* **`trg_training_topic_catalog_audit`**
+  ```sql
+  CREATE TRIGGER trg_training_topic_catalog_audit BEFORE INSERT OR UPDATE ON public.training_topic_catalog FOR EACH ROW EXECUTE FUNCTION fn_training_set_audit_fields()
+  ```
+
+---
+
+### training_topics
+
+* **Segurança de Nível de Linha (RLS):** Habilitada (Enabled)
+* **Propósito:** Tabela de associação entre treinamentos (`trainings`) e os tópicos abordados (`training_topic_catalog`). Define a ordem de exibição (`position`), o instante de início (`start_seconds`) e término (`end_seconds`) para sincronização interativa de capítulos no player de vídeo.
+
+#### Colunas
+
+| Coluna | Tipo | Nulável | Padrão | Restrições / Notas |
+| :--- | :--- | :---: | :--- | :--- |
+| `id` | `uuid` | Não | `gen_random_uuid()` | 🔑 PK |
+| `training_id` | `uuid` | Não | - | FK -> `trainings.id` (ON DELETE CASCADE) |
+| `topic_id` | `uuid` | Não | - | FK -> `training_topic_catalog.id` (ON DELETE RESTRICT) |
+| `position` | `integer` | Não | `0` | Check: `position >= 0` |
+| `start_seconds` | `integer` | Não | `0` | Check: `start_seconds >= 0` |
+| `end_seconds` | `integer` | Sim | - | Check: `end_seconds IS NULL OR end_seconds > start_seconds` |
+| `description` | `text` | Sim | - | Descrição específica do capítulo nesta aula |
+| `created_by` | `uuid` | Sim | `auth.uid()` | FK -> `users_profiles.id` |
+| `updated_by` | `uuid` | Sim | - | FK -> `users_profiles.id` |
+| `created_at` | `timestamp with time zone` | Não | `now()` |  |
+| `updated_at` | `timestamp with time zone` | Não | `now()` |  |
+
+#### Relacionamentos de Saída (Chaves Estrangeiras Referenciadas)
+
+* A coluna `training_id` aponta para [`trainings.id`](#trainings)`(id)` (Constraint: `training_topics_training_id_fkey`)
+* A coluna `topic_id` aponta para [`training_topic_catalog.id`](#training-topic-catalog)`(id)` (Constraint: `training_topics_topic_id_fkey`)
+* A coluna `created_by` aponta para [`users_profiles.id`](#users-profiles)`(id)` (Constraint: `training_topics_created_by_fkey`)
+* A coluna `updated_by` aponta para [`users_profiles.id`](#users-profiles)`(id)` (Constraint: `training_topics_updated_by_fkey`)
+
+#### Índices (Indexes)
+
+* **`training_topics_pkey`**
+  ```sql
+  CREATE UNIQUE INDEX training_topics_pkey ON public.training_topics USING btree (id)
+  ```
+* **`training_topics_training_id_topic_id_key`**
+  ```sql
+  CREATE UNIQUE INDEX training_topics_training_id_topic_id_key ON public.training_topics USING btree (training_id, topic_id)
+  ```
+* **`idx_training_topics_training`**
+  ```sql
+  CREATE INDEX idx_training_topics_training ON public.training_topics USING btree (training_id, position)
+  ```
+* **`idx_training_topics_topic`**
+  ```sql
+  CREATE INDEX idx_training_topics_topic ON public.training_topics USING btree (topic_id)
+  ```
+
+#### Políticas de Segurança (Row Level Security - RLS)
+
+* **`training_topics_select`**
+  * **Comando:** `SELECT` | **Permissivo:** `PERMISSIVE` | **Roles:** `{authenticated}`
+  * **Condição de Leitura/Acesso (USING):** `(EXISTS (SELECT 1 FROM public.trainings t WHERE (t.id = training_topics.training_id)))`
+* **`training_topics_insert`**
+  * **Comando:** `INSERT` | **Permissivo:** `PERMISSIVE` | **Roles:** `{authenticated}`
+  * **Condição de Escrita (WITH CHECK):** `(is_training_manager() AND (EXISTS (SELECT 1 FROM public.trainings t WHERE ((t.id = training_topics.training_id) AND (t.created_by = auth.uid())))))`
+* **`training_topics_update`**
+  * **Comando:** `UPDATE` | **Permissivo:** `PERMISSIVE` | **Roles:** `{authenticated}`
+  * **Condição de Leitura/Acesso (USING):** `(is_training_manager() AND (EXISTS (SELECT 1 FROM public.trainings t WHERE ((t.id = training_topics.training_id) AND (t.created_by = auth.uid())))))`
+  * **Condição de Escrita (WITH CHECK):** `(is_training_manager() AND (EXISTS (SELECT 1 FROM public.trainings t WHERE ((t.id = training_topics.training_id) AND (t.created_by = auth.uid())))))`
+* **`training_topics_delete`**
+  * **Comando:** `DELETE` | **Permissivo:** `PERMISSIVE` | **Roles:** `{authenticated}`
+  * **Condição de Leitura/Acesso (USING):** `(is_training_manager() AND (EXISTS (SELECT 1 FROM public.trainings t WHERE ((t.id = training_topics.training_id) AND (t.created_by = auth.uid())))))`
+
+#### Gatilhos (Triggers)
+
+* **`trg_training_topics_audit`**
+  ```sql
+  CREATE TRIGGER trg_training_topics_audit BEFORE INSERT OR UPDATE ON public.training_topics FOR EACH ROW EXECUTE FUNCTION fn_training_set_audit_fields()
+  ```
+
+---
+
+### trainings
+
+* **Segurança de Nível de Linha (RLS):** Habilitada (Enabled)
+* **Propósito:** Catálogo principal de treinamentos de capacitação e operação do ERP C3Loc (*não confundir com hr_employee_trainings do RH*). Armazena o vídeo do YouTube (com extração automática e validação do `youtube_video_id`), duração em segundos, categoria, nível de complexidade, instrutor, competências/objetivos, obrigatoriedade e auditoria. Somente usuários 'Administrador' e 'Diretoria' podem cadastrar e cada gestor só pode excluir treinamentos cadastrados por si próprio.
+
+#### Colunas
+
+| Coluna | Tipo | Nulável | Padrão | Restrições / Notas |
+| :--- | :--- | :---: | :--- | :--- |
+| `id` | `uuid` | Não | `gen_random_uuid()` | 🔑 PK |
+| `title` | `text` | Não | - | Título da capacitação |
+| `subtitle` | `text` | Sim | - | Subtítulo / resumo curto |
+| `description` | `text` | Sim | - | Descrição detalhada do treinamento |
+| `category_id` | `uuid` | Não | - | FK -> `training_categories.id` (ON DELETE RESTRICT) |
+| `level` | `text` | Não | `'Iniciante'::text` | Check: `level = ANY (ARRAY['Iniciante'::text, 'Intermediário'::text, 'Avançado'::text])` |
+| `youtube_url` | `text` | Não | - | URL completa do vídeo no YouTube |
+| `youtube_video_id` | `text` | Sim | - | Coluna gerada (*STORED*) extraindo os 11 caracteres do ID |
+| `duration_seconds` | `integer` | Não | - | Duração total em segundos. Check: `duration_seconds > 0` |
+| `instructor_name` | `text` | Sim | - | Nome do facilitador ou instrutor |
+| `objectives` | `text[]` | Não | `'{}'::text[]` | Lista de competências e objetivos de aprendizagem |
+| `is_mandatory` | `boolean` | Não | `false` | Indica se é obrigatório na integração do colaborador |
+| `default_due_days` | `integer` | Sim | - | Prazo padrão de dias sugerido para conclusão |
+| `active` | `boolean` | Não | `true` | Ativo para novas atribuições |
+| `created_by` | `uuid` | Não | `auth.uid()` | FK -> `users_profiles.id` (Restringe exclusão ao criador) |
+| `updated_by` | `uuid` | Sim | - | FK -> `users_profiles.id` |
+| `created_at` | `timestamp with time zone` | Não | `now()` |  |
+| `updated_at` | `timestamp with time zone` | Não | `now()` |  |
+
+#### Relacionamentos de Saída (Chaves Estrangeiras Referenciadas)
+
+* A coluna `category_id` aponta para [`training_categories.id`](#training-categories)`(id)` (Constraint: `trainings_category_id_fkey`)
+* A coluna `created_by` aponta para [`users_profiles.id`](#users-profiles)`(id)` (Constraint: `trainings_created_by_fkey`)
+* A coluna `updated_by` aponta para [`users_profiles.id`](#users-profiles)`(id)` (Constraint: `trainings_updated_by_fkey`)
+
+#### Relacionamentos de Entrada (Tabelas que Referenciam esta)
+
+* [`training_topics.training_id`](#training-topics)`(training_id)` aponta para a coluna local `id` (Constraint: `training_topics_training_id_fkey`)
+* [`training_assignments.training_id`](#training-assignments)`(training_id)` aponta para a coluna local `id` (Constraint: `training_assignments_training_id_fkey`)
+
+#### Índices (Indexes)
+
+* **`trainings_pkey`**
+  ```sql
+  CREATE UNIQUE INDEX trainings_pkey ON public.trainings USING btree (id)
+  ```
+* **`idx_trainings_category`**
+  ```sql
+  CREATE INDEX idx_trainings_category ON public.trainings USING btree (category_id)
+  ```
+* **`idx_trainings_created_by`**
+  ```sql
+  CREATE INDEX idx_trainings_created_by ON public.trainings USING btree (created_by)
+  ```
+* **`idx_trainings_active`**
+  ```sql
+  CREATE INDEX idx_trainings_active ON public.trainings USING btree (active) WHERE (active = true)
+  ```
+
+#### Políticas de Segurança (Row Level Security - RLS)
+
+* **`trainings_select`**
+  * **Comando:** `SELECT` | **Permissivo:** `PERMISSIVE` | **Roles:** `{authenticated}`
+  * **Condição de Leitura/Acesso (USING):** `(is_training_manager() OR (EXISTS (SELECT 1 FROM public.training_assignments a WHERE ((a.training_id = trainings.id) AND (a.user_id = auth.uid())))))`
+* **`trainings_insert`**
+  * **Comando:** `INSERT` | **Permissivo:** `PERMISSIVE` | **Roles:** `{authenticated}`
+  * **Condição de Escrita (WITH CHECK):** `(is_training_manager() AND (created_by = auth.uid()))`
+* **`trainings_update`**
+  * **Comando:** `UPDATE` | **Permissivo:** `PERMISSIVE` | **Roles:** `{authenticated}`
+  * **Condição de Leitura/Acesso (USING):** `(is_training_manager() AND (created_by = auth.uid()))`
+  * **Condição de Escrita (WITH CHECK):** `(is_training_manager() AND (created_by = auth.uid()))`
+* **`trainings_delete`**
+  * **Comando:** `DELETE` | **Permissivo:** `PERMISSIVE` | **Roles:** `{authenticated}`
+  * **Condição de Leitura/Acesso (USING):** `(is_training_manager() AND (created_by = auth.uid()))`
+
+#### Gatilhos (Triggers)
+
+* **`trg_trainings_audit`**
+  ```sql
+  CREATE TRIGGER trg_trainings_audit BEFORE INSERT OR UPDATE ON public.trainings FOR EACH ROW EXECUTE FUNCTION fn_training_set_audit_fields()
+  ```
+
+---
+
+### users_profiles
+
+* **Segurança de Nível de Linha (RLS):** Habilitada (Enabled)
+* **Propósito:** Perfis de usuários do sistema, níveis de acesso (RBAC), dados cadastrais, cargo atual e vínculo com autenticação Supabase.
+
+#### Colunas
+
+| Coluna | Tipo | Nulável | Padrão | Restrições / Notas |
+| :--- | :--- | :---: | :--- | :--- |
+| `id` | `uuid` | Não | - | 🔑 PK \| FK -> `auth.users.id` |
 | `full_name` | `text` | Não | - |  |
 | `cpf` | `text` | Sim | - | ✨ Unique |
 | `birth_date` | `date` | Sim | - |  |
@@ -2548,7 +3470,7 @@ Abaixo estão listadas as 52 tabelas ativas no esquema `public` do banco de dado
 | `address_state` | `text` | Sim | - |  |
 | `address_zip` | `text` | Sim | - |  |
 | `role_title` | `text` | Sim | - |  |
-| `access_level` | `USER-DEFINED (access_level_type)` | Sim | `'Financeiro'::access_level_type` | Valores: ["Administrador", "Diretoria", "Gerente", "Comercial", "Logística", "Manutenção", "Financeiro", "Recursos Humanos", "Usuário"] |
+| `access_level` | `USER-DEFINED` | Sim | `'Financeiro'::access_level_type` |  |
 | `active` | `boolean` | Sim | `true` |  |
 | `created_at` | `timestamp with time zone` | Sim | `now()` |  |
 | `updated_at` | `timestamp with time zone` | Sim | `now()` |  |
@@ -2571,9 +3493,45 @@ Abaixo estão listadas as 52 tabelas ativas no esquema `public` do banco de dado
 * [`crm_leads.owner_id`](#crm-leads)`(owner_id)` aponta para a coluna local `id` (Constraint: `crm_leads_owner_id_fkey`)
 * [`crm_tasks.assigned_to`](#crm-tasks)`(assigned_to)` aponta para a coluna local `id` (Constraint: `crm_tasks_assigned_to_fkey`)
 * [`crm_tasks.created_by`](#crm-tasks)`(created_by)` aponta para a coluna local `id` (Constraint: `crm_tasks_created_by_fkey`)
-* [`equipment_documents.created_by`](#equipment-documents)`(created_by)` aponta para a coluna local `id` (Constraint: `equipment_documents_created_by_fkey`)
 * [`equipment_documents.updated_by`](#equipment-documents)`(updated_by)` aponta para a coluna local `id` (Constraint: `equipment_documents_updated_by_fkey`)
+* [`equipment_documents.created_by`](#equipment-documents)`(created_by)` aponta para a coluna local `id` (Constraint: `equipment_documents_created_by_fkey`)
 * [`equipment_hour_meter_logs.created_by`](#equipment-hour-meter-logs)`(created_by)` aponta para a coluna local `id` (Constraint: `equipment_hour_meter_logs_created_by_fkey`)
+* [`equipments.created_by`](#equipments)`(created_by)` aponta para a coluna local `id` (Constraint: `equipments_created_by_fkey`)
+* [`hr_employee_documents.user_id`](#hr-employee-documents)`(user_id)` aponta para a coluna local `id` (Constraint: `hr_employee_documents_user_id_fkey`)
+* [`hr_employee_documents.registered_by`](#hr-employee-documents)`(registered_by)` aponta para a coluna local `id` (Constraint: `hr_employee_documents_registered_by_fkey`)
+* [`hr_employee_integrations.user_id`](#hr-employee-integrations)`(user_id)` aponta para a coluna local `id` (Constraint: `hr_employee_integrations_user_id_fkey`)
+* [`hr_employee_integrations.registered_by`](#hr-employee-integrations)`(registered_by)` aponta para a coluna local `id` (Constraint: `hr_employee_integrations_registered_by_fkey`)
+* [`hr_employee_positions.registered_by`](#hr-employee-positions)`(registered_by)` aponta para a coluna local `id` (Constraint: `hr_employee_positions_registered_by_fkey`)
+* [`hr_employee_positions.user_id`](#hr-employee-positions)`(user_id)` aponta para a coluna local `id` (Constraint: `hr_employee_positions_user_id_fkey`)
+* [`hr_employee_trainings.registered_by`](#hr-employee-trainings)`(registered_by)` aponta para a coluna local `id` (Constraint: `hr_employee_trainings_registered_by_fkey`)
+* [`hr_employee_trainings.user_id`](#hr-employee-trainings)`(user_id)` aponta para a coluna local `id` (Constraint: `hr_employee_trainings_user_id_fkey`)
+* [`hr_epi_records.user_id`](#hr-epi-records)`(user_id)` aponta para a coluna local `id` (Constraint: `hr_epi_records_user_id_fkey`)
+* [`hr_epi_records.uploaded_by`](#hr-epi-records)`(uploaded_by)` aponta para a coluna local `id` (Constraint: `hr_epi_records_uploaded_by_fkey`)
+* [`hr_time_records.adjusted_by`](#hr-time-records)`(adjusted_by)` aponta para a coluna local `id` (Constraint: `hr_time_records_adjusted_by_fkey`)
+* [`hr_time_records.user_id`](#hr-time-records)`(user_id)` aponta para a coluna local `id` (Constraint: `hr_time_records_user_id_fkey`)
+* [`hr_timesheet_reports.approved_by`](#hr-timesheet-reports)`(approved_by)` aponta para a coluna local `id` (Constraint: `hr_timesheet_reports_approved_by_fkey`)
+* [`hr_timesheet_reports.generated_by`](#hr-timesheet-reports)`(generated_by)` aponta para a coluna local `id` (Constraint: `hr_timesheet_reports_generated_by_fkey`)
+* [`hr_timesheet_reports.user_id`](#hr-timesheet-reports)`(user_id)` aponta para a coluna local `id` (Constraint: `hr_timesheet_reports_user_id_fkey`)
+* [`hr_vacation_approvals.approver_id`](#hr-vacation-approvals)`(approver_id)` aponta para a coluna local `id` (Constraint: `hr_vacation_approvals_approver_id_fkey`)
+* [`hr_vacation_requests.user_id`](#hr-vacation-requests)`(user_id)` aponta para a coluna local `id` (Constraint: `hr_vacation_requests_user_id_fkey`)
+* [`logistics_triage_photos.uploaded_by`](#logistics-triage-photos)`(uploaded_by)` aponta para a coluna local `id` (Constraint: `logistics_triage_photos_uploaded_by_fkey`)
+* [`nfe_imports.created_by`](#nfe-imports)`(created_by)` aponta para a coluna local `id` (Constraint: `nfe_imports_created_by_fkey`)
+* [`parts.created_by`](#parts)`(created_by)` aponta para a coluna local `id` (Constraint: `parts_created_by_fkey`)
+* [`rental_billing_invoices.created_by`](#rental-billing-invoices)`(created_by)` aponta para a coluna local `id` (Constraint: `rental_billing_invoices_created_by_fkey`)
+* [`rental_invoices.created_by`](#rental-invoices)`(created_by)` aponta para a coluna local `id` (Constraint: `rental_invoices_created_by_fkey`)
+* [`service_orders.executed_by`](#service-orders)`(executed_by)` aponta para a coluna local `id` (Constraint: `service_orders_executed_by_fkey`)
+* [`stock_movements.created_by`](#stock-movements)`(created_by)` aponta para a coluna local `id` (Constraint: `stock_movements_created_by_fkey`)
+* [`equipment_documents.created_by`](#equipment-documents)`(created_by)` aponta para a coluna local `id` (Constraint: `equipment_documents_created_by_fkey`)
+* [`bills.created_by`](#bills)`(created_by)` aponta para a coluna local `id` (Constraint: `bills_created_by_fkey`)
+* [`crm_deal_activities.performed_by`](#crm-deal-activities)`(performed_by)` aponta para a coluna local `id` (Constraint: `crm_deal_activities_performed_by_fkey`)
+* [`crm_deal_contract_forms.created_by`](#crm-deal-contract-forms)`(created_by)` aponta para a coluna local `id` (Constraint: `crm_deal_contract_forms_created_by_fkey`)
+* [`crm_deal_contract_forms.updated_by`](#crm-deal-contract-forms)`(updated_by)` aponta para a coluna local `id` (Constraint: `crm_deal_contract_forms_updated_by_fkey`)
+* [`crm_deal_contracts.generated_by`](#crm-deal-contracts)`(generated_by)` aponta para a coluna local `id` (Constraint: `crm_deal_contracts_generated_by_fkey`)
+* [`crm_deal_contracts.signed_uploaded_by`](#crm-deal-contracts)`(signed_uploaded_by)` aponta para a coluna local `id` (Constraint: `crm_deal_contracts_signed_uploaded_by_fkey`)
+* [`crm_deals.owner_id`](#crm-deals)`(owner_id)` aponta para a coluna local `id` (Constraint: `crm_deals_owner_id_fkey`)
+* [`crm_leads.owner_id`](#crm-leads)`(owner_id)` aponta para a coluna local `id` (Constraint: `crm_leads_owner_id_fkey`)
+* [`crm_tasks.assigned_to`](#crm-tasks)`(assigned_to)` aponta para a coluna local `id` (Constraint: `crm_tasks_assigned_to_fkey`)
+* [`crm_tasks.created_by`](#crm-tasks)`(created_by)` aponta para a coluna local `id` (Constraint: `crm_tasks_created_by_fkey`)
 * [`equipments.created_by`](#equipments)`(created_by)` aponta para a coluna local `id` (Constraint: `equipments_created_by_fkey`)
 * [`hr_employee_documents.registered_by`](#hr-employee-documents)`(registered_by)` aponta para a coluna local `id` (Constraint: `hr_employee_documents_registered_by_fkey`)
 * [`hr_employee_documents.user_id`](#hr-employee-documents)`(user_id)` aponta para a coluna local `id` (Constraint: `hr_employee_documents_user_id_fkey`)
@@ -2595,10 +3553,12 @@ Abaixo estão listadas as 52 tabelas ativas no esquema `public` do banco de dado
 * [`logistics_triage_photos.uploaded_by`](#logistics-triage-photos)`(uploaded_by)` aponta para a coluna local `id` (Constraint: `logistics_triage_photos_uploaded_by_fkey`)
 * [`nfe_imports.created_by`](#nfe-imports)`(created_by)` aponta para a coluna local `id` (Constraint: `nfe_imports_created_by_fkey`)
 * [`parts.created_by`](#parts)`(created_by)` aponta para a coluna local `id` (Constraint: `parts_created_by_fkey`)
-* [`rental_billing_invoices.created_by`](#rental-billing-invoices)`(created_by)` aponta para a coluna local `id` (Constraint: `rental_billing_invoices_created_by_fkey`)
 * [`rental_invoices.created_by`](#rental-invoices)`(created_by)` aponta para a coluna local `id` (Constraint: `rental_invoices_created_by_fkey`)
 * [`service_orders.executed_by`](#service-orders)`(executed_by)` aponta para a coluna local `id` (Constraint: `service_orders_executed_by_fkey`)
 * [`stock_movements.created_by`](#stock-movements)`(created_by)` aponta para a coluna local `id` (Constraint: `stock_movements_created_by_fkey`)
+* [`rental_billing_invoices.created_by`](#rental-billing-invoices)`(created_by)` aponta para a coluna local `id` (Constraint: `rental_billing_invoices_created_by_fkey`)
+* [`equipment_documents.updated_by`](#equipment-documents)`(updated_by)` aponta para a coluna local `id` (Constraint: `equipment_documents_updated_by_fkey`)
+* [`equipment_hour_meter_logs.created_by`](#equipment-hour-meter-logs)`(created_by)` aponta para a coluna local `id` (Constraint: `equipment_hour_meter_logs_created_by_fkey`)
 
 #### Índices (Indexes)
 
@@ -2615,6 +3575,13 @@ Abaixo estão listadas as 52 tabelas ativas no esquema `public` do banco de dado
   CREATE UNIQUE INDEX users_profiles_pkey ON public.users_profiles USING btree (id)
   ```
 
+#### Políticas de Segurança (Row Level Security - RLS)
+
+* **`Allow CRUD for authenticated users`**
+  * **Comando:** `ALL` | **Permissivo:** `PERMISSIVE` | **Roles:** `{authenticated}`
+  * **Condição de Leitura/Acesso (USING):** `true`
+  * **Condição de Escrita (WITH CHECK):** `true`
+
 #### Gatilhos (Triggers)
 
 * **`update_users_profiles_updated_at`**
@@ -2624,35 +3591,273 @@ Abaixo estão listadas as 52 tabelas ativas no esquema `public` do banco de dado
 
 ---
 
-## Tipos Enumerados (Enums)
+## Tipos Enumerados (Custom Enums)
 
-Abaixo estão os tipos enumerados customizados criados no banco de dados:
+O banco de dados utiliza 5 tipos enumerados personalizados para padronizar status e níveis de acesso no sistema:
 
 ### `access_level_type`
 
-* **Valores:** `Administrador`, `Diretoria`, `Gerente`, `Comercial`, `Logística`, `Manutenção`, `Financeiro`, `Recursos Humanos`, `Usuário`
+* **Propósito:** Níveis de permissão e controle de acesso hierárquico (RBAC) dos colaboradores e usuários.
+* **Valores Permitidos:**
+  - `'Administrador'`
+  - `'Diretoria'`
+  - `'Gerente'`
+  - `'Comercial'`
+  - `'Logística'`
+  - `'Manutenção'`
+  - `'Financeiro'`
+  - `'Recursos Humanos'`
+  - `'Usuário'`
 
-### `billing_status_type`
-
-* **Valores:** `Pendente`, `Faturado`, `Emitida`, `Cancelada`
-
-### `equipment_status_type`
-
-* **Valores:** `Disponível`, `Locado`, `Em Manutenção`, `Inativo`
-
-### `reconciliation_status_type`
-
-* **Valores:** `Pendente`, `Atrasado`, `Recebido`, `Divergente`, `No prazo`
-
-### `service_order_status_type`
-
-* **Valores:** `Aberta`, `Em Andamento`, `Aguardando Peças`, `Concluída`, `Cancelada`, `Encerrada com pendências`
+```sql
+CREATE TYPE public.access_level_type AS ENUM (
+  'Administrador',
+  'Diretoria',
+  'Gerente',
+  'Comercial',
+  'Logística',
+  'Manutenção',
+  'Financeiro',
+  'Recursos Humanos',
+  'Usuário'
+);
+```
 
 ---
 
-## Definição das Funções Auxiliares
+### `billing_status_type`
 
-Estas funções PL/pgSQL são utilizadas por gatilhos, rotinas atômicas de faturamento ou como utilitários de segurança:
+* **Propósito:** Status do fluxo de faturamento de contratos e notas de débito de locação.
+* **Valores Permitidos:**
+  - `'Pendente'`
+  - `'Faturado'`
+  - `'Emitida'`
+  - `'Cancelada'`
+
+```sql
+CREATE TYPE public.billing_status_type AS ENUM (
+  'Pendente',
+  'Faturado',
+  'Emitida',
+  'Cancelada'
+);
+```
+
+---
+
+### `equipment_status_type`
+
+* **Propósito:** Status operacional do inventário de máquinas e frotas.
+* **Valores Permitidos:**
+  - `'Disponível'`
+  - `'Locado'`
+  - `'Em Manutenção'`
+  - `'Inativo'`
+
+```sql
+CREATE TYPE public.equipment_status_type AS ENUM (
+  'Disponível',
+  'Locado',
+  'Em Manutenção',
+  'Inativo'
+);
+```
+
+---
+
+### `reconciliation_status_type`
+
+* **Propósito:** Status da conciliação bancária de lançamentos e extratos do Banco do Brasil e Asaas.
+* **Valores Permitidos:**
+  - `'Pendente'`
+  - `'Atrasado'`
+  - `'Recebido'`
+  - `'Divergente'`
+  - `'No prazo'`
+
+```sql
+CREATE TYPE public.reconciliation_status_type AS ENUM (
+  'Pendente',
+  'Atrasado',
+  'Recebido',
+  'Divergente',
+  'No prazo'
+);
+```
+
+---
+
+### `service_order_status_type`
+
+* **Propósito:** Status de ciclo de vida das Ordens de Serviço (OS) de manutenção e oficina.
+* **Valores Permitidos:**
+  - `'Aberta'`
+  - `'Em Andamento'`
+  - `'Aguardando Peças'`
+  - `'Concluída'`
+  - `'Cancelada'`
+  - `'Encerrada com pendências'`
+
+```sql
+CREATE TYPE public.service_order_status_type AS ENUM (
+  'Aberta',
+  'Em Andamento',
+  'Aguardando Peças',
+  'Concluída',
+  'Cancelada',
+  'Encerrada com pendências'
+);
+```
+
+---
+
+## Gatilhos do Sistema (Triggers)
+
+A tabela a seguir consolida os 14 gatilhos ativos no banco de dados e suas respectivas funções:
+
+| Tabela | Nome do Gatilho | Momento / Evento | Função Executada |
+| :--- | :--- | :---: | :--- |
+| [`clients`](#clients) | `update_clients_updated_at` | `BEFORE UPDATE` | `update_updated_at_column()` |
+| [`equipments`](#equipments) | `update_equipments_updated_at` | `BEFORE UPDATE` | `update_updated_at_column()` |
+| [`hr_vacation_approvals`](#hr-vacation-approvals) | `trg_vacation_approval_status` | `AFTER INSERT, UPDATE` | `fn_update_vacation_request_status()` |
+| [`parts`](#parts) | `update_parts_updated_at` | `BEFORE UPDATE` | `update_updated_at_column()` |
+| [`rental_invoices`](#rental-invoices) | `tr_update_client_score` | `AFTER INSERT, UPDATE` | `update_client_average_score()` |
+| [`rental_invoices`](#rental-invoices) | `trg_set_invoice_number` | `BEFORE INSERT` | `generate_invoice_number()` |
+| [`rental_invoices`](#rental-invoices) | `update_rental_invoices_updated_at` | `BEFORE UPDATE` | `update_updated_at_column()` |
+| [`service_orders`](#service-orders) | `update_service_orders_updated_at` | `BEFORE UPDATE` | `update_updated_at_column()` |
+| [`training_assignments`](#training-assignments) | `trg_training_assignments_audit` | `BEFORE INSERT, UPDATE` | `fn_training_set_audit_fields()` |
+| [`training_categories`](#training-categories) | `trg_training_categories_audit` | `BEFORE INSERT, UPDATE` | `fn_training_set_audit_fields()` |
+| [`training_topic_catalog`](#training-topic-catalog) | `trg_training_topic_catalog_audit` | `BEFORE INSERT, UPDATE` | `fn_training_set_audit_fields()` |
+| [`training_topics`](#training-topics) | `trg_training_topics_audit` | `BEFORE INSERT, UPDATE` | `fn_training_set_audit_fields()` |
+| [`trainings`](#trainings) | `trg_trainings_audit` | `BEFORE INSERT, UPDATE` | `fn_training_set_audit_fields()` |
+| [`users_profiles`](#users-profiles) | `update_users_profiles_updated_at` | `BEFORE UPDATE` | `update_updated_at_column()` |
+
+---
+
+## Funções e Procedimentos Armazenados (Stored Functions)
+
+Abaixo estão documentadas as funções PL/pgSQL ativas no schema `public`:
+
+### Função `can_manage_training_assignment(p_user_id uuid)`
+
+```sql
+CREATE OR REPLACE FUNCTION public.can_manage_training_assignment(p_user_id uuid)
+ RETURNS boolean
+ LANGUAGE sql
+ STABLE
+ SECURITY DEFINER
+ SET search_path TO 'public'
+AS $function$
+  SELECT EXISTS (
+    SELECT 1 FROM public.users_profiles
+    WHERE id = auth.uid()
+      AND COALESCE(active, true)
+      AND (
+        access_level = 'Administrador'
+        OR (access_level = 'Diretoria' AND p_user_id IS DISTINCT FROM auth.uid())
+      )
+  );
+$function$
+```
+
+---
+
+### Função `fn_training_set_audit_fields()`
+
+```sql
+CREATE OR REPLACE FUNCTION public.fn_training_set_audit_fields()
+ RETURNS trigger
+ LANGUAGE plpgsql
+ SET search_path TO 'public'
+AS $function$
+BEGIN
+  IF TG_OP = 'INSERT' THEN
+    NEW.created_by := COALESCE(NEW.created_by, auth.uid());
+    NEW.created_at := COALESCE(NEW.created_at, now());
+    NEW.updated_at := now();
+  ELSE
+    NEW.created_by := OLD.created_by;
+    NEW.created_at := OLD.created_at;
+    NEW.updated_by := COALESCE(auth.uid(), NEW.updated_by);
+    NEW.updated_at := now();
+  END IF;
+  RETURN NEW;
+END;
+$function$
+```
+
+---
+
+### Função `fn_training_update_progress(p_assignment_id uuid, p_position_seconds integer)`
+
+```sql
+CREATE OR REPLACE FUNCTION public.fn_training_update_progress(p_assignment_id uuid, p_position_seconds integer)
+ RETURNS public.training_assignments
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO 'public'
+AS $function$
+DECLARE
+  v_assignment public.training_assignments%ROWTYPE;
+  v_duration integer;
+  v_position integer;
+  v_max integer;
+  v_pct numeric(5,2);
+  v_status text;
+  -- Tolerancia (s) para considerar o avanco como continuo (evita contar saltos na linha do tempo como assistido)
+  c_skip_tolerance constant integer := 45;
+BEGIN
+  SELECT a.* INTO v_assignment
+    FROM public.training_assignments a
+   WHERE a.id = p_assignment_id
+   FOR UPDATE;
+
+  IF NOT FOUND THEN
+    RAISE EXCEPTION 'Atribuição de treinamento não encontrada' USING ERRCODE = 'P0002';
+  END IF;
+
+  IF v_assignment.user_id IS DISTINCT FROM auth.uid() THEN
+    RAISE EXCEPTION 'Somente o colaborador atribuído pode registrar o progresso' USING ERRCODE = '42501';
+  END IF;
+
+  SELECT t.duration_seconds INTO v_duration FROM public.trainings t WHERE t.id = v_assignment.training_id;
+
+  v_position := LEAST(GREATEST(COALESCE(p_position_seconds, 0), 0), v_duration);
+
+  IF v_position <= v_assignment.max_position_seconds + c_skip_tolerance THEN
+    v_max := GREATEST(v_assignment.max_position_seconds, v_position);
+  ELSE
+    v_max := v_assignment.max_position_seconds;
+  END IF;
+
+  v_pct := LEAST(100, ROUND((v_max::numeric / v_duration) * 100, 2));
+
+  IF v_assignment.status = 'Concluído' OR v_pct >= 95 THEN
+    v_status := 'Concluído';
+    v_pct := CASE WHEN v_pct >= 95 THEN 100 ELSE v_pct END;
+  ELSIF v_max > 0 OR v_position > 0 THEN
+    v_status := 'Em Andamento';
+  ELSE
+    v_status := 'Pendente';
+  END IF;
+
+  UPDATE public.training_assignments
+     SET last_position_seconds = v_position,
+         max_position_seconds  = v_max,
+         progress_pct          = GREATEST(v_assignment.progress_pct, v_pct),
+         status                = v_status,
+         started_at            = COALESCE(started_at, now()),
+         completed_at          = CASE WHEN v_status = 'Concluído' THEN COALESCE(completed_at, now()) ELSE completed_at END,
+         last_accessed_at      = now()
+   WHERE id = p_assignment_id
+  RETURNING * INTO v_assignment;
+
+  RETURN v_assignment;
+END;
+$function$
+```
+
+---
 
 ### Função `fn_update_vacation_request_status()`
 
@@ -2869,6 +4074,27 @@ $function$
 
 ---
 
+### Função `is_training_manager()`
+
+```sql
+CREATE OR REPLACE FUNCTION public.is_training_manager()
+ RETURNS boolean
+ LANGUAGE sql
+ STABLE
+ SECURITY DEFINER
+ SET search_path TO 'public'
+AS $function$
+  SELECT EXISTS (
+    SELECT 1 FROM public.users_profiles
+    WHERE id = auth.uid()
+      AND COALESCE(active, true)
+      AND access_level IN ('Administrador', 'Diretoria')
+  );
+$function$
+```
+
+---
+
 ### Função `update_client_average_score()`
 
 ```sql
@@ -2906,3 +4132,4 @@ $function$
 ```
 
 ---
+
