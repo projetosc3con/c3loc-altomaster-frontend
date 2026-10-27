@@ -45,7 +45,24 @@ const PipelineTab: React.FC = () => {
   const [selectedDeal, setSelectedDeal] = useState<any>(null);
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
   const [currentWeekDate, setCurrentWeekDate] = useState(new Date());
+  const [searchTerm, setSearchTerm] = useState('');
+  const [showKpis, setShowKpis] = useState(() => {
+    try {
+      const saved = localStorage.getItem('crm_pipeline_show_kpis');
+      return saved !== null ? saved === 'true' : true;
+    } catch {
+      return true;
+    }
+  });
   const { profile } = useAuth();
+
+  useEffect(() => {
+    try {
+      localStorage.setItem('crm_pipeline_show_kpis', String(showKpis));
+    } catch {
+      // ignore
+    }
+  }, [showKpis]);
 
   // Won celebration state
   const [showCelebration, setShowCelebration] = useState(false);
@@ -121,7 +138,7 @@ const PipelineTab: React.FC = () => {
       // If target is is_won, trigger celebration
       if (newStage.is_won) {
         const deal = deals.find(d => d.id === dealId);
-        
+
         try {
           const contracts = await crmService.getContracts(dealId);
           if (!contracts || contracts.length === 0) {
@@ -203,19 +220,34 @@ const PipelineTab: React.FC = () => {
 
   const pipelineDeals = deals.filter(d => {
     if (d.pipeline_id !== activePipeline.id) return false;
-    
+
     // Filtro por semana (domingo a sábado)
     const created = new Date(d.created_at);
     if (created > weekEnd) return false; // Criado no futuro em relação à semana selecionada
 
     const isClosed = wonStageIds.includes(d.stage_id) || lostStageIds.includes(d.stage_id);
-    
+
     if (isClosed) {
       // Se está finalizado, só exibe na semana se foi fechado nesta semana ou depois
       const closedAt = d.closed_at ? new Date(d.closed_at) : new Date(d.updated_at);
-      if (closedAt < weekStart) return false; 
+      if (closedAt < weekStart) return false;
     }
-    
+
+    // Filtro por termo de pesquisa (combinado com o período selecionado)
+    if (searchTerm.trim()) {
+      const term = searchTerm.toLowerCase().trim();
+      const titleMatch = d.title ? String(d.title).toLowerCase().includes(term) : false;
+      const clientMatch = d.client?.company_name ? String(d.client.company_name).toLowerCase().includes(term) : false;
+      const leadMatch = d.lead?.company_name ? String(d.lead.company_name).toLowerCase().includes(term) : false;
+      const ownerMatch = d.owner?.full_name ? String(d.owner.full_name).toLowerCase().includes(term) : false;
+      const descMatch = d.description ? String(d.description).toLowerCase().includes(term) : false;
+      const valueMatch = d.value ? String(d.value).includes(term) : false;
+
+      if (!titleMatch && !clientMatch && !leadMatch && !ownerMatch && !descMatch && !valueMatch) {
+        return false;
+      }
+    }
+
     return true;
   });
 
@@ -240,57 +272,125 @@ const PipelineTab: React.FC = () => {
   }
 
   return (
-    <div className="space-y-6">
-      {/* Header and Stats */}
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-        {/* Stats Row */}
-        <div className="flex items-center gap-3 flex-1 overflow-x-auto custom-scrollbar pb-2 md:pb-0">
-          {[
-            { label: 'Ativas', value: pipelineDeals.length.toString(), icon: 'handshake', accent: 'bg-blue-50 dark:bg-blue-500/10 text-blue-600 dark:text-blue-400' },
-            { label: 'Valor', value: totalValue.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' }), icon: 'payments', accent: 'bg-mustard-50 dark:bg-mustard-500/10 text-mustard-600 dark:text-mustard-400' },
-            { label: 'Conversão', value: conversionRate, icon: 'trending_up', accent: 'bg-amber-50 dark:bg-amber-500/10 text-amber-600 dark:text-amber-400' },
-            { label: 'Ciclo', value: avgCycle, icon: 'schedule', accent: 'bg-purple-50 dark:bg-purple-500/10 text-purple-600 dark:text-purple-400' },
-          ].map((stat) => (
-            <div key={stat.label} className="bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800 px-4 py-2.5 shadow-sm min-w-max flex items-center gap-3">
-              <div className={`w-8 h-8 ${stat.accent} rounded-lg flex items-center justify-center shrink-0`}>
-                <span className="material-symbols-outlined text-[18px]">{stat.icon}</span>
-              </div>
-              <div>
-                <p className="text-[9px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest leading-none mb-1">{stat.label}</p>
-                <p className="text-sm font-black text-slate-900 dark:text-white leading-none">{stat.value}</p>
-              </div>
+    <div className="space-y-4">
+      {/* Row 1: Full-width compact KPIs */}
+      <AnimatePresence initial={false}>
+        {showKpis && (
+          <motion.div
+            key="kpis-row"
+            initial={{ opacity: 0, height: 0 }}
+            animate={{ opacity: 1, height: 'auto' }}
+            exit={{ opacity: 0, height: 0 }}
+            transition={{ duration: 0.2 }}
+            className="overflow-hidden"
+          >
+            <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 w-full pb-0.5">
+              {[
+                { label: 'Ativas', value: pipelineDeals.length.toString(), icon: 'handshake', accent: 'bg-blue-50 dark:bg-blue-500/10 text-blue-600 dark:text-blue-400' },
+                { label: 'Valor', value: totalValue.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' }), icon: 'payments', accent: 'bg-mustard-50 dark:bg-mustard-500/10 text-mustard-600 dark:text-mustard-400' },
+                { label: 'Conversão', value: conversionRate, icon: 'trending_up', accent: 'bg-amber-50 dark:bg-amber-500/10 text-amber-600 dark:text-amber-400' },
+                { label: 'Ciclo', value: avgCycle, icon: 'schedule', accent: 'bg-purple-50 dark:bg-purple-500/10 text-purple-600 dark:text-purple-400' },
+              ].map((stat) => (
+                <div key={stat.label} className="bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800 px-3.5 py-2 shadow-xs flex items-center gap-3">
+                  <div className={`w-7 h-7 ${stat.accent} rounded-lg flex items-center justify-center shrink-0`}>
+                    <span className="material-symbols-outlined text-[16px]">{stat.icon}</span>
+                  </div>
+                  <div className="min-w-0 flex-1">
+                    <p className="text-[9px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest leading-none mb-0.5 truncate">{stat.label}</p>
+                    <p className="text-sm font-black text-slate-900 dark:text-white leading-tight truncate">{stat.value}</p>
+                  </div>
+                </div>
+              ))}
             </div>
-          ))}
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* Row 2: Search, Toggle KPIs, Period Filter & Action Button on the same line */}
+      <div className="flex flex-col sm:flex-row sm:items-center gap-3 w-full">
+        {/* Search Input */}
+        <div className="relative flex-1 min-w-[220px]">
+          <span className="material-symbols-outlined absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400 dark:text-slate-500 text-[18px] pointer-events-none">
+            search
+          </span>
+          <input
+            type="text"
+            placeholder="Pesquisar propostas por título, cliente, responsável..."
+            value={searchTerm}
+            onChange={(e) => setSearchTerm(e.target.value)}
+            className="w-full pl-10 pr-16 py-2 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl focus:outline-none focus:ring-2 focus:ring-mustard-500/20 focus:border-mustard-500 text-xs font-medium text-slate-900 dark:text-white placeholder:text-slate-400 dark:placeholder:text-slate-500 shadow-xs h-[40px] transition-all"
+          />
+          {searchTerm && (
+            <div className="absolute right-2.5 top-1/2 -translate-y-1/2 flex items-center gap-1.5">
+              <span className="text-[10px] font-bold text-slate-400 dark:text-slate-500 bg-slate-100 dark:bg-slate-800 px-1.5 py-0.5 rounded-md pointer-events-none">
+                {pipelineDeals.length}
+              </span>
+              <button
+                type="button"
+                onClick={() => setSearchTerm('')}
+                className="w-5 h-5 rounded-full flex items-center justify-center text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors cursor-pointer"
+                title="Limpar pesquisa"
+              >
+                <span className="material-symbols-outlined text-[15px]">close</span>
+              </button>
+            </div>
+          )}
         </div>
 
-        {/* Action Button & Period */}
-        <div className="flex items-center gap-3 shrink-0">
-          <div className="flex items-center gap-2 bg-white dark:bg-slate-900 rounded-xl px-2 py-1.5 border border-slate-200 dark:border-slate-800 shadow-sm h-[44px]">
-            <button 
-              onClick={() => { const d = new Date(currentWeekDate); d.setDate(d.getDate() - 7); setCurrentWeekDate(d); }}
-              className="w-8 h-8 rounded-lg flex items-center justify-center hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-500 transition-colors"
-            >
-              <span className="material-symbols-outlined text-[18px]">chevron_left</span>
-            </button>
-            <span className="text-[11px] font-black uppercase tracking-widest text-slate-700 dark:text-slate-300 min-w-[100px] text-center">
-              {formatShortDate(weekStart)} - {formatShortDate(weekEnd)}
-            </span>
-            <button 
-              onClick={() => { const d = new Date(currentWeekDate); d.setDate(d.getDate() + 7); setCurrentWeekDate(d); }}
-              className="w-8 h-8 rounded-lg flex items-center justify-center hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-500 transition-colors"
-            >
-              <span className="material-symbols-outlined text-[18px]">chevron_right</span>
-            </button>
-          </div>
-
-          <button
-            onClick={() => setIsNewDealModalOpen(true)}
-            className="flex items-center justify-center gap-2 bg-mustard-500 hover:bg-mustard-600 text-white px-5 py-2.5 rounded-xl text-xs font-bold uppercase tracking-widest shadow-lg shadow-mustard-500/20 transition-all active:scale-95 h-[44px]"
+        {/* Toggle Top KPIs Row Button */}
+        <button
+          type="button"
+          onClick={() => setShowKpis((prev) => !prev)}
+          className={`h-[40px] px-3 rounded-xl border flex items-center gap-1.5 transition-all text-xs font-bold shrink-0 cursor-pointer shadow-xs select-none ${showKpis
+            ? 'bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800 text-slate-700 dark:text-slate-200 hover:border-slate-300 dark:hover:border-slate-700'
+            : 'bg-slate-100 dark:bg-slate-800/80 border-slate-200 dark:border-slate-700 text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-200'
+            }`}
+          title={showKpis ? 'Ocultar indicadores superiores' : 'Exibir indicadores superiores'}
+        >
+          <span className="material-symbols-outlined text-[18px]">query_stats</span>
+          <span className="text-[11px] font-black uppercase tracking-widest hidden sm:inline">
+            KPIs
+          </span>
+          <span
+            className={`material-symbols-outlined text-[16px] text-slate-400 transition-transform duration-200 ${showKpis ? 'rotate-180' : ''
+              }`}
           >
-            <span className="material-symbols-outlined text-[18px]">add</span>
-            Novo Negócio
+            expand_more
+          </span>
+        </button>
+
+        {/* Period Selector */}
+        <div className="flex items-center gap-1.5 bg-white dark:bg-slate-900 rounded-xl px-2 py-1 border border-slate-200 dark:border-slate-800 shadow-xs h-[40px] shrink-0">
+          <button
+            type="button"
+            onClick={() => { const d = new Date(currentWeekDate); d.setDate(d.getDate() - 7); setCurrentWeekDate(d); }}
+            className="w-7 h-7 rounded-lg flex items-center justify-center hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-500 transition-colors cursor-pointer"
+            title="Semana anterior"
+          >
+            <span className="material-symbols-outlined text-[18px]">chevron_left</span>
+          </button>
+          <span className="text-[11px] font-black uppercase tracking-widest text-slate-700 dark:text-slate-300 min-w-[95px] text-center select-none">
+            {formatShortDate(weekStart)} - {formatShortDate(weekEnd)}
+          </span>
+          <button
+            type="button"
+            onClick={() => { const d = new Date(currentWeekDate); d.setDate(d.getDate() + 7); setCurrentWeekDate(d); }}
+            className="w-7 h-7 rounded-lg flex items-center justify-center hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-500 transition-colors cursor-pointer"
+            title="Próxima semana"
+          >
+            <span className="material-symbols-outlined text-[18px]">chevron_right</span>
           </button>
         </div>
+
+        {/* New Deal Button */}
+        <button
+          type="button"
+          onClick={() => setIsNewDealModalOpen(true)}
+          className="flex items-center justify-center gap-2 bg-mustard-500 hover:bg-mustard-600 text-white px-4 py-2 rounded-xl text-xs font-bold uppercase tracking-widest shadow-md shadow-mustard-500/20 transition-all active:scale-95 h-[40px] shrink-0 cursor-pointer"
+        >
+          <span className="material-symbols-outlined text-[18px]">add</span>
+          <span>Novo Negócio</span>
+        </button>
       </div>
 
       {/* Kanban Board Area */}
@@ -305,7 +405,7 @@ const PipelineTab: React.FC = () => {
                 <div key={stage.id} className="w-60 shrink-0 snap-center">
                   <div className="space-y-3">
                     {/* Stage Header */}
-                    <div className={`rounded-2xl p-4 border ${colors.bg} ${colors.border} flex items-center justify-between`}>
+                    <div className={`rounded-xl px-4 py-2 border ${colors.bg} ${colors.border} flex items-center justify-between`}>
                       <div className="flex items-center gap-2">
                         <h3 className={`text-xs font-black uppercase tracking-widest ${colors.text}`}>{stage.name}</h3>
                       </div>
@@ -320,7 +420,7 @@ const PipelineTab: React.FC = () => {
                         <div
                           {...provided.droppableProps}
                           ref={provided.innerRef}
-                          className={`min-h-[200px] space-y-3 rounded-2xl transition-colors ${snapshot.isDraggingOver ? 'bg-slate-50 dark:bg-slate-800/50' : ''
+                          className={`min-h-[200px] space-y-3 rounded-xl transition-colors ${snapshot.isDraggingOver ? 'bg-slate-50 dark:bg-slate-800/50' : ''
                             }`}
                         >
                           {stageDeals.map((deal, index) => {
@@ -339,7 +439,7 @@ const PipelineTab: React.FC = () => {
                                     ref={provided.innerRef}
                                     {...provided.draggableProps}
                                     {...provided.dragHandleProps}
-                                    className={`bg-white dark:bg-slate-900 rounded-2xl border ${snapshot.isDragging ? 'border-mustard-500 shadow-xl' : 'border-slate-200 dark:border-slate-800'} p-5 shadow-sm hover:shadow-md transition-all ${canEditOrDrag ? 'cursor-grab active:cursor-grabbing' : 'cursor-default'} group select-none relative`}
+                                    className={`bg-white dark:bg-slate-900 rounded-xl border ${snapshot.isDragging ? 'border-mustard-500 shadow-xl' : 'border-slate-200 dark:border-slate-800'} p-5 shadow-sm hover:shadow-md transition-all ${canEditOrDrag ? 'cursor-grab active:cursor-grabbing' : 'cursor-default'} group select-none relative`}
                                   >
                                     <div className="flex justify-between items-start gap-2">
                                       <h4 className="text-sm font-bold text-slate-900 dark:text-white group-hover:text-mustard-500 dark:group-hover:text-mustard-400 transition-colors leading-tight">{deal.title}</h4>
