@@ -12,6 +12,7 @@ import type {
   InvoiceNfse,
   NfseEmitResult,
   BankStatementLine,
+  BankStatementSnapshot,
   ReconcileBankStatementResponse,
   PaginatedBillStatement,
 } from '../types';
@@ -259,6 +260,20 @@ export const financeiroService = {
   reconciliarExtratoBancario: async (period: { from?: string; to?: string } = {}): Promise<ReconcileBankStatementResponse> => {
     const { data } = await api.post<ReconcileBankStatementResponse>('/bills/reconcile', null, { params: period });
     return data;
+  },
+
+  salvarExtratoBancarioSnapshot: async (period: { from?: string; to?: string } = {}): Promise<BankStatementSnapshot> => {
+    const { data } = await api.post<BankStatementSnapshot>('/bills/statement-snapshots', period, { params: period });
+    return data;
+  },
+
+  listarExtratosBancariosSnapshots: async (params?: { from?: string; to?: string }): Promise<BankStatementSnapshot[]> => {
+    const { data } = await api.get<BankStatementSnapshot[]>('/bills/statement-snapshots', { params });
+    return Array.isArray(data) ? data : [];
+  },
+
+  excluirExtratoBancarioSnapshot: async (id: string): Promise<void> => {
+    await api.delete(`/bills/statement-snapshots/${id}`);
   },
 
   // Vincula manualmente uma linha do extrato que não bateu automaticamente a

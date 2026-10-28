@@ -866,3 +866,23 @@ export interface NfseEmitResult {
   nfse: InvoiceNfse;
   asaas: Record<string, unknown>;
 }
+
+
+export interface BankStatementSnapshot {
+  id: string;
+  period_from: string;
+  period_to: string;
+  simulated: boolean;
+  total_lines: number;
+  total_credits: number;
+  total_debits: number;
+  lines: BankStatementLine[];
+  created_by: string | null;
+  created_by_user?: {
+    id: string;
+    full_name: string;
+    email?: string;
+    photo_url?: string | null;
+  } | null;
+  created_at: string;
+}

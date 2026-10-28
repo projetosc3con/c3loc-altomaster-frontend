@@ -4,6 +4,7 @@ import { Link } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import { useTheme } from '../context/ThemeContext';
 import { TicketModal } from './TicketModal';
+import { NotificationsOverlay } from './NotificationsOverlay';
 
 import logoLight from '../../config_files/logo-completo.png';
 import logoDark from '../../config_files/logo-completo-dark.png';
@@ -83,13 +84,7 @@ const Header: React.FC = () => {
           </span>
         </motion.button>
 
-        <motion.button
-          whileHover={{ scale: 1.1 }}
-          whileTap={{ scale: 0.9 }}
-          className="p-2 text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-full transition-colors relative"
-        >
-          <span className="material-symbols-outlined">notifications</span>
-        </motion.button>
+        <NotificationsOverlay />
 
         <motion.button
           whileHover={{ scale: 1.1 }}
