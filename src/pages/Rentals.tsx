@@ -736,7 +736,7 @@ const Rentals: React.FC = () => {
                   <div className="grid grid-cols-3 gap-2">
                     <button
                       type="button"
-                      onClick={() => setFilters(f => ({ ...f, period_status: f.period_status === 'encerrado' ? '' : 'encerrado' }))}
+                      onClick={() => setFilters(f => ({ ...f, period_status: f.period_status === 'encerrado' ? '' : 'encerrado', date_from: f.period_status === 'encerrado' ? f.date_from : '', date_to: f.period_status === 'encerrado' ? f.date_to : '' }))}
                       className={`px-2.5 py-2.5 rounded-xl text-xs font-bold text-left transition-all flex items-center justify-between ${
                         filters.period_status === 'encerrado'
                           ? 'bg-mustard-500 text-white shadow-md'
@@ -753,7 +753,7 @@ const Rentals: React.FC = () => {
 
                     <button
                       type="button"
-                      onClick={() => setFilters(f => ({ ...f, period_status: f.period_status === 'em_vigor' ? '' : 'em_vigor' }))}
+                      onClick={() => setFilters(f => ({ ...f, period_status: f.period_status === 'em_vigor' ? '' : 'em_vigor', date_from: f.period_status === 'em_vigor' ? f.date_from : '', date_to: f.period_status === 'em_vigor' ? f.date_to : '' }))}
                       className={`px-2.5 py-2.5 rounded-xl text-xs font-bold text-left transition-all flex items-center justify-between ${
                         filters.period_status === 'em_vigor'
                           ? 'bg-mustard-500 text-white shadow-md'
@@ -770,7 +770,7 @@ const Rentals: React.FC = () => {
 
                     <button
                       type="button"
-                      onClick={() => setFilters(f => ({ ...f, period_status: f.period_status === 'futuro' ? '' : 'futuro' }))}
+                      onClick={() => setFilters(f => ({ ...f, period_status: f.period_status === 'futuro' ? '' : 'futuro', date_from: f.period_status === 'futuro' ? f.date_from : '', date_to: f.period_status === 'futuro' ? f.date_to : '' }))}
                       className={`px-2.5 py-2.5 rounded-xl text-xs font-bold text-left transition-all flex items-center justify-between ${
                         filters.period_status === 'futuro'
                           ? 'bg-mustard-500 text-white shadow-md'
@@ -833,7 +833,7 @@ const Rentals: React.FC = () => {
                           const y = now.getFullYear();
                           const m = String(now.getMonth() + 1).padStart(2, '0');
                           const lastDay = new Date(y, now.getMonth() + 1, 0).getDate();
-                          setFilters(f => ({ ...f, date_from: `${y}-${m}-01`, date_to: `${y}-${m}-${String(lastDay).padStart(2, '0')}` }));
+                          setFilters(f => ({ ...f, period_status: '', date_from: `${y}-${m}-01`, date_to: `${y}-${m}-${String(lastDay).padStart(2, '0')}` }));
                         }}
                         className="text-[10px] font-bold text-mustard-600 dark:text-mustard-400 hover:underline"
                       >
@@ -854,10 +854,10 @@ const Rentals: React.FC = () => {
                     </div>
                   </div>
                   <div className="flex items-center gap-3">
-                    <input type="date" value={filters.date_from} onChange={e => setFilters(f => ({ ...f, date_from: e.target.value }))}
+                    <input type="date" value={filters.date_from} onChange={e => setFilters(f => ({ ...f, period_status: (e.target.value || f.date_to) ? '' : f.period_status, date_from: e.target.value }))}
                       className="min-w-0 w-full px-3 py-3 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-sm text-slate-900 dark:text-white outline-none focus:ring-2 focus:ring-mustard-500/10 focus:border-mustard-500 transition-all" />
                     <span className="text-slate-300 dark:text-slate-600 font-bold shrink-0">—</span>
-                    <input type="date" value={filters.date_to} onChange={e => setFilters(f => ({ ...f, date_to: e.target.value }))}
+                    <input type="date" value={filters.date_to} onChange={e => setFilters(f => ({ ...f, period_status: (f.date_from || e.target.value) ? '' : f.period_status, date_to: e.target.value }))}
                       className="min-w-0 w-full px-3 py-3 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-sm text-slate-900 dark:text-white outline-none focus:ring-2 focus:ring-mustard-500/10 focus:border-mustard-500 transition-all" />
                   </div>
                   <p className="text-[10px] text-slate-400 dark:text-slate-500">
