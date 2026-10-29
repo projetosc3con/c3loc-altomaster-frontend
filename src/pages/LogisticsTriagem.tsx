@@ -152,11 +152,11 @@ const LogisticsTriagem: React.FC = () => {
         console.warn('Erro ao carregar erp_company_settings:', sErr);
       }
 
-      // Check localStorage for saved draft first
+      // Check localStorage for saved draft first (apenas se contrato ainda não processado)
       const draftStr = localStorage.getItem(`triage_draft_${id}`);
       let savedWorkSite = '';
       let savedTriagedEquipments: TriagedEquipmentItem[] | null = null;
-      if (draftStr) {
+      if (draftStr && contractData.status !== 'Processado') {
         try {
           const draft = JSON.parse(draftStr);
           savedWorkSite = draft.workSite || '';
@@ -243,15 +243,39 @@ const LogisticsTriagem: React.FC = () => {
             total_value: Number(item.total_value) || 0
           };
         });
+
+        // Se há fotos com equipment_id mas o item não tem equipment_id
+        if (photosRes && photosRes.length > 0 && initialList.length === 1 && !initialList[0].equipment_id) {
+          const photoEqId = photosRes.find(p => p.equipment_id)?.equipment_id;
+          if (photoEqId) {
+            const matched = allEquipments.find(e => e.id === photoEqId);
+            initialList[0].equipment_id = photoEqId;
+            if (matched) {
+              initialList[0].equipment_name = matched.name || initialList[0].equipment_name;
+              initialList[0].equipment_type = matched.type || initialList[0].equipment_type;
+              initialList[0].asset_number = matched.asset_number || initialList[0].asset_number;
+              initialList[0].model = matched.model || initialList[0].model;
+              initialList[0].serial_number = matched.serial_number || initialList[0].serial_number;
+            }
+          }
+        }
+
         setTriagedEquipments(initialList);
         setActiveEquipmentTab(initialList[0].equipment_id || initialList[0].tempId);
       } else {
         // Fallback para único equipamento
+        const photoEqId = photosRes?.find(p => p.equipment_id)?.equipment_id || '';
+        const matchedStock = photoEqId ? allEquipments.find(e => e.id === photoEqId) : undefined;
         const defaultItem: TriagedEquipmentItem = {
           tempId: `triaged-0-${Math.random().toString(36).substring(2, 7)}`,
           intended_index: 1,
           intended_name: form?.equipment_description || 'Equipamento Principal',
-          equipment_id: '',
+          equipment_id: photoEqId,
+          equipment_name: matchedStock?.name || form?.equipment_description || '',
+          equipment_type: matchedStock?.type || '',
+          asset_number: matchedStock?.asset_number || '',
+          model: matchedStock?.model || '',
+          serial_number: matchedStock?.serial_number || '',
           billing_period_start: form?.period_start || contractData.snapshot?.period_start || '',
           billing_period_end: form?.period_end || contractData.snapshot?.period_end || '',
           cost_rental: Number(form?.cost_rental) || 0,
@@ -263,7 +287,7 @@ const LogisticsTriagem: React.FC = () => {
           total_value: Number(form?.cost_total) || 0
         };
         setTriagedEquipments([defaultItem]);
-        setActiveEquipmentTab(defaultItem.tempId);
+        setActiveEquipmentTab(defaultItem.equipment_id || defaultItem.tempId);
       }
 
       const initialFaturaNotes = form?.notes || (form as any)?.observations || (contractData as any)?.notes || (contractData as any)?.observations || contractData.snapshot?.notes || contractData.snapshot?.observations || 'PROPOSTA ASSINADA';
@@ -519,13 +543,30 @@ const LogisticsTriagem: React.FC = () => {
 
   // Filtrar fotos do equipamento ativo na etapa 2
   const activeEqPhotos = triagePhotos.filter(p => {
-    if (p.equipment_id) return p.equipment_id === currentActiveEquipment?.equipment_id;
+    if (p.equipment_id && currentActiveEquipment?.equipment_id) {
+      return p.equipment_id === currentActiveEquipment.equipment_id;
+    }
+    if (triagedEquipments.length === 1) return true;
     return currentActiveEquipment === triagedEquipments[0];
   });
 
   // Estrutura de dados para o documento PDF de checklist consolidado
   const equipmentsChecklistDataForPdf = triagedEquipments.map((item, idx) => {
-    const matchedStock = equipments.find(e => e.id === item.equipment_id);
+    // Correlaciona as fotos deste equipamento de forma inteligente e resiliente
+    const photos = triagePhotos.filter(p => {
+      if (item.equipment_id && p.equipment_id) {
+        return p.equipment_id === item.equipment_id;
+      }
+      if (!p.equipment_id && idx === 0) return true;
+      if (triagedEquipments.length === 1) return true;
+      if (!item.equipment_id && p.equipment_id && !triagedEquipments.some(other => other.equipment_id === p.equipment_id)) {
+        return idx === 0;
+      }
+      return false;
+    });
+
+    const effectiveEqId = item.equipment_id || photos.find(p => p.equipment_id)?.equipment_id;
+    const matchedStock = equipments.find(e => e.id === effectiveEqId);
     const resolvedAssetNumber = item.asset_number || matchedStock?.asset_number || '';
     const resolvedSerialNumber = item.serial_number || matchedStock?.serial_number || (item as any).serialNumber || '';
     return {
@@ -534,7 +575,7 @@ const LogisticsTriagem: React.FC = () => {
       serialNumber: resolvedSerialNumber,
       model: item.model || matchedStock?.model,
       period: item.billing_period_start && item.billing_period_end ? `${formatDate(item.billing_period_start)} a ${formatDate(item.billing_period_end)}` : undefined,
-      photos: triagePhotos.filter(p => p.equipment_id === item.equipment_id || (!p.equipment_id && idx === 0))
+      photos
     };
   });
 
@@ -929,7 +970,7 @@ const LogisticsTriagem: React.FC = () => {
               {/* Abas horizontais dos equipamentos */}
               <div className="flex items-center gap-2.5 overflow-x-auto pb-1">
                 {triagedEquipments.map((item, idx) => {
-                  const eqPhotos = triagePhotos.filter(p => p.equipment_id === item.equipment_id || (!p.equipment_id && idx === 0));
+                  const eqPhotos = triagePhotos.filter(p => (item.equipment_id && p.equipment_id === item.equipment_id) || (!p.equipment_id && idx === 0) || (triagedEquipments.length === 1));
                   const isComplete = eqPhotos.length === CHECKLIST_ITEMS.length;
                   const isTabActive = (activeEquipmentTab === item.equipment_id) || (!activeEquipmentTab && idx === 0);
 
@@ -1249,7 +1290,7 @@ const LogisticsTriagem: React.FC = () => {
                     </thead>
                     <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
                       {triagedEquipments.map((item, idx) => {
-                        const photosCount = triagePhotos.filter(p => p.equipment_id === item.equipment_id || (!p.equipment_id && idx === 0)).length;
+                        const photosCount = triagePhotos.filter(p => (item.equipment_id && p.equipment_id === item.equipment_id) || (!p.equipment_id && idx === 0) || (triagedEquipments.length === 1)).length;
                         const isComplete = photosCount === CHECKLIST_ITEMS.length;
 
                         return (

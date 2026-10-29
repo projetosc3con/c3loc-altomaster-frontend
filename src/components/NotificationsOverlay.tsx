@@ -73,6 +73,15 @@ const getNotificationMeta = (notification: SystemNotification) => {
     };
   }
 
+  if (origem === 'crm_deal_contracts') {
+    return {
+      icon: 'description',
+      badgeLabel: 'Contrato Assinado',
+      iconBg: 'bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 border-indigo-500/20',
+      badgeBg: 'bg-indigo-500/10 text-indigo-700 dark:text-indigo-300',
+    };
+  }
+
   return {
     icon: 'notifications',
     badgeLabel: 'Sistema',
@@ -96,6 +105,10 @@ const resolveTargetRoute = (notification: SystemNotification): string | null => 
   if (origem === 'bills') {
     const isPagar = tituloLower.includes('pagar');
     return isPagar ? '/financeiro/pagar' : '/financeiro/receber';
+  }
+
+  if (origem === 'crm_deal_contracts') {
+    return '/crm/pipeline';
   }
 
   return null;
