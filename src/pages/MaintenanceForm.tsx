@@ -144,7 +144,7 @@ const MaintenanceForm: React.FC = () => {
           const { data } = await api.get(`/service-orders/${id}`);
           setFormData({
             ...data,
-            execution_date: data.execution_date ? new Date(data.execution_date).toISOString().split('T')[0] : '',
+            execution_date: data.execution_date ? String(data.execution_date).split('T')[0] : '',
             nfe_invoices: data.nfe_invoices || [],
             nfe_access_keys: data.nfe_access_keys || [],
           });

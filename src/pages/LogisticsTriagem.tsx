@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { useNavigate, useParams } from 'react-router-dom';
+import { useNavigate, useParams, Link } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import api from '../services/api';
 import { logisticsService, type LogisticsContract, type TriagePhoto } from '../services/logistics';
@@ -13,6 +13,8 @@ import { saveAs } from 'file-saver';
 import { getApiErrorMessage } from '../utils/apiError';
 import { formatDate } from '../utils/date';
 import { supabase } from '../lib/supabase';
+import { shippingNfeService, type ShippingInvoice } from '../services/shippingNfeService';
+import { StagingNfeModal, type StagingStep } from '../components/fiscal/StagingNfeModal';
 
 const STEPS = [
   { key: 'triagem', label: 'Triagem', icon: 'fact_check' },
@@ -106,6 +108,16 @@ const LogisticsTriagem: React.FC = () => {
   const [chargeResult, setChargeResult] = useState<AsaasChargeResult | null>(null);
   const [chargeError, setChargeError] = useState<string | null>(null);
   const [resultModalOpen, setResultModalOpen] = useState(false);
+
+  // NF-e de Remessa Staging & Documentos
+  const [stagingOpen, setStagingOpen] = useState(false);
+  const [stagingSteps, setStagingSteps] = useState<StagingStep[]>([
+    { title: 'Concluindo triagem e alocando equipamentos', status: 'pending' },
+    { title: 'Transmitindo NF-e de Remessa para SEFAZ-MT (Notaas)', status: 'pending' },
+    { title: 'Gerando DANFE com layout clássico oficial e baixando', status: 'pending' },
+  ]);
+  const [stagingError, setStagingError] = useState<string | null>(null);
+  const [shippingDocs, setShippingDocs] = useState<ShippingInvoice[]>([]);
 
   useEffect(() => {
     if (!id) return;
@@ -297,6 +309,14 @@ const LogisticsTriagem: React.FC = () => {
       if (contractData.status === 'Processado') {
         setCurrentStep(2);
       }
+
+      // Carregar documentos fiscais de remessa/retorno
+      try {
+        const docs = await shippingNfeService.getDocuments(id!);
+        setShippingDocs(docs || []);
+      } catch (docErr) {
+        console.warn('Erro ao carregar documentos de remessa:', docErr);
+      }
     } catch (err) {
       console.error('Erro ao carregar contrato:', err);
       setError('Erro ao carregar dados do contrato.');
@@ -434,11 +454,22 @@ const LogisticsTriagem: React.FC = () => {
   const handleFinish = async () => {
     if (!contract) return;
     setChargeConfirmOpen(false);
+
+    // Iniciar Staging Modal
+    setStagingOpen(true);
+    setStagingError(null);
+    setStagingSteps([
+      { title: 'Concluindo triagem e alocando equipamentos', desc: 'Gravando dados e vinculando equipamentos', status: 'active' },
+      { title: 'Transmitindo NF-e de Remessa para SEFAZ-MT (Notaas)', desc: 'Validando regras fiscais e autorização', status: 'pending' },
+      { title: 'Gerando DANFE clássico oficial e baixando', desc: 'Renderizando layout idêntico ao modelo físico', status: 'pending' },
+    ]);
+
     try {
       setSubmitting(true);
       setError(null);
       setChargeError(null);
 
+      // Passo 1: Finalizar Triagem
       const updatedContract = await logisticsService.finishProcessing(contract.id, {
         equipments: triagedEquipments,
         equipment_id: triagedEquipments[0]?.equipment_id || undefined,
@@ -451,6 +482,60 @@ const LogisticsTriagem: React.FC = () => {
       localStorage.removeItem(`triage_draft_${id}`);
       setContract(updatedContract);
       setSuccess(true);
+      setCurrentStep(2);
+
+      setStagingSteps([
+        { title: 'Concluindo triagem e alocando equipamentos', status: 'done' },
+        { title: 'Transmitindo NF-e de Remessa para SEFAZ-MT (Notaas)', desc: 'Transmitindo lote para autorização SEFAZ', status: 'active' },
+        { title: 'Gerando DANFE clássico oficial e baixando', status: 'pending' },
+      ]);
+
+      // Passo 2: Emitir NF-e de Remessa de Saída
+      let nfeResult: any = null;
+      try {
+        nfeResult = await shippingNfeService.emitSaida(contract.id);
+        setStagingSteps([
+          { title: 'Concluindo triagem e alocando equipamentos', status: 'done' },
+          { title: `NF-e de Remessa Autorizada na SEFAZ (Nº ${nfeResult.nfeNumber || 1})`, desc: `Chave: ${nfeResult.accessKey}`, status: 'done' },
+          { title: 'Gerando DANFE clássico oficial e baixando', desc: 'Disparando download silencioso', status: 'active' },
+        ]);
+
+        // Download automático silencioso do DANFE gerado com o layout clássico
+        if (nfeResult.pdfBase64) {
+          const byteCharacters = atob(nfeResult.pdfBase64);
+          const byteNumbers = new Array(byteCharacters.length);
+          for (let i = 0; i < byteCharacters.length; i++) {
+            byteNumbers[i] = byteCharacters.charCodeAt(i);
+          }
+          const byteArray = new Uint8Array(byteNumbers);
+          const blob = new Blob([byteArray], { type: 'application/pdf' });
+          saveAs(blob, `DANFE_Remessa_${contract.contract_number}_NFe_${nfeResult.nfeNumber || 1}.pdf`);
+        } else if (nfeResult.danfePdfUrl) {
+          window.open(nfeResult.danfePdfUrl, '_blank');
+        }
+
+        // Recarregar documentos fiscais anexados
+        const updatedDocs = await shippingNfeService.getDocuments(contract.id);
+        setShippingDocs(updatedDocs || []);
+
+        setStagingSteps([
+          { title: 'Concluindo triagem e alocando equipamentos', status: 'done' },
+          { title: `NF-e de Remessa Autorizada na SEFAZ (Nº ${nfeResult.nfeNumber || 1})`, status: 'done' },
+          { title: 'DANFE baixado na sua máquina com sucesso!', status: 'done' },
+        ]);
+
+        // Fechar staging modal após 2 segundos
+        setTimeout(() => {
+          setStagingOpen(false);
+        }, 2200);
+      } catch (nfeErr: any) {
+        console.error('Erro na emissão da NF-e de Remessa:', nfeErr);
+        const errMsg = nfeErr.response?.data?.error || nfeErr.message || 'Erro ao emitir NF-e de Remessa';
+        setStagingError(errMsg);
+        setStagingSteps((prev) =>
+          prev.map((s, idx) => (idx === 1 ? { ...s, status: 'error', desc: errMsg } : s))
+        );
+      }
 
       // Se for fluxo Asaas, gera cobrança e boleto no Asaas
       if (billingMethod === 'ASAAS' && updatedContract.rental_invoice_id) {
@@ -459,6 +544,7 @@ const LogisticsTriagem: React.FC = () => {
     } catch (err: any) {
       console.error('Erro ao finalizar processamento:', err);
       setError(err.response?.data?.error || 'Erro ao finalizar processamento.');
+      setStagingOpen(false);
     } finally {
       setSubmitting(false);
     }
@@ -829,11 +915,10 @@ const LogisticsTriagem: React.FC = () => {
                             {item.intended_name || `Equipamento #${index + 1}`}
                           </span>
                           {selectedEq && (
-                            <span className={`text-[10px] font-black uppercase px-2 py-0.5 rounded-md ${
-                              selectedEq.status === 'Disponível' ? 'bg-emerald-100 dark:bg-emerald-500/20 text-emerald-700 dark:text-emerald-400' :
+                            <span className={`text-[10px] font-black uppercase px-2 py-0.5 rounded-md ${selectedEq.status === 'Disponível' ? 'bg-emerald-100 dark:bg-emerald-500/20 text-emerald-700 dark:text-emerald-400' :
                               selectedEq.status === 'Locado' ? 'bg-blue-100 dark:bg-blue-500/20 text-blue-700 dark:text-blue-400' :
-                              'bg-amber-100 dark:bg-amber-500/20 text-amber-700 dark:text-amber-400'
-                            }`}>
+                                'bg-amber-100 dark:bg-amber-500/20 text-amber-700 dark:text-amber-400'
+                              }`}>
                               {selectedEq.status}
                             </span>
                           )}
@@ -979,21 +1064,19 @@ const LogisticsTriagem: React.FC = () => {
                       key={item.tempId}
                       type="button"
                       onClick={() => setActiveEquipmentTab(item.equipment_id || item.tempId)}
-                      className={`px-4 py-2.5 rounded-xl text-xs font-bold transition-all flex items-center gap-2.5 whitespace-nowrap border ${
-                        isTabActive
-                          ? 'bg-mustard-500 text-white border-mustard-500 shadow-md shadow-mustard-500/20'
-                          : 'bg-slate-50 dark:bg-slate-800/80 text-slate-700 dark:text-slate-300 border-slate-200 dark:border-slate-700 hover:border-slate-300'
-                      }`}
+                      className={`px-4 py-2.5 rounded-xl text-xs font-bold transition-all flex items-center gap-2.5 whitespace-nowrap border ${isTabActive
+                        ? 'bg-mustard-500 text-white border-mustard-500 shadow-md shadow-mustard-500/20'
+                        : 'bg-slate-50 dark:bg-slate-800/80 text-slate-700 dark:text-slate-300 border-slate-200 dark:border-slate-700 hover:border-slate-300'
+                        }`}
                     >
                       <span className="material-symbols-outlined text-base">precision_manufacturing</span>
                       <span>{item.asset_number ? `Patrimônio #${item.asset_number}` : `Máquina #${idx + 1}`}</span>
-                      <span className={`px-2 py-0.5 rounded-md text-[10px] font-black ${
-                        isTabActive
-                          ? 'bg-black/20 text-white'
-                          : isComplete
-                            ? 'bg-emerald-100 dark:bg-emerald-500/20 text-emerald-700 dark:text-emerald-300'
-                            : 'bg-slate-200 dark:bg-slate-700 text-slate-600 dark:text-slate-400'
-                      }`}>
+                      <span className={`px-2 py-0.5 rounded-md text-[10px] font-black ${isTabActive
+                        ? 'bg-black/20 text-white'
+                        : isComplete
+                          ? 'bg-emerald-100 dark:bg-emerald-500/20 text-emerald-700 dark:text-emerald-300'
+                          : 'bg-slate-200 dark:bg-slate-700 text-slate-600 dark:text-slate-400'
+                        }`}>
                         {eqPhotos.length}/{CHECKLIST_ITEMS.length} fotos {isComplete && '✓'}
                       </span>
                     </button>
@@ -1307,11 +1390,10 @@ const LogisticsTriagem: React.FC = () => {
                               ) : 'Não informado'}
                             </td>
                             <td className="py-3.5 px-4">
-                              <span className={`inline-flex items-center gap-1 text-[10px] font-black px-2 py-0.5 rounded-md ${
-                                isComplete
-                                  ? 'bg-emerald-100 dark:bg-emerald-500/20 text-emerald-700 dark:text-emerald-300'
-                                  : 'bg-amber-100 dark:bg-amber-500/20 text-amber-700 dark:text-amber-300'
-                              }`}>
+                              <span className={`inline-flex items-center gap-1 text-[10px] font-black px-2 py-0.5 rounded-md ${isComplete
+                                ? 'bg-emerald-100 dark:bg-emerald-500/20 text-emerald-700 dark:text-emerald-300'
+                                : 'bg-amber-100 dark:bg-amber-500/20 text-amber-700 dark:text-amber-300'
+                                }`}>
                                 <span className="material-symbols-outlined text-xs">{isComplete ? 'check_circle' : 'pending'}</span>
                                 {photosCount} / {CHECKLIST_ITEMS.length} fotos
                               </span>
@@ -1376,8 +1458,8 @@ const LogisticsTriagem: React.FC = () => {
                     <div
                       onClick={() => setBillingMethod('ASAAS')}
                       className={`p-4 rounded-2xl border-2 cursor-pointer transition-all ${billingMethod === 'ASAAS'
-                          ? 'border-mustard-500 bg-mustard-50/20 dark:bg-mustard-500/5 shadow-sm'
-                          : 'border-slate-200 dark:border-slate-800 hover:border-slate-300 dark:hover:border-slate-700'
+                        ? 'border-mustard-500 bg-mustard-50/20 dark:bg-mustard-500/5 shadow-sm'
+                        : 'border-slate-200 dark:border-slate-800 hover:border-slate-300 dark:hover:border-slate-700'
                         }`}
                     >
                       <div className="flex items-start gap-3">
@@ -1402,8 +1484,8 @@ const LogisticsTriagem: React.FC = () => {
                     <div
                       onClick={() => setBillingMethod('MANUAL')}
                       className={`p-4 rounded-2xl border-2 cursor-pointer transition-all ${billingMethod === 'MANUAL'
-                          ? 'border-mustard-500 bg-mustard-50/20 dark:bg-mustard-500/5 shadow-sm'
-                          : 'border-slate-200 dark:border-slate-800 hover:border-slate-300 dark:hover:border-slate-700'
+                        ? 'border-mustard-500 bg-mustard-50/20 dark:bg-mustard-500/5 shadow-sm'
+                        : 'border-slate-200 dark:border-slate-800 hover:border-slate-300 dark:hover:border-slate-700'
                         }`}
                     >
                       <div className="flex items-start gap-3">
@@ -1419,7 +1501,7 @@ const LogisticsTriagem: React.FC = () => {
                             Lançamento Manual
                           </p>
                           <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5 leading-relaxed">
-                            Registra diretamente no Contas a Receber (Bills) sem gerar cobrança no gateway.
+                            Registra diretamente no Contas a Receber sem gerar cobrança no gateway.
                           </p>
                         </div>
                       </div>
@@ -1460,8 +1542,8 @@ const LogisticsTriagem: React.FC = () => {
                     <div
                       onClick={() => setDocumentType('FATURA_LOCACAO')}
                       className={`p-4 rounded-2xl border-2 cursor-pointer transition-all ${documentType === 'FATURA_LOCACAO'
-                          ? 'border-mustard-500 bg-mustard-50/20 dark:bg-mustard-500/5 shadow-sm'
-                          : 'border-slate-200 dark:border-slate-800 hover:border-slate-300 dark:hover:border-slate-700'
+                        ? 'border-mustard-500 bg-mustard-50/20 dark:bg-mustard-500/5 shadow-sm'
+                        : 'border-slate-200 dark:border-slate-800 hover:border-slate-300 dark:hover:border-slate-700'
                         }`}
                     >
                       <div className="flex items-start gap-3">
@@ -1491,8 +1573,8 @@ const LogisticsTriagem: React.FC = () => {
                     <div
                       onClick={() => setDocumentType('NFSE')}
                       className={`p-4 rounded-2xl border-2 cursor-pointer transition-all ${documentType === 'NFSE'
-                          ? 'border-mustard-500 bg-mustard-50/20 dark:bg-mustard-500/5 shadow-sm'
-                          : 'border-slate-200 dark:border-slate-800 hover:border-slate-300 dark:hover:border-slate-700'
+                        ? 'border-mustard-500 bg-mustard-50/20 dark:bg-mustard-500/5 shadow-sm'
+                        : 'border-slate-200 dark:border-slate-800 hover:border-slate-300 dark:hover:border-slate-700'
                         }`}
                     >
                       <div className="flex items-start gap-3">
@@ -1670,16 +1752,108 @@ const LogisticsTriagem: React.FC = () => {
                     </button>
                   </div>
                 </div>
+
+                {/* 3. NF-e de Remessa de Saída (SEFAZ - Notaas) */}
+                <div className="p-4 rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-800/30 space-y-3 sm:col-span-2">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2.5">
+                      <span className="material-symbols-outlined text-blue-500 text-xl">local_shipping</span>
+                      <div>
+                        <h5 className="font-bold text-xs text-slate-900 dark:text-white">Nota Fiscal de Remessa para Locação (NF-e Modelo 55)</h5>
+                        <p className="text-[11px] text-slate-400">DANFE oficial com layout clássico SEFAZ e Canhoto de recebimento</p>
+                      </div>
+                    </div>
+                    {shippingDocs.find(d => d.direction === 'SAIDA') && (
+                      <span className="text-[10px] font-black uppercase px-2.5 py-1 rounded-full bg-blue-100 dark:bg-blue-500/20 text-blue-700 dark:text-blue-300 flex items-center gap-1">
+                        <span className="material-symbols-outlined text-xs">verified</span>
+                        Autorizada na SEFAZ
+                      </span>
+                    )}
+                  </div>
+
+                  {shippingDocs.find(d => d.direction === 'SAIDA') ? (
+                    (() => {
+                      const saidaDoc = shippingDocs.find(d => d.direction === 'SAIDA')!;
+                      return (
+                        <div className="space-y-2 pt-1">
+                          <div className="p-3 bg-white dark:bg-slate-900 rounded-lg border border-slate-200 dark:border-slate-800 flex flex-wrap items-center justify-between gap-3 text-xs">
+                            <div>
+                              <p className="font-bold text-slate-900 dark:text-white">
+                                NF-e Nº {String(saidaDoc.nfe_number || 1).padStart(6, '0')} - Série {saidaDoc.serie || 1}
+                              </p>
+                              <p className="text-[11px] text-slate-500 font-mono mt-0.5">
+                                Chave: {saidaDoc.access_key || 'N/A'}
+                              </p>
+                            </div>
+                            <div className="flex gap-2">
+                              {saidaDoc.danfe_pdf_url && (
+                                <a
+                                  href={saidaDoc.danfe_pdf_url}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  className="px-3 py-1.5 bg-blue-600 text-white rounded-lg font-bold text-xs flex items-center gap-1 hover:bg-blue-700 transition-colors shadow-sm"
+                                >
+                                  <span className="material-symbols-outlined text-sm">picture_as_pdf</span>
+                                  Abrir DANFE (PDF)
+                                </a>
+                              )}
+                              {saidaDoc.xml_url && (
+                                <a
+                                  href={saidaDoc.xml_url}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  className="px-3 py-1.5 border border-slate-300 dark:border-slate-700 text-slate-700 dark:text-slate-300 rounded-lg font-bold text-xs flex items-center gap-1 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
+                                >
+                                  <span className="material-symbols-outlined text-sm">code</span>
+                                  XML
+                                </a>
+                              )}
+                            </div>
+                          </div>
+                        </div>
+                      );
+                    })()
+                  ) : (
+                    <div className="p-3 bg-amber-50 dark:bg-amber-950/20 border border-amber-200 dark:border-amber-800/40 rounded-lg flex items-center justify-between text-xs">
+                      <span className="text-amber-800 dark:text-amber-300">
+                        {isProcessed
+                          ? 'Nenhuma NF-e de remessa emitida para esta saída ainda.'
+                          : 'A NF-e de remessa será transmitida para a SEFAZ automaticamente ao concluir a triagem.'}
+                      </span>
+                      {isProcessed && (
+                        <button
+                          type="button"
+                          onClick={() => handleFinish()}
+                          className="px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-lg transition-colors flex items-center gap-1 shadow-sm"
+                        >
+                          <span className="material-symbols-outlined text-sm">send</span>
+                          Emitir NF-e Agora
+                        </button>
+                      )}
+                    </div>
+                  )}
+                </div>
               </div>
 
               {/* Already processed info */}
               {isProcessed && contract.rental_invoice_id && (
-                <div className="mt-4 bg-emerald-50 dark:bg-emerald-500/10 border border-emerald-100 dark:border-emerald-500/20 rounded-xl p-4 flex items-center gap-3">
-                  <span className="material-symbols-outlined text-emerald-500">verified</span>
-                  <div>
-                    <p className="text-xs font-bold text-emerald-700 dark:text-emerald-300">Contrato Processado com Sucesso</p>
-                    <p className="text-sm font-bold text-emerald-800 dark:text-emerald-200 font-mono">ID da Fatura: {contract.rental_invoice_id}</p>
+                <div className="mt-4 bg-emerald-50 dark:bg-emerald-500/10 border border-emerald-100 dark:border-emerald-500/20 rounded-xl p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-xs">
+                  <div className="flex items-center gap-3">
+                    <span className="material-symbols-outlined text-emerald-500 text-2xl">verified</span>
+                    <div>
+                      <p className="text-xs font-bold text-emerald-700 dark:text-emerald-300">Triagem Concluída & Equipamentos Alocados</p>
+                      <p className="text-[11px] text-slate-600 dark:text-slate-300 font-medium">
+                        Locação faturada no sistema. A NF-e de remessa emitida acima está vinculada a esta locação.
+                      </p>
+                    </div>
                   </div>
+                  <Link
+                    to={`/locacoes/${contract.rental_invoice_id}`}
+                    className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-xs font-bold flex items-center gap-1.5 transition-colors shadow-xs shrink-0 self-end sm:self-center"
+                  >
+                    <span>Abrir Tela de Locação</span>
+                    <span className="material-symbols-outlined text-[16px]">open_in_new</span>
+                  </Link>
                 </div>
               )}
 
@@ -1715,7 +1889,7 @@ const LogisticsTriagem: React.FC = () => {
                   <div>
                     <h3 className="text-lg font-bold">Pronto para Emitir e Finalizar?</h3>
                     <p className="text-sm opacity-70">
-                      O contrato será processado com {triagedEquipments.length} equipamento(s), método: <b>{billingMethod === 'MANUAL' ? 'Lançamento Manual (Bills)' : 'Cobrança Asaas'}</b> e documento: <b>{documentType === 'FATURA_LOCACAO' ? 'Fatura de Locação' : 'NFS-e'}</b>.
+                      O contrato será processado com {triagedEquipments.length} equipamento(s), método: <b>{billingMethod === 'MANUAL' ? 'Lançamento Manual' : 'Cobrança Asaas'}</b> e documento: <b>{documentType === 'FATURA_LOCACAO' ? 'Fatura de Locação' : 'NFS-e'}</b>.
                     </p>
                   </div>
                 </div>
@@ -1837,7 +2011,7 @@ const LogisticsTriagem: React.FC = () => {
                 <div className="flex justify-between">
                   <span className="text-slate-400">Cobrança:</span>
                   <span className="font-bold text-slate-800 dark:text-slate-200">
-                    {billingMethod === 'MANUAL' ? 'Lançamento Manual em Bills' : 'Cobrança Automática Asaas'}
+                    {billingMethod === 'MANUAL' ? 'Lançamento Manual' : 'Cobrança Automática Asaas'}
                   </span>
                 </div>
                 <div className="flex justify-between">
@@ -1968,6 +2142,16 @@ const LogisticsTriagem: React.FC = () => {
           </div>
         )}
       </AnimatePresence>
+
+      {/* Modal de Staging da NF-e de Remessa SEFAZ */}
+      <StagingNfeModal
+        isOpen={stagingOpen}
+        title="Emitindo NF-e de Remessa de Locação"
+        steps={stagingSteps}
+        error={stagingError}
+        onRetry={handleFinish}
+        onClose={() => setStagingOpen(false)}
+      />
     </motion.div>
   );
 };

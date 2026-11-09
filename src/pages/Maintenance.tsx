@@ -6,6 +6,7 @@ import { saveAs } from 'file-saver';
 import api from '../services/api';
 import type { ServiceOrder, UserProfile } from '../types';
 import ServiceOrderDocument from '../components/maintenance/ServiceOrderDocument';
+import { formatDate } from '../utils/date';
 
 const STATUS_OPTIONS = [
   { label: 'Aberta', value: 'Aberta', dotColor: 'bg-blue-500' },
@@ -247,11 +248,13 @@ const Maintenance: React.FC = () => {
       if (search) {
         const q = search.toLowerCase();
         const techName = os.executor?.full_name || os.signer_tech_name || '';
+        const dateFormatted = os.execution_date ? formatDate(os.execution_date) : '';
         const match = (os.os_number?.toString() || '').includes(q)
           || (os.equipment_asset_number || '').toLowerCase().includes(q)
           || (os.equipment_name || '').toLowerCase().includes(q)
           || (os.description || '').toLowerCase().includes(q)
           || (os.status || '').toLowerCase().includes(q)
+          || dateFormatted.includes(q)
           || techName.toLowerCase().includes(q);
         if (!match) return false;
       }
@@ -561,7 +564,7 @@ const Maintenance: React.FC = () => {
                       <td className="px-6 py-4">
                         <div className="flex flex-col">
                           <span className="font-medium text-slate-700 dark:text-slate-300">
-                            {os.execution_date ? new Date(os.execution_date).toLocaleDateString('pt-BR') : '-'}
+                            {os.execution_date ? formatDate(os.execution_date) : '-'}
                           </span>
                           <span className="text-xs text-slate-500 dark:text-slate-500">{os.execution_location || '-'}</span>
                         </div>

@@ -68,8 +68,12 @@ const Logistics: React.FC = () => {
       await logisticsService.startTriage(contractId);
       // Navigate to triage page
       navigate(`/logistica/triagem/${contractId}`);
-    } catch (error) {
+    } catch (error: any) {
       console.error('Erro ao iniciar triagem:', error);
+      const apiMsg = error.response?.data?.error || error.message;
+      if (error.response?.status === 400 && String(apiMsg).includes('Triagem')) {
+        navigate(`/logistica/triagem/${contractId}`);
+      }
     } finally {
       setActionLoading(null);
     }

@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
-import { useNavigate, useParams } from 'react-router-dom';
+import { useNavigate, useParams, Link } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import api from '../services/api';
 import { financeiroService } from '../services/financeiro';
@@ -23,6 +23,7 @@ import RentalExtensionModal from '../components/RentalExtensionModal';
 import BillDetailsModal from '../components/financeiro/BillDetailsModal';
 import LancamentoManualModal from '../components/financeiro/LancamentoManualModal';
 import { ReturnChecklistModal } from '../components/rentals/ReturnChecklistModal';
+import { shippingNfeService, type ShippingInvoice } from '../services/shippingNfeService';
 
 type NfseRecord = any;
 type DealContract = any;
@@ -457,6 +458,22 @@ const RentalEdit: React.FC = () => {
   const [billToDelete, setBillToDelete] = useState<StatementItem | null>(null);
   const [deletingBill, setDeletingBill] = useState(false);
 
+  // Notas Fiscais de Remessa e Retorno (Modelo 55)
+  const [shippingInvoices, setShippingInvoices] = useState<ShippingInvoice[]>([]);
+  const [shippingInvoicesLoading, setShippingInvoicesLoading] = useState(false);
+
+  const loadShippingInvoices = async (rentalId: string) => {
+    try {
+      setShippingInvoicesLoading(true);
+      const docs = await shippingNfeService.getDocuments(rentalId);
+      setShippingInvoices(docs || []);
+    } catch (err) {
+      console.warn('Erro ao buscar notas fiscais de remessa/retorno:', err);
+    } finally {
+      setShippingInvoicesLoading(false);
+    }
+  };
+
   const loadPayableBills = async (rentalId: string) => {
     try {
       setPayableBillsLoading(true);
@@ -570,6 +587,7 @@ const RentalEdit: React.FC = () => {
           loadRentalDeal(id);
           loadRentalBills(id);
           loadPayableBills(id);
+          loadShippingInvoices(id);
         }
       } catch (err: any) {
         console.error('Erro ao buscar dados:', err);
@@ -743,7 +761,8 @@ const RentalEdit: React.FC = () => {
       if (id) {
         await Promise.all([
           loadRentalBills(id),
-          loadPayableBills(id)
+          loadPayableBills(id),
+          loadShippingInvoices(id)
         ]);
       }
     } catch (err: any) {
@@ -1832,6 +1851,7 @@ const RentalEdit: React.FC = () => {
                 </div>
               )}
 
+
               {!contractLoading && (
                 <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm overflow-hidden">
                   <div className="p-6 border-b border-slate-100 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-800/20 rounded-t-2xl flex items-center justify-between">
@@ -2071,6 +2091,152 @@ const RentalEdit: React.FC = () => {
                   </div>
                 </div>
               )}
+
+              {/* Seção: Notas Fiscais de Remessa e Retorno (Modelo 55) */}
+              <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm overflow-hidden">
+                <div className="p-6 border-b border-slate-100 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-800/20 rounded-t-2xl flex flex-wrap items-center justify-between gap-3">
+                  <div>
+                    <h3 className="font-bold text-slate-900 dark:text-white flex items-center gap-2 text-base">
+                      <span className="material-symbols-outlined text-mustard-500 text-xl">local_shipping</span>
+                      <span>Notas Fiscais de Remessa e Retorno (Modelo 55)</span>
+                      <span className="px-2.5 py-0.5 text-[10px] font-bold rounded-full bg-mustard-100 dark:bg-mustard-500/20 text-mustard-700 dark:text-mustard-400 font-mono">
+                        {shippingInvoices.length}
+                      </span>
+                    </h3>
+                    <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
+                      NF-e de remessa para locação (CFOP 5554/6554) e retorno de locação (CFOP 1554/2554) autorizadas na SEFAZ.
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => id && loadShippingInvoices(id)}
+                    disabled={shippingInvoicesLoading}
+                    className="p-2 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 rounded-xl hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
+                    title="Atualizar notas fiscais"
+                  >
+                    <span className={`material-symbols-outlined text-[18px] ${shippingInvoicesLoading ? 'animate-spin' : ''}`}>sync</span>
+                  </button>
+                </div>
+
+                <div className="p-6">
+                  {shippingInvoicesLoading ? (
+                    <div className="p-8 text-center">
+                      <div className="w-6 h-6 border-2 border-mustard-500 border-t-transparent rounded-full animate-spin mx-auto mb-2" />
+                      <span className="text-xs text-slate-500">Carregando notas fiscais de remessa...</span>
+                    </div>
+                  ) : shippingInvoices.length === 0 ? (
+                    <div className="p-8 text-center rounded-xl bg-slate-50/50 dark:bg-slate-800/30 border border-dashed border-slate-200 dark:border-slate-800 space-y-2">
+                      <span className="material-symbols-outlined text-3xl text-slate-300 dark:text-slate-600">receipt</span>
+                      <p className="text-xs text-slate-500 dark:text-slate-400 font-medium">
+                        Nenhuma NF-e de remessa emitida para esta locação ainda. A emissão ocorre automaticamente ao finalizar a triagem de saída ou o checklist de retorno.
+                      </p>
+                    </div>
+                  ) : (
+                    <div className="space-y-4">
+                      {shippingInvoices.map((inv) => {
+                        const isSaida = inv.direction === 'SAIDA' || (inv as any).operation_type === 'REMESSA_SAIDA';
+                        const isIssued = (inv.status as string) === 'issued' || (inv.status as string) === 'AUTHORIZED';
+                        return (
+                          <div
+                            key={inv.id}
+                            className="p-5 rounded-2xl border border-slate-200 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-800/40 space-y-4 hover:border-mustard-300 dark:hover:border-mustard-500/30 transition-all shadow-sm"
+                          >
+                            <div className="flex flex-wrap items-center justify-between gap-3">
+                              <div className="flex items-center gap-3">
+                                <span
+                                  className={`w-3 h-3 rounded-full ${
+                                    isIssued ? 'bg-emerald-500' : 'bg-amber-500'
+                                  }`}
+                                />
+                                <div>
+                                  <p className="text-sm font-bold text-slate-900 dark:text-white flex items-center gap-2">
+                                    <span>
+                                      {isSaida ? 'NF-e de Remessa (Saída para Locação)' : 'NF-e de Retorno (Devolução de Locação)'}
+                                    </span>
+                                    <span className="font-mono text-xs text-slate-500">
+                                      Nº {inv.nfe_number || 'S/N'} (Série {inv.serie || (inv as any).nfe_series || '1'})
+                                    </span>
+                                  </p>
+                                  <p className="text-xs text-slate-500 dark:text-slate-400">
+                                    {inv.created_at ? new Date(inv.created_at).toLocaleString('pt-BR') : ''} • CFOP {inv.cfop || (isSaida ? '5554' : '1554')}
+                                  </p>
+                                </div>
+                              </div>
+
+                              <div className="flex items-center gap-2">
+                                {((inv as any).is_external || inv.issuer_type === 'CLIENTE_EXTERNO') && (
+                                  <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-purple-100 dark:bg-purple-500/10 text-purple-700 dark:text-purple-400 border border-purple-200 dark:border-purple-500/20">
+                                    Emitida pelo Cliente
+                                  </span>
+                                )}
+                                <span
+                                  className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-[10px] font-bold ${
+                                    isIssued
+                                      ? 'bg-emerald-100 dark:bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-500/20'
+                                      : 'bg-amber-100 dark:bg-amber-500/10 text-amber-700 dark:text-amber-400 border border-amber-200 dark:border-amber-500/20'
+                                  }`}
+                                >
+                                  {isIssued ? 'Autorizada SEFAZ' : inv.status}
+                                </span>
+                              </div>
+                            </div>
+
+                            <div className="grid grid-cols-1 md:grid-cols-3 gap-3 p-3.5 rounded-xl bg-white dark:bg-slate-900 border border-slate-100 dark:border-slate-800 text-xs">
+                              <div>
+                                <span className="text-[10px] uppercase font-bold text-slate-400 block mb-0.5">Chave de Acesso:</span>
+                                <span className="font-mono text-[11px] text-slate-700 dark:text-slate-300 select-all break-all">{inv.access_key || '—'}</span>
+                              </div>
+                              <div>
+                                <span className="text-[10px] uppercase font-bold text-slate-400 block mb-0.5">Protocolo SEFAZ:</span>
+                                <span className="font-mono text-[11px] text-slate-700 dark:text-slate-300">{inv.protocol || (inv as any).sefaz_protocol || '—'}</span>
+                              </div>
+                              <div>
+                                <span className="text-[10px] uppercase font-bold text-slate-400 block mb-0.5">Valor Patrimonial dos Equipamentos:</span>
+                                <span className="font-bold text-slate-900 dark:text-white">
+                                  R$ {Number(inv.total_value || (inv as any).total_equipment_value || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                                </span>
+                              </div>
+                            </div>
+
+                            <div className="flex flex-wrap items-center gap-2 pt-2 border-t border-slate-200/60 dark:border-slate-700/60">
+                              {inv.danfe_pdf_url && (
+                                <>
+                                  <button
+                                    type="button"
+                                    onClick={() => window.open(inv.danfe_pdf_url!, '_blank')}
+                                    className="px-3.5 py-1.5 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-200 rounded-xl text-xs font-bold hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors flex items-center gap-1.5"
+                                  >
+                                    <span className="material-symbols-outlined text-[16px] text-red-500">picture_as_pdf</span>
+                                    Visualizar DANFE
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={() => saveAs(inv.danfe_pdf_url!, `DANFE_${isSaida ? 'Remessa' : 'Retorno'}_NFe_${inv.nfe_number || '1'}.pdf`)}
+                                    className="px-3.5 py-1.5 bg-mustard-500 hover:bg-mustard-600 text-white rounded-xl text-xs font-bold transition-colors flex items-center gap-1.5 shadow-sm"
+                                  >
+                                    <span className="material-symbols-outlined text-[16px]">download</span>
+                                    Baixar DANFE Clássico
+                                  </button>
+                                </>
+                              )}
+                              {inv.xml_url && (
+                                <button
+                                  type="button"
+                                  onClick={() => saveAs(inv.xml_url!, `NFe_${inv.access_key || inv.nfe_number}.xml`)}
+                                  className="px-3.5 py-1.5 border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 rounded-xl text-xs font-bold hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors flex items-center gap-1.5"
+                                >
+                                  <span className="material-symbols-outlined text-[16px] text-emerald-600">code</span>
+                                  Baixar XML Oficial
+                                </button>
+                              )}
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
+              </div>
 
               {/* Seção: Faturas da Locação (Financeiro) */}
               <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm overflow-hidden">
@@ -2363,6 +2529,7 @@ const RentalEdit: React.FC = () => {
                   </div>
                 </div>
               )}
+
             </div>
           )}
 
@@ -2643,6 +2810,7 @@ const RentalEdit: React.FC = () => {
                   </div>
                 </div>
               )}
+
             </div>
           )}
         </div>
@@ -2819,6 +2987,177 @@ const RentalEdit: React.FC = () => {
                   </button>
                 </div>
               )}
+
+              {/* Central de Documentos da Locação (4 Documentos) */}
+              <div className="p-4 rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 space-y-3.5 shadow-sm">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <span className="material-symbols-outlined text-mustard-500 text-lg">folder_shared</span>
+                    <h4 className="text-xs font-bold uppercase tracking-wider text-slate-900 dark:text-white">
+                      Documentos da Operação
+                    </h4>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => id && loadShippingInvoices(id)}
+                    className="p-1 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
+                    title="Atualizar documentos"
+                  >
+                    <span className={`material-symbols-outlined text-[15px] ${shippingInvoicesLoading ? 'animate-spin' : ''}`}>sync</span>
+                  </button>
+                </div>
+
+                <div className="space-y-2 text-xs">
+                  {/* 1. Checklist de Saída */}
+                  {(() => {
+                    const activeContractId = contracts[0]?.id || deal?.contracts?.[0]?.id;
+                    return (
+                      <div className="p-2.5 rounded-xl border border-slate-100 dark:border-slate-800/80 bg-slate-50/60 dark:bg-slate-800/30 flex items-center justify-between gap-2">
+                        <div className="flex items-center gap-2 min-w-0">
+                          <span className="material-symbols-outlined text-amber-500 text-base shrink-0">assignment_turned_in</span>
+                          <div className="min-w-0">
+                            <p className="font-bold text-[11px] text-slate-800 dark:text-slate-200 truncate">1. Checklist de Saída</p>
+                            <p className="text-[10px] text-slate-400">Triagem / Expedição</p>
+                          </div>
+                        </div>
+                        {activeContractId ? (
+                          <Link
+                            to={`/logistica/triagem/${activeContractId}`}
+                            className="px-2.5 py-1 bg-amber-50 hover:bg-amber-100 dark:bg-amber-950/40 text-amber-700 dark:text-amber-300 border border-amber-200 dark:border-amber-800/40 rounded-lg font-bold text-[10px] shrink-0 transition-colors flex items-center gap-1"
+                          >
+                            <span>Abrir</span>
+                            <span className="material-symbols-outlined text-[12px]">open_in_new</span>
+                          </Link>
+                        ) : (
+                          <span className="text-[10px] text-slate-400 italic">Pendente</span>
+                        )}
+                      </div>
+                    );
+                  })()}
+
+                  {/* 2. NF-e Remessa Saída */}
+                  {(() => {
+                    const invSaida = shippingInvoices.find(i => i.direction === 'SAIDA' || (i as any).operation_type === 'REMESSA_SAIDA');
+                    return (
+                      <div className="p-2.5 rounded-xl border border-blue-100 dark:border-blue-900/30 bg-blue-50/30 dark:bg-blue-950/20 flex items-center justify-between gap-2">
+                        <div className="flex items-center gap-2 min-w-0">
+                          <span className="material-symbols-outlined text-blue-500 text-base shrink-0">local_shipping</span>
+                          <div className="min-w-0">
+                            <p className="font-bold text-[11px] text-slate-800 dark:text-slate-200 truncate">
+                              2. NF-e Remessa (Saída)
+                            </p>
+                            <p className="text-[10px] text-slate-400 truncate">
+                              {invSaida ? `Nº ${invSaida.nfe_number || 'S/N'} • Autorizada` : 'Aguardando triagem'}
+                            </p>
+                          </div>
+                        </div>
+                        {invSaida?.danfe_pdf_url ? (
+                          <div className="flex items-center gap-1 shrink-0">
+                            <button
+                              type="button"
+                              onClick={() => window.open(invSaida.danfe_pdf_url!, '_blank')}
+                              className="p-1 text-slate-500 hover:text-blue-600 rounded-lg hover:bg-blue-100 dark:hover:bg-blue-900/40 transition-colors"
+                              title="Visualizar DANFE"
+                            >
+                              <span className="material-symbols-outlined text-[15px]">visibility</span>
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => saveAs(invSaida.danfe_pdf_url!, `DANFE_Remessa_NFe_${invSaida.nfe_number || '1'}.pdf`)}
+                              className="p-1 text-slate-500 hover:text-blue-600 rounded-lg hover:bg-blue-100 dark:hover:bg-blue-900/40 transition-colors"
+                              title="Baixar DANFE"
+                            >
+                              <span className="material-symbols-outlined text-[15px]">download</span>
+                            </button>
+                          </div>
+                        ) : (
+                          <span className="text-[10px] text-slate-400 italic">Pendente</span>
+                        )}
+                      </div>
+                    );
+                  })()}
+
+                  {/* 3. Checklist de Retorno */}
+                  {(() => {
+                    const hasReturnChecklist = Array.isArray(rental?.return_checklist_urls) && rental.return_checklist_urls.length > 0;
+                    return (
+                      <div className="p-2.5 rounded-xl border border-emerald-100 dark:border-emerald-900/30 bg-emerald-50/30 dark:bg-emerald-950/20 flex items-center justify-between gap-2">
+                        <div className="flex items-center gap-2 min-w-0">
+                          <span className="material-symbols-outlined text-emerald-500 text-base shrink-0">fact_check</span>
+                          <div className="min-w-0">
+                            <p className="font-bold text-[11px] text-slate-800 dark:text-slate-200 truncate">
+                              3. Checklist de Retorno
+                            </p>
+                            <p className="text-[10px] text-slate-400 truncate">
+                              {hasReturnChecklist ? `${rental.return_checklist_urls.length} Laudo(s) anexado(s)` : 'Pendente de devolução'}
+                            </p>
+                          </div>
+                        </div>
+                        {hasReturnChecklist ? (
+                          <button
+                            type="button"
+                            onClick={() => window.open(rental.return_checklist_urls[0], '_blank')}
+                            className="p-1 text-slate-500 hover:text-emerald-600 rounded-lg hover:bg-emerald-100 dark:hover:bg-emerald-900/40 transition-colors shrink-0"
+                            title="Visualizar laudo"
+                          >
+                            <span className="material-symbols-outlined text-[15px]">visibility</span>
+                          </button>
+                        ) : (
+                          <button
+                            type="button"
+                            onClick={() => setIsReturnModalOpen(true)}
+                            className="px-2 py-0.5 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300 border border-emerald-200 rounded text-[10px] font-bold shrink-0"
+                          >
+                            Fazer
+                          </button>
+                        )}
+                      </div>
+                    );
+                  })()}
+
+                  {/* 4. NF-e Remessa de Retorno */}
+                  {(() => {
+                    const invRetorno = shippingInvoices.find(i => i.direction === 'RETORNO' || (i as any).operation_type === 'REMESSA_RETORNO');
+                    return (
+                      <div className="p-2.5 rounded-xl border border-emerald-100 dark:border-emerald-900/30 bg-emerald-50/30 dark:bg-emerald-950/20 flex items-center justify-between gap-2">
+                        <div className="flex items-center gap-2 min-w-0">
+                          <span className="material-symbols-outlined text-emerald-600 text-base shrink-0">assignment_return</span>
+                          <div className="min-w-0">
+                            <p className="font-bold text-[11px] text-slate-800 dark:text-slate-200 truncate">
+                              4. NF-e Retorno (Entrada)
+                            </p>
+                            <p className="text-[10px] text-slate-400 truncate">
+                              {invRetorno ? (((invRetorno as any).is_external || invRetorno.issuer_type === 'CLIENTE_EXTERNO') ? 'Emitida pelo Cliente' : `Nº ${invRetorno.nfe_number || 'S/N'}`) : 'Se houver (ISENTO / Cliente)'}
+                            </p>
+                          </div>
+                        </div>
+                        {invRetorno?.danfe_pdf_url ? (
+                          <div className="flex items-center gap-1 shrink-0">
+                            <button
+                              type="button"
+                              onClick={() => window.open(invRetorno.danfe_pdf_url!, '_blank')}
+                              className="p-1 text-slate-500 hover:text-emerald-600 rounded-lg hover:bg-emerald-100 dark:hover:bg-emerald-900/40 transition-colors"
+                              title="Visualizar DANFE"
+                            >
+                              <span className="material-symbols-outlined text-[15px]">visibility</span>
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => saveAs(invRetorno.danfe_pdf_url!, `DANFE_Retorno_NFe_${invRetorno.nfe_number || '1'}.pdf`)}
+                              className="p-1 text-slate-500 hover:text-emerald-600 rounded-lg hover:bg-emerald-100 dark:hover:bg-emerald-900/40 transition-colors"
+                              title="Baixar DANFE"
+                            >
+                              <span className="material-symbols-outlined text-[15px]">download</span>
+                            </button>
+                          </div>
+                        ) : (
+                          <span className="text-[10px] text-slate-400 italic">Pendente</span>
+                        )}
+                      </div>
+                    );
+                  })()}
+                </div>
+              </div>
 
               {/* Card de Locação Devolvida e Checklists de Retorno Gerados */}
               {(rental?.return_date || (Array.isArray(rental?.return_checklist_urls) && rental.return_checklist_urls.length > 0)) && (

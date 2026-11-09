@@ -5,6 +5,8 @@ import { supabase } from '../../lib/supabase';
 import api from '../../services/api';
 import { CHECKLIST_ITEMS_CONFIG, ReturnChecklistDocument, type ReturnPhotoItem } from './ReturnChecklistDocument';
 import type { RentalInvoice, RentalInvoiceEquipment } from '../../types';
+import { shippingNfeService } from '../../services/shippingNfeService';
+import { saveAs } from 'file-saver';
 
 interface UniqueMachineItem extends RentalInvoiceEquipment {
   uniqueKey: string;
@@ -56,6 +58,37 @@ export const ReturnChecklistModal: React.FC<ReturnChecklistModalProps> = ({
   const [submitting, setSubmitting] = useState(false);
   const [submitProgress, setSubmitProgress] = useState<string>('');
   const [error, setError] = useState<string | null>(null);
+
+  // Informações de NF-e do Retorno
+  const [clientData, setClientData] = useState<any>(null);
+  const [externalAccessKey, setExternalAccessKey] = useState<string>('');
+  const [externalNfeNumber, setExternalNfeNumber] = useState<string>('');
+  const [externalDanfeFile, setExternalDanfeFile] = useState<File | null>(null);
+
+  // Estados para confirmação de checklist incompleto
+  const [showIncompleteConfirmModal, setShowIncompleteConfirmModal] = useState(false);
+  const [incompleteCount, setIncompleteCount] = useState(0);
+
+  // Carregar dados cadastrais do cliente para checar Inscrição Estadual
+  React.useEffect(() => {
+    async function loadClientInfo() {
+      if (!rental?.client_id) return;
+      try {
+        const { data } = await supabase.from('clients').select('*').eq('id', rental.client_id).single();
+        if (data) setClientData(data);
+      } catch (e) {
+        console.warn('Erro ao carregar dados do cliente no retorno:', e);
+      }
+    }
+    loadClientInfo();
+  }, [rental?.client_id]);
+
+  const isClientIsento = useMemo(() => {
+    const ie = clientData?.state_subscription || rental?.state_subscription || '';
+    if (!ie) return true;
+    const clean = ie.trim().toUpperCase();
+    return clean === '' || clean === 'ISENTO' || clean === 'ISENTA' || clean === 'NAO' || clean === 'NÃO';
+  }, [clientData, rental]);
 
   // Inicializa a aba ativa quando a lista de máquinas mudar ou o modal abrir
   React.useEffect(() => {
@@ -171,7 +204,7 @@ export const ReturnChecklistModal: React.FC<ReturnChecklistModalProps> = ({
       window.open(blobUrl, '_blank');
     } catch (err) {
       console.error('Erro ao gerar prévia do PDF:', err);
-      alert('Erro ao gerar pré-visualização do PDF.');
+      setError('Erro ao gerar pré-visualização do PDF.');
     }
   };
 
@@ -185,11 +218,16 @@ export const ReturnChecklistModal: React.FC<ReturnChecklistModalProps> = ({
     );
 
     if (incompleteMachines.length > 0) {
-      const confirmIncomplete = window.confirm(
-        `Atenção: ${incompleteMachines.length} máquina(s) não possuem todas as 22 fotos preenchidas.\nDeseja concluir o retorno mesmo com o checklist parcial?`
-      );
-      if (!confirmIncomplete) return;
+      setIncompleteCount(incompleteMachines.length);
+      setShowIncompleteConfirmModal(true);
+      return;
     }
+
+    await executeFinishReturn();
+  };
+
+  const executeFinishReturn = async () => {
+    setShowIncompleteConfirmModal(false);
 
     try {
       setSubmitting(true);
@@ -284,10 +322,7 @@ export const ReturnChecklistModal: React.FC<ReturnChecklistModalProps> = ({
         }
       }
 
-      setSubmitProgress('Atualizando registro da locação e data de retorno...');
-
-      // 2. Atualizar rental_invoices no backend
-      // Unir URLs existentes com as novas geradas
+      // Preparar dados do checklist finalizado
       const existingUrls: string[] = Array.isArray(rental?.return_checklist_urls) ? rental.return_checklist_urls : [];
       const updatedChecklistUrls = Array.from(new Set([...existingUrls, ...generatedPdfUrls]));
 
@@ -306,8 +341,9 @@ export const ReturnChecklistModal: React.FC<ReturnChecklistModalProps> = ({
         };
       });
 
+      // 2. Atualizar registro da locação no backend
+      setSubmitProgress('Atualizando devolução da locação...');
       const payload = {
-        ...rental,
         return_date: todayStr,
         return_checklist_urls: updatedChecklistUrls,
         equipments: updatedEquipments,
@@ -315,12 +351,98 @@ export const ReturnChecklistModal: React.FC<ReturnChecklistModalProps> = ({
 
       await api.put(`/rentals/${rental.id}`, payload);
 
-      setSubmitProgress('Retorno concluído com sucesso!');
+      // 3. OBRIGATÓRIO: Abertura automática de Ordem de Serviço Interna e mudança de status da máquina para "Em Manutenção"
+      setSubmitProgress('Abrindo Ordem de Serviço Interna de manutenção...');
+      for (const machine of uniqueMachines) {
+        if (machine.equipment_id) {
+          const mState = inspectionData[machine.uniqueKey];
+          const mNotes = mState?.notes?.trim() || '';
+          const locNumber = rental.invoice_number
+            ? (String(rental.invoice_number).startsWith('#') ? rental.invoice_number : `#${rental.invoice_number}`)
+            : '';
+          const baseClientReq = locNumber
+            ? `Manutenção gerada no retorno da locação ${locNumber}`
+            : 'Manutenção gerada no retorno da locação';
+          const clientReq = mNotes
+            ? `${baseClientReq}, observação: ${mNotes}`
+            : baseClientReq;
+
+          try {
+            await api.post(`/rentals/${rental.id}/service-orders`, {
+              equipment_id: machine.equipment_id,
+              order_type: 'Interna',
+              execution_location: '',
+              client_request: clientReq,
+              description: `OS Interna aberta automaticamente no retorno da Locação #${rental.invoice_number || ''}. Obra: ${rental.work_site || 'Não informado'}.`,
+              notes: mNotes || null,
+              hour_meter_before: mState?.hourMeter && mState.hourMeter.trim() !== '' ? Number(mState.hourMeter) : null,
+            });
+          } catch (osErr: any) {
+            console.error('Erro ao abrir OS interna para máquina:', machine.asset_number, osErr);
+          }
+
+          // Garantir expressamente que o status do equipamento em 'equipments' seja 'Em Manutenção'
+          try {
+            await supabase
+              .from('equipments')
+              .update({ status: 'Em Manutenção' })
+              .eq('id', machine.equipment_id);
+          } catch (eqErr) {
+            console.error('Erro ao atualizar status do equipamento para Em Manutenção:', eqErr);
+          }
+        }
+      }
+
+      // 4. Processar NF-e de Retorno (SEFAZ)
+      if (isClientIsento) {
+        setSubmitProgress('Cliente ISENTO de IE: Transmitindo NF-e de Retorno para a SEFAZ-MT...');
+        try {
+          const nfeRetornoResult = await shippingNfeService.emitRetorno(rental.id);
+          if (nfeRetornoResult.pdfBase64) {
+            const byteCharacters = atob(nfeRetornoResult.pdfBase64);
+            const byteNumbers = new Array(byteCharacters.length);
+            for (let k = 0; k < byteCharacters.length; k++) {
+              byteNumbers[k] = byteCharacters.charCodeAt(k);
+            }
+            const byteArray = new Uint8Array(byteNumbers);
+            const blob = new Blob([byteArray], { type: 'application/pdf' });
+            saveAs(blob, `DANFE_Retorno_${rental.invoice_number || rental.id}_NFe_${nfeRetornoResult.nfeNumber || 1}.pdf`);
+          } else if (nfeRetornoResult.danfePdfUrl) {
+            window.open(nfeRetornoResult.danfePdfUrl, '_blank');
+          }
+        } catch (nfeRetErr: any) {
+          console.error('Erro na emissão automática da NF-e de retorno:', nfeRetErr);
+        }
+      } else if (externalAccessKey || externalDanfeFile) {
+        // Cliente com IE: registrar nota emitida pelo cliente
+        setSubmitProgress('Registrando NF-e de devolução emitida pelo cliente...');
+        try {
+          let uploadedDanfeUrl = '';
+          if (externalDanfeFile) {
+            const ext = externalDanfeFile.name.split('.').pop() || 'pdf';
+            const filePath = `return-external-nfe/${rental.id}/nfe_cliente_${Date.now()}.${ext}`;
+            const { error: upErr } = await supabase.storage.from('fiscal-documents').upload(filePath, externalDanfeFile, { upsert: true });
+            if (!upErr) {
+              const { data: upUrl } = supabase.storage.from('fiscal-documents').getPublicUrl(filePath);
+              uploadedDanfeUrl = upUrl.publicUrl;
+            }
+          }
+          await shippingNfeService.registerExternalRetorno(rental.id, {
+            access_key: externalAccessKey,
+            nfe_number: externalNfeNumber ? Number(externalNfeNumber) : undefined,
+            danfe_pdf_url: uploadedDanfeUrl || undefined,
+          });
+        } catch (extNfeErr) {
+          console.error('Erro ao registrar NF-e de retorno do cliente:', extNfeErr);
+        }
+      }
+
+      setSubmitProgress('Retorno concluído com sucesso! OS interna gerada.');
       await onSuccess();
       onClose();
     } catch (err: any) {
-      console.error('Erro ao concluir checklist de retorno:', err);
-      setError(err.response?.data?.error || err.message || 'Erro ao concluir retorno da locação.');
+      console.error('Erro ao processar checklist de retorno:', err);
+      setError(err.response?.data?.error || err.message || 'Erro ao processar checklist de retorno.');
     } finally {
       setSubmitting(false);
       setSubmitProgress('');
@@ -703,6 +825,71 @@ export const ReturnChecklistModal: React.FC<ReturnChecklistModalProps> = ({
                 )}
               </>
             )}
+
+            {/* Seção Fiscal: NF-e de Retorno (Bifurcação IE) */}
+            <div className="mt-6 pt-5 border-t border-slate-200 dark:border-slate-800">
+              <div className="p-4 rounded-2xl border border-slate-200 dark:border-slate-800 bg-slate-50/70 dark:bg-slate-850/40 space-y-3">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2.5">
+                    <span className="material-symbols-outlined text-blue-500 text-xl">local_shipping</span>
+                    <div>
+                      <h4 className="text-xs font-bold text-slate-900 dark:text-white">
+                        Nota Fiscal de Remessa de Retorno (Entrada)
+                      </h4>
+                      <p className="text-[11px] text-slate-500">
+                        {isClientIsento
+                          ? 'Cliente ISENTO de Inscrição Estadual: O sistema emitirá a NF-e de retorno automaticamente.'
+                          : 'Cliente CONTRIBUINTE de ICMS: A nota de devolução deve ser emitida pelo próprio cliente.'}
+                      </p>
+                    </div>
+                  </div>
+                  <span
+                    className={`text-[10px] font-bold uppercase px-2.5 py-1 rounded-full ${
+                      isClientIsento
+                        ? 'bg-emerald-100 dark:bg-emerald-500/20 text-emerald-700 dark:text-emerald-300'
+                        : 'bg-amber-100 dark:bg-amber-500/20 text-amber-700 dark:text-amber-300'
+                    }`}
+                  >
+                    {isClientIsento ? 'Emissão Automática (Isento)' : 'NF-e do Cliente (Com IE)'}
+                  </span>
+                </div>
+
+                {!isClientIsento && (
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 pt-2">
+                    <div>
+                      <label className="block text-[10px] font-bold text-slate-500 uppercase">Nº da NF-e do Cliente</label>
+                      <input
+                        type="text"
+                        value={externalNfeNumber}
+                        onChange={(e) => setExternalNfeNumber(e.target.value)}
+                        placeholder="Ex: 1245"
+                        className="mt-1 w-full text-xs p-2 rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-900 dark:text-white"
+                      />
+                    </div>
+                    <div className="sm:col-span-2">
+                      <label className="block text-[10px] font-bold text-slate-500 uppercase">Chave de Acesso (44 dígitos)</label>
+                      <input
+                        type="text"
+                        maxLength={44}
+                        value={externalAccessKey}
+                        onChange={(e) => setExternalAccessKey(e.target.value)}
+                        placeholder="5126..."
+                        className="mt-1 w-full text-xs p-2 rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-900 dark:text-white font-mono"
+                      />
+                    </div>
+                    <div className="sm:col-span-3">
+                      <label className="block text-[10px] font-bold text-slate-500 uppercase mb-1">Anexar DANFE do Cliente (PDF)</label>
+                      <input
+                        type="file"
+                        accept="application/pdf,image/*"
+                        onChange={(e) => setExternalDanfeFile(e.target.files?.[0] || null)}
+                        className="text-xs text-slate-600 dark:text-slate-400 file:mr-3 file:py-1.5 file:px-3 file:rounded-lg file:border-0 file:text-xs file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100"
+                      />
+                    </div>
+                  </div>
+                )}
+              </div>
+            </div>
           </div>
 
           {/* Modal Footer */}
@@ -745,6 +932,62 @@ export const ReturnChecklistModal: React.FC<ReturnChecklistModalProps> = ({
             </div>
           </div>
         </motion.div>
+
+        {/* Modal de Confirmação: Checklist Incompleto */}
+        <AnimatePresence>
+          {showIncompleteConfirmModal && (
+            <div className="fixed inset-0 z-[70] flex items-center justify-center p-4 bg-slate-950/75 backdrop-blur-sm">
+              <motion.div
+                initial={{ opacity: 0, scale: 0.95, y: 15 }}
+                animate={{ opacity: 1, scale: 1, y: 0 }}
+                exit={{ opacity: 0, scale: 0.95, y: 15 }}
+                className="relative w-full max-w-md bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl shadow-2xl overflow-hidden flex flex-col"
+              >
+                <div className="p-5 border-b border-slate-200 dark:border-slate-800 flex items-center gap-3 bg-amber-500/10 dark:bg-amber-500/5">
+                  <div className="w-10 h-10 rounded-xl bg-amber-500/20 text-amber-600 dark:text-amber-400 flex items-center justify-center shrink-0">
+                    <span className="material-symbols-outlined text-[24px]">warning</span>
+                  </div>
+                  <div>
+                    <h3 className="font-bold text-base text-slate-900 dark:text-white">
+                      Checklist Parcial
+                    </h3>
+                    <p className="text-xs text-slate-500 dark:text-slate-400">
+                      Identificamos fotos pendentes na vistoria.
+                    </p>
+                  </div>
+                </div>
+
+                <div className="p-5 space-y-3 text-xs text-slate-600 dark:text-slate-300">
+                  <p>
+                    Atenção: <strong>{incompleteCount} máquina(s)</strong> não possuem todas as {CHECKLIST_ITEMS_CONFIG.length} fotos preenchidas.
+                  </p>
+                  <p className="text-slate-500 dark:text-slate-400 text-[11px] leading-relaxed">
+                    Deseja concluir o retorno mesmo com o checklist parcial ou prefere voltar e anexar as fotos restantes?
+                  </p>
+                </div>
+
+                <div className="p-4 bg-slate-50 dark:bg-slate-800/40 border-t border-slate-200 dark:border-slate-800 flex flex-col sm:flex-row items-center justify-end gap-2.5">
+                  <button
+                    type="button"
+                    onClick={() => setShowIncompleteConfirmModal(false)}
+                    className="w-full sm:w-auto px-4 py-2 rounded-xl text-slate-600 dark:text-slate-400 hover:bg-slate-200 dark:hover:bg-slate-700 font-semibold transition-colors text-xs cursor-pointer"
+                  >
+                    Voltar e Preencher
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => executeFinishReturn()}
+                    className="w-full sm:w-auto px-4 py-2 bg-amber-600 hover:bg-amber-700 text-white rounded-xl font-bold flex items-center justify-center gap-1.5 shadow-sm transition-all text-xs cursor-pointer"
+                  >
+                    <span className="material-symbols-outlined text-[16px]">check</span>
+                    Concluir Assim Mesmo
+                  </button>
+                </div>
+              </motion.div>
+            </div>
+          )}
+        </AnimatePresence>
       </div>
     </AnimatePresence>
   );

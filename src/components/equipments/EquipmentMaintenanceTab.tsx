@@ -2,6 +2,7 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import api from '../../services/api';
 import type { ServiceOrder } from '../../types';
+import { formatDate } from '../../utils/date';
 
 interface EquipmentMaintenanceTabProps {
   equipmentId: string;
@@ -194,7 +195,7 @@ export const EquipmentMaintenanceTab: React.FC<EquipmentMaintenanceTabProps> = (
                   <div>
                     <span className="block text-[10px] font-bold text-slate-400 uppercase tracking-widest">Data de Execução</span>
                     <span className="text-slate-800 dark:text-slate-200 font-semibold mt-0.5 block">
-                      {os.execution_date ? new Date(os.execution_date + (os.execution_date.includes('T') ? '' : 'T00:00:00')).toLocaleDateString('pt-BR') : new Date(os.created_at).toLocaleDateString('pt-BR')}
+                      {formatDate(os.execution_date || os.created_at)}
                     </span>
                   </div>
 
