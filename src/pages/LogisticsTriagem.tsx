@@ -550,6 +550,71 @@ const LogisticsTriagem: React.FC = () => {
     }
   };
 
+  /**
+   * Emissão avulsa da NF-e de Remessa para contratos que já foram processados/finalizados na triagem,
+   * sem tentar reexecutar a conclusão do contrato (evitando o erro 'Apenas contratos em "Triagem" podem ser finalizados').
+   */
+  const handleEmitNfeOnly = async () => {
+    if (!contract) return;
+
+    setStagingOpen(true);
+    setStagingError(null);
+    setStagingSteps([
+      { title: 'Transmitindo NF-e de Remessa para SEFAZ-MT (Notaas)', desc: 'Validando regras fiscais e autorização', status: 'active' },
+      { title: 'Gerando DANFE clássico oficial e baixando', desc: 'Renderizando layout idêntico ao modelo físico', status: 'pending' },
+    ]);
+
+    try {
+      setSubmitting(true);
+      setError(null);
+
+      const nfeResult = await shippingNfeService.emitSaida(contract.id);
+
+      setStagingSteps([
+        { title: `NF-e de Remessa Autorizada na SEFAZ (Nº ${nfeResult.nfeNumber || 1})`, desc: `Chave: ${nfeResult.accessKey}`, status: 'done' },
+        { title: 'Gerando DANFE clássico oficial e baixando', desc: 'Disparando download silencioso', status: 'active' },
+      ]);
+
+      // Download automático silencioso do DANFE gerado com o layout clássico
+      if (nfeResult.pdfBase64) {
+        const byteCharacters = atob(nfeResult.pdfBase64);
+        const byteNumbers = new Array(byteCharacters.length);
+        for (let i = 0; i < byteCharacters.length; i++) {
+          byteNumbers[i] = byteCharacters.charCodeAt(i);
+        }
+        const byteArray = new Uint8Array(byteNumbers);
+        const blob = new Blob([byteArray], { type: 'application/pdf' });
+        saveAs(blob, `DANFE_Remessa_${contract.contract_number}_NFe_${nfeResult.nfeNumber || 1}.pdf`);
+      } else if (nfeResult.danfePdfUrl) {
+        window.open(nfeResult.danfePdfUrl, '_blank');
+      }
+
+      // Recarregar documentos fiscais anexados
+      const updatedDocs = await shippingNfeService.getDocuments(contract.id);
+      setShippingDocs(updatedDocs || []);
+
+      setStagingSteps([
+        { title: `NF-e de Remessa Autorizada na SEFAZ (Nº ${nfeResult.nfeNumber || 1})`, status: 'done' },
+        { title: 'DANFE baixado na sua máquina com sucesso!', status: 'done' },
+      ]);
+
+      // Fechar staging modal após 2 segundos
+      setTimeout(() => {
+        setStagingOpen(false);
+      }, 2200);
+    } catch (nfeErr: any) {
+      console.error('Erro na emissão avulsa da NF-e de Remessa:', nfeErr);
+      const errMsg = nfeErr.response?.data?.error || nfeErr.message || 'Erro ao emitir NF-e de Remessa';
+      setStagingError(errMsg);
+      setStagingSteps([
+        { title: 'Transmitindo NF-e de Remessa para SEFAZ-MT (Notaas)', desc: errMsg, status: 'error' },
+        { title: 'Gerando DANFE clássico oficial e baixando', status: 'pending' },
+      ]);
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
   const isStepValid = (stepIndex: number): boolean => {
     if (stepIndex === 0) {
       if (!workSite.trim()) return false;
@@ -1823,8 +1888,9 @@ const LogisticsTriagem: React.FC = () => {
                       {isProcessed && (
                         <button
                           type="button"
-                          onClick={() => handleFinish()}
-                          className="px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-lg transition-colors flex items-center gap-1 shadow-sm"
+                          onClick={handleEmitNfeOnly}
+                          disabled={submitting}
+                          className="px-3 py-1.5 bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white font-bold rounded-lg transition-colors flex items-center gap-1 shadow-sm cursor-pointer"
                         >
                           <span className="material-symbols-outlined text-sm">send</span>
                           Emitir NF-e Agora
@@ -2149,7 +2215,7 @@ const LogisticsTriagem: React.FC = () => {
         title="Emitindo NF-e de Remessa de Locação"
         steps={stagingSteps}
         error={stagingError}
-        onRetry={handleFinish}
+        onRetry={isProcessed ? handleEmitNfeOnly : handleFinish}
         onClose={() => setStagingOpen(false)}
       />
     </motion.div>
