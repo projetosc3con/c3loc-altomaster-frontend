@@ -19,6 +19,7 @@ import { pdf } from '@react-pdf/renderer';
 import ContractDocument from '../components/crm-modals/ContractDocument';
 import { saveAs } from 'file-saver';
 import { formatDate } from '../utils/date';
+import { resolveLatestMachinesWithSwapStatus } from '../utils/rentalPeriods';
 import RentalExtensionModal from '../components/RentalExtensionModal';
 import BillDetailsModal from '../components/financeiro/BillDetailsModal';
 import LancamentoManualModal from '../components/financeiro/LancamentoManualModal';
@@ -33,7 +34,9 @@ const BILLING_STATUSES: BillingStatus[] = ['Pendente', 'Faturado', 'Emitida', 'C
 const RECONCILIATION_STATUSES: ReconciliationStatus[] = ['Pendente', 'Atrasado', 'Recebido', 'Divergente', 'No prazo'];
 
 function isPaidStatus(status: string): boolean {
-  return ['RECEIVED', 'CONFIRMED', 'RECEIVED_IN_CASH', 'PAGO', 'RECEBIDO'].includes(status?.toUpperCase());
+  return ['RECEIVED', 'CONFIRMED', 'RECEIVED_IN_CASH', 'PAGO', 'PAGA', 'RECEBIDO', 'QUITADO', 'CONCILIADO'].includes(
+    status?.toUpperCase()
+  );
 }
 
 function formatCurrency(val?: number | null): string {
@@ -431,6 +434,13 @@ const RentalEdit: React.FC = () => {
   const [deletingRental, setDeletingRental] = useState(false);
   const [deleteError, setDeleteError] = useState<string | null>(null);
 
+  // Period Deletion state (Excluir período de prorrogação/locação)
+  const [periodToDelete, setPeriodToDelete] = useState<PeriodGroup | null>(null);
+  const [linkedBillForPeriodDelete, setLinkedBillForPeriodDelete] = useState<StatementItem | null>(null);
+  const [deleteLinkedBill, setDeleteLinkedBill] = useState(true);
+  const [deletingPeriod, setDeletingPeriod] = useState(false);
+  const [deletePeriodError, setDeletePeriodError] = useState<string | null>(null);
+
   // Faturas da Locação (Financeiro / Bills)
   const [rentalBills, setRentalBills] = useState<StatementItem[]>([]);
   const [billsLoading, setBillsLoading] = useState(false);
@@ -661,32 +671,9 @@ const RentalEdit: React.FC = () => {
     if (rental?.return_date) return false;
     if (!equipmentItems || equipmentItems.length === 0) return false;
 
-    // Agrupar por máquina para encontrar o último período de cada equipamento
-    const machineMap = new Map<string, FormEquipmentItem>();
-    for (const item of equipmentItems) {
-      const key = item.equipment_id || item.asset_number || item.equipment_name || item.id || (item as any).tempId;
-      const existing = machineMap.get(key);
-      if (!existing) {
-        machineMap.set(key, item);
-      } else {
-        const existingEnd = existing.billing_period_end ? String(existing.billing_period_end).split('T')[0] : '';
-        const currentEnd = item.billing_period_end ? String(item.billing_period_end).split('T')[0] : '';
-        if (currentEnd >= existingEnd) {
-          machineMap.set(key, item);
-        }
-      }
-    }
-
-    if (machineMap.size === 0) return false;
-
-    // Se todas as máquinas distintas da locação já foram devolvidas em seu último período, não pode prorrogar
-    const allReturned = Array.from(machineMap.values()).every(
-      (m) => Boolean(m.return_date && String(m.return_date).trim())
-    );
-    if (allReturned) return false;
-
-    // Há pelo menos uma máquina ativa ainda não devolvida
-    return true;
+    // Resolver máquinas ativas descartando máquinas históricas substituídas em renovações anteriores
+    const { activeMachines } = resolveLatestMachinesWithSwapStatus(equipmentItems);
+    return activeMachines.length > 0;
   }, [rental, equipmentItems]);
 
   const reloadRentalData = async () => {
@@ -964,10 +951,126 @@ const RentalEdit: React.FC = () => {
 
   const handleRemoveEquipment = (index: number) => {
     if (equipmentItems.length <= 1) {
-      alert('A locação deve conter obrigatoriamente pelo menos um equipamento.');
+      setError('A locação deve conter obrigatoriamente pelo menos um equipamento.');
       return;
     }
     setEquipmentItems(prev => prev.filter((_, i) => i !== index));
+  };
+
+  const buildRentalPayload = (itemsToSave: FormEquipmentItem[], selectedClient: Client) => {
+    // Resolver máquinas não substituídas para determinar se todas ativas já possuem data de retorno
+    const { nonSupersededMachines } = resolveLatestMachinesWithSwapStatus(itemsToSave);
+    const allHaveReturnDate =
+      nonSupersededMachines.length > 0 &&
+      nonSupersededMachines.every(item => Boolean(item.return_date && item.return_date.trim()));
+    let computedReturnDate: string | null = null;
+    if (allHaveReturnDate) {
+      const sortedReturnDates = nonSupersededMachines
+        .map(item => (item.return_date ? item.return_date.trim().split('T')[0] : ''))
+        .filter(Boolean)
+        .sort((a, b) => a.localeCompare(b));
+      if (sortedReturnDates.length > 0) {
+        computedReturnDate = sortedReturnDates[sortedReturnDates.length - 1];
+      }
+    }
+
+    return {
+      ...generalData,
+      client_name: selectedClient.company_name,
+      cnpj: selectedClient.cnpj,
+      return_date: computedReturnDate,
+      equipments: itemsToSave.map(item => ({
+        id: item.id,
+        equipment_id: item.equipment_id,
+        equipment_name: item.equipment_name,
+        equipment_type: item.equipment_type,
+        equipment_size: item.equipment_size,
+        asset_number: item.asset_number,
+        billing_period_start: item.billing_period_start,
+        billing_period_end: item.billing_period_end,
+        return_date: item.return_date ? item.return_date.trim().split('T')[0] : null,
+        cost_rental: Number(item.cost_rental) || 0,
+        cost_insurance: Number(item.cost_insurance) || 0,
+        cost_freight: Number(item.cost_freight) || 0,
+        cost_rcd: Number(item.cost_rcd) || 0,
+        cost_third_party: Number(item.cost_third_party) || 0,
+        cost_training: Number(item.cost_training) || 0,
+        total_value: item.total_value,
+        notes: item.notes || null
+      }))
+    };
+  };
+
+  const handleRequestDeletePeriod = (group: PeriodGroup) => {
+    setDeletePeriodError(null);
+    if (equipmentItems.length <= group.itemsWithIndex.length) {
+      setError('A locação deve conter obrigatoriamente pelo menos um período/equipamento.');
+      return;
+    }
+
+    // Procurar lançamento de prorrogação vinculado a este período (se houver)
+    const norm = (d?: string | null) => (d ? String(d).split('T')[0].trim() : '');
+    const matchingBill = rentalBills.find((b) => {
+      const snap = (b.raw as any)?.bank_raw_snapshot || {};
+      const isRealManualBill = Boolean((b.raw as any)?.id) && b.origin === 'MANUAL';
+      if (!isRealManualBill) return false;
+      const bStart = norm(snap.period_start);
+      const bEnd = norm(snap.period_end);
+      return Boolean(snap.is_extension) && bStart === group.start && bEnd === group.end;
+    }) || null;
+
+    setLinkedBillForPeriodDelete(matchingBill);
+    setDeleteLinkedBill(Boolean(matchingBill && !isPaidStatus(matchingBill.status || '')));
+    setPeriodToDelete(group);
+  };
+
+  const handleConfirmDeletePeriod = async () => {
+    if (!id || !periodToDelete) return;
+    const indicesToRemove = new Set(periodToDelete.itemsWithIndex.map((it) => it.index));
+    const remainingItems = equipmentItems.filter((_, idx) => !indicesToRemove.has(idx));
+
+    if (remainingItems.length === 0) {
+      setDeletePeriodError('A locação deve conter obrigatoriamente pelo menos um equipamento.');
+      return;
+    }
+
+    const selectedClient = clients.find((c) => c.id === generalData.client_id);
+    if (!selectedClient) {
+      setDeletePeriodError('Selecione um cliente válido antes de excluir o período.');
+      return;
+    }
+
+    try {
+      setDeletingPeriod(true);
+      setDeletePeriodError(null);
+
+      const payload = buildRentalPayload(remainingItems, selectedClient);
+      await api.put(`/rentals/${id}`, payload);
+
+      if (
+        deleteLinkedBill &&
+        linkedBillForPeriodDelete &&
+        !isPaidStatus(linkedBillForPeriodDelete.status || '') &&
+        Boolean((linkedBillForPeriodDelete.raw as any)?.id)
+      ) {
+        try {
+          await api.delete(`/bills/${linkedBillForPeriodDelete.id}`);
+        } catch (billErr) {
+          console.warn('Não foi possível excluir a conta a receber vinculada:', billErr);
+        }
+      }
+
+      setExpandedPeriodKeys((prev) => prev.filter((k) => k !== periodToDelete.key));
+      setPeriodToDelete(null);
+      setLinkedBillForPeriodDelete(null);
+      setExtensionSuccessMsg('Período da locação excluído com sucesso!');
+      await reloadRentalData();
+    } catch (err: any) {
+      console.error('Erro ao excluir período da locação:', err);
+      setDeletePeriodError(err.response?.data?.error || err.message || 'Erro ao excluir período.');
+    } finally {
+      setDeletingPeriod(false);
+    }
   };
 
   const handleEquipmentChange = (index: number, field: string, value: any) => {
@@ -1051,63 +1154,7 @@ const RentalEdit: React.FC = () => {
       const selectedClient = clients.find(c => c.id === generalData.client_id);
       if (!selectedClient) throw new Error('Selecione um cliente válido.');
 
-      // Agrupar os equipamentos por máquina para encontrar o último período de cada máquina distinta
-      const machineMap = new Map<string, any>();
-      for (const item of equipmentItems) {
-        const key = item.equipment_id || item.asset_number || item.equipment_name || item.id || (item as any).tempId;
-        const existing = machineMap.get(key);
-        if (!existing) {
-          machineMap.set(key, item);
-        } else {
-          const existingEnd = existing.billing_period_end ? String(existing.billing_period_end).split('T')[0] : '';
-          const currentEnd = item.billing_period_end ? String(item.billing_period_end).split('T')[0] : '';
-          if (currentEnd >= existingEnd) {
-            machineMap.set(key, item);
-          }
-        }
-      }
-
-      // Só preenche a data de retorno da locação como um todo quando a última máquina for retornada
-      const distinctMachines = Array.from(machineMap.values());
-      const allHaveReturnDate =
-        distinctMachines.length > 0 &&
-        distinctMachines.every(item => Boolean(item.return_date && item.return_date.trim()));
-      let computedReturnDate: string | null = null;
-      if (allHaveReturnDate) {
-        const sortedReturnDates = distinctMachines
-          .map(item => (item.return_date ? item.return_date.trim().split('T')[0] : ''))
-          .filter(Boolean)
-          .sort((a, b) => a.localeCompare(b));
-        if (sortedReturnDates.length > 0) {
-          computedReturnDate = sortedReturnDates[sortedReturnDates.length - 1];
-        }
-      }
-
-      const payload = {
-        ...generalData,
-        client_name: selectedClient.company_name,
-        cnpj: selectedClient.cnpj,
-        return_date: computedReturnDate,
-        equipments: equipmentItems.map(item => ({
-          id: item.id,
-          equipment_id: item.equipment_id,
-          equipment_name: item.equipment_name,
-          equipment_type: item.equipment_type,
-          equipment_size: item.equipment_size,
-          asset_number: item.asset_number,
-          billing_period_start: item.billing_period_start,
-          billing_period_end: item.billing_period_end,
-          return_date: item.return_date ? item.return_date.trim().split('T')[0] : null,
-          cost_rental: Number(item.cost_rental) || 0,
-          cost_insurance: Number(item.cost_insurance) || 0,
-          cost_freight: Number(item.cost_freight) || 0,
-          cost_rcd: Number(item.cost_rcd) || 0,
-          cost_third_party: Number(item.cost_third_party) || 0,
-          cost_training: Number(item.cost_training) || 0,
-          total_value: item.total_value,
-          notes: item.notes || null
-        }))
-      };
+      const payload = buildRentalPayload(equipmentItems, selectedClient);
 
       await api.put(`/rentals/${id}`, payload);
       navigate('/locacoes');
@@ -1420,6 +1467,16 @@ const RentalEdit: React.FC = () => {
                                       {group.totalValue.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
                                     </span>
                                   </div>
+                                  {periodGroups.length > 1 && (
+                                    <button
+                                      type="button"
+                                      onClick={() => handleRequestDeletePeriod(group)}
+                                      className="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-500/10 rounded-lg transition-colors cursor-pointer"
+                                      title="Excluir este período da locação"
+                                    >
+                                      <span className="material-symbols-outlined text-[18px]">delete</span>
+                                    </button>
+                                  )}
                                   <button
                                     type="button"
                                     onClick={() => togglePeriod(group.key)}
@@ -1678,11 +1735,26 @@ const RentalEdit: React.FC = () => {
                               {group.durationDays > 0 ? `${group.durationDays} dias` : 'Período'}
                             </span>
                           </div>
-                          <span
-                            className={`px-2 py-0.5 rounded-full text-[10px] font-bold shrink-0 ${badge.className}`}
-                          >
-                            {badge.label}
-                          </span>
+                          <div className="flex items-center gap-1 shrink-0">
+                            <span
+                              className={`px-2 py-0.5 rounded-full text-[10px] font-bold shrink-0 ${badge.className}`}
+                            >
+                              {badge.label}
+                            </span>
+                            {periodGroups.length > 1 && (
+                              <button
+                                type="button"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  handleRequestDeletePeriod(group);
+                                }}
+                                className="p-1 text-slate-400 hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-500/10 rounded-lg transition-colors cursor-pointer"
+                                title="Excluir este período da locação"
+                              >
+                                <span className="material-symbols-outlined text-[16px]">delete</span>
+                              </button>
+                            )}
+                          </div>
                         </div>
 
                         {/* Datas do período */}
@@ -3570,12 +3642,112 @@ const RentalEdit: React.FC = () => {
           rentalId={id}
           invoiceNumber={generalData.invoice_number}
           equipments={equipmentItems}
+          availableEquipments={allEquipments}
           onSuccess={(result) => {
             setExtensionSuccessMsg(result?.message || 'Locação prorrogada com sucesso!');
             reloadRentalData();
           }}
         />
       )}
+
+      {/* Modal de Confirmação de Exclusão de Período */}
+      <AnimatePresence>
+        {periodToDelete && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              onClick={() => !deletingPeriod && setPeriodToDelete(null)}
+              className="absolute inset-0 bg-slate-900/60 backdrop-blur-sm"
+            />
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95, y: 10 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.95, y: 10 }}
+              className="relative w-full max-w-lg bg-white dark:bg-slate-900 rounded-3xl shadow-2xl border border-rose-200 dark:border-rose-900/40 overflow-hidden z-10 p-6 space-y-5"
+            >
+              <div className="flex items-center gap-3 pb-3 border-b border-slate-100 dark:border-slate-800">
+                <div className="w-11 h-11 rounded-2xl bg-rose-50 dark:bg-rose-500/10 text-rose-600 dark:text-rose-400 flex items-center justify-center flex-shrink-0">
+                  <span className="material-symbols-outlined text-2xl">delete_sweep</span>
+                </div>
+                <div>
+                  <h3 className="text-base font-black text-slate-900 dark:text-white">
+                    Excluir Período de Locação
+                  </h3>
+                  <p className="text-xs text-slate-500 dark:text-slate-400 font-mono">
+                    {periodToDelete.start ? formatDate(periodToDelete.start) : 'N/D'} — {periodToDelete.end ? formatDate(periodToDelete.end) : 'N/D'} ({periodToDelete.totalValue.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })})
+                  </p>
+                </div>
+              </div>
+
+              {deletePeriodError && (
+                <div className="p-3 bg-red-50 dark:bg-red-500/10 border border-red-200 dark:border-red-500/20 rounded-xl text-red-700 dark:text-red-400 text-xs flex items-center gap-2">
+                  <span className="material-symbols-outlined text-base flex-shrink-0">error</span>
+                  <span>{deletePeriodError}</span>
+                </div>
+              )}
+
+              <div className="space-y-3 text-xs text-slate-600 dark:text-slate-300">
+                <p>
+                  Deseja remover este período e os{' '}
+                  <strong>{periodToDelete.itemsWithIndex.length}</strong>{' '}
+                  {periodToDelete.itemsWithIndex.length === 1 ? 'equipamento vinculado' : 'equipamentos vinculados'} a ele desta locação? Os totais da locação serão recalculados automaticamente.
+                </p>
+
+                {linkedBillForPeriodDelete && !isPaidStatus(linkedBillForPeriodDelete.status || '') && (
+                  <label className="flex items-start gap-2.5 p-3 rounded-xl bg-amber-50 dark:bg-amber-500/10 border border-amber-200 dark:border-amber-500/20 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={deleteLinkedBill}
+                      onChange={(e) => setDeleteLinkedBill(e.target.checked)}
+                      className="mt-0.5 rounded border-amber-400 text-amber-600 focus:ring-amber-500"
+                    />
+                    <span className="text-slate-700 dark:text-slate-200">
+                      Excluir também a prorrogação / conta a receber pendente vinculada ({formatCurrency(linkedBillForPeriodDelete.gross_value)}, venc. {formatDate(linkedBillForPeriodDelete.due_date)}).
+                    </span>
+                  </label>
+                )}
+
+                {linkedBillForPeriodDelete && isPaidStatus(linkedBillForPeriodDelete.status || '') && (
+                  <div className="p-3 rounded-xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700 text-slate-500 dark:text-slate-400">
+                    Este período possui uma fatura já recebida/quitada ({formatCurrency(linkedBillForPeriodDelete.gross_value)}). O lançamento financeiro será preservado.
+                  </div>
+                )}
+              </div>
+
+              <div className="pt-2 flex items-center justify-end gap-3 border-t border-slate-100 dark:border-slate-800">
+                <button
+                  type="button"
+                  disabled={deletingPeriod}
+                  onClick={() => setPeriodToDelete(null)}
+                  className="px-4 py-2.5 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 rounded-xl text-xs font-bold transition-all disabled:opacity-50"
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="button"
+                  disabled={deletingPeriod}
+                  onClick={handleConfirmDeletePeriod}
+                  className="px-5 py-2.5 bg-rose-600 hover:bg-rose-700 text-white rounded-xl text-xs font-bold uppercase tracking-wider transition-all flex items-center gap-2 shadow-lg shadow-rose-600/20 disabled:opacity-50"
+                >
+                  {deletingPeriod ? (
+                    <>
+                      <div className="w-3.5 h-3.5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                      <span>Excluindo...</span>
+                    </>
+                  ) : (
+                    <>
+                      <span className="material-symbols-outlined text-[16px]">delete</span>
+                      <span>Confirmar Exclusão</span>
+                    </>
+                  )}
+                </button>
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
 
       {/* Modal de Confirmação de Exclusão da Locação (Administrador e Diretoria) */}
       <AnimatePresence>
