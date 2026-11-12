@@ -96,6 +96,7 @@ const ClientForm: React.FC = () => {
   const [docType, setDocType] = useState<'cnpj' | 'cpf'>('cnpj');
   const [docStatus, setDocStatus] = useState<'idle' | 'validating' | 'valid' | 'invalid'>(isEdit ? 'valid' : 'idle');
   const [docError, setDocError] = useState<string | null>(null);
+  const [docNotice, setDocNotice] = useState<string | null>(null);
 
   const [asaasCustomerId, setAsaasCustomerId] = useState<string | undefined>(undefined);
   const [syncingAsaas, setSyncingAsaas] = useState(false);
@@ -173,65 +174,137 @@ const ClientForm: React.FC = () => {
     if (!isValidCnpjChecksum(unmasked)) {
       setDocStatus('invalid');
       setDocError('CNPJ inválido (dígitos verificadores incorretos).');
+      setDocNotice(null);
       return;
     }
 
     setDocStatus('validating');
     setDocError(null);
+    setDocNotice(null);
 
+    // 1. Tentar primeiro o backend proxy (cascata robusta: OpenCNPJ -> BrasilAPI -> ReceitaWS)
+    try {
+      const { data } = await api.get(`/clients/lookup-cnpj/${unmasked}`);
+      if (data && data.valid) {
+        if (data.company_name) {
+          setFormData(prev => ({
+            ...prev,
+            company_name: data.company_name || prev.company_name,
+            phone: data.phone || prev.phone,
+            email: data.email || prev.email,
+            address_street: data.address_street || prev.address_street,
+            address_number: data.address_number || prev.address_number,
+            address_complement: data.address_complement || prev.address_complement,
+            address_city: data.address_city || prev.address_city,
+            address_state: data.address_state || prev.address_state,
+            address_zip: data.address_zip || prev.address_zip
+          }));
+        }
+
+        setDocStatus('valid');
+        setDocError(null);
+        if (data.source === 'offline_checksum' || data.message) {
+          setDocNotice(data.message || 'CNPJ com dígito verificador válido. Preencha os campos cadastrais manualmente.');
+        } else {
+          setDocNotice(null);
+        }
+        return;
+      }
+    } catch (backendErr) {
+      console.warn('[validateCnpjOnline] Backend proxy falhou ou indisponível, tentando consultas diretas...', backendErr);
+    }
+
+    // 2. Fallback direto 1: OpenCNPJ
     try {
       const response = await fetch(`https://api.opencnpj.org/${unmasked}`);
-      if (!response.ok) {
-        setDocStatus('invalid');
-        setDocError('CNPJ não encontrado ou inválido na Receita Federal.');
-        return;
+      if (response.ok) {
+        const data = await response.json();
+        if (!data.error && (data.razao_social || data.razao_scoial || data.cnpj)) {
+          const company_name = data.razao_scoial || data.razao_social || '';
+          const tel = data.telefones?.[0];
+          const phone = tel ? `(${tel.ddd}) ${tel.numero}` : '';
+          const email = data.email || '';
+
+          const tipo_logradouro = data.tipo_logradouro || '';
+          const logradouro = data.logradouro || '';
+          const numero = data.numero || '';
+          const bairro = data.bairro || '';
+          const municipio = data.municipio || '';
+          const uf = data.uf || '';
+
+          const cepStr = (data.cep || '').replace(/\D/g, '');
+          const cep_formatado = cepStr.length === 8 ? `${cepStr.slice(0, 5)}-${cepStr.slice(5)}` : data.cep || '';
+
+          const address_street = `${tipo_logradouro} ${logradouro}`.trim();
+          const address_complement = `${tipo_logradouro} ${logradouro} Nº ${numero}, ${bairro}, ${municipio} - ${uf} CEP: ${cep_formatado}`.trim();
+
+          setFormData(prev => ({
+            ...prev,
+            company_name: company_name || prev.company_name,
+            phone: phone || prev.phone,
+            email: email || prev.email,
+            address_street: address_street || prev.address_street,
+            address_number: numero || prev.address_number,
+            address_complement: address_complement || prev.address_complement,
+            address_city: municipio || prev.address_city,
+            address_state: uf || prev.address_state,
+            address_zip: cep_formatado || prev.address_zip
+          }));
+
+          setDocStatus('valid');
+          setDocError(null);
+          setDocNotice(null);
+          return;
+        }
       }
-      const data = await response.json();
-
-      if (data.error || (!data.razao_social && !data.razao_scoial && !data.cnpj)) {
-        setDocStatus('invalid');
-        setDocError('CNPJ não localizado na base de dados da Receita Federal.');
-        return;
-      }
-
-      const company_name = data.razao_scoial || data.razao_social || '';
-      const tel = data.telefones?.[0];
-      const phone = tel ? `(${tel.ddd}) ${tel.numero}` : '';
-      const email = data.email || '';
-
-      const tipo_logradouro = data.tipo_logradouro || '';
-      const logradouro = data.logradouro || '';
-      const numero = data.numero || '';
-      const bairro = data.bairro || '';
-      const municipio = data.municipio || '';
-      const uf = data.uf || '';
-
-      const cepStr = (data.cep || '').replace(/\D/g, '');
-      const cep_formatado = cepStr.length === 8 ? `${cepStr.slice(0, 5)}-${cepStr.slice(5)}` : data.cep || '';
-
-      const address_street = `${tipo_logradouro} ${logradouro}`.trim();
-      const address_complement = `${tipo_logradouro} ${logradouro} Nº ${numero}, ${bairro}, ${municipio} - ${uf} CEP: ${cep_formatado}`.trim();
-
-      setFormData(prev => ({
-        ...prev,
-        company_name: company_name || prev.company_name,
-        phone: phone || prev.phone,
-        email: email || prev.email,
-        address_street: address_street || prev.address_street,
-        address_number: numero || prev.address_number,
-        address_complement: address_complement || prev.address_complement,
-        address_city: municipio || prev.address_city,
-        address_state: uf || prev.address_state,
-        address_zip: cep_formatado || prev.address_zip
-      }));
-
-      setDocStatus('valid');
-      setDocError(null);
-    } catch (err) {
-      console.error('Erro na consulta do CNPJ:', err);
-      setDocStatus('invalid');
-      setDocError('Falha ao validar o CNPJ junto à Receita Federal. Verifique o número digitado.');
+    } catch (openCnpjErr) {
+      console.warn('[validateCnpjOnline] OpenCNPJ direto falhou:', openCnpjErr);
     }
+
+    // 3. Fallback direto 2: BrasilAPI
+    try {
+      const response = await fetch(`https://brasilapi.com.br/api/cnpj/v1/${unmasked}`);
+      if (response.ok) {
+        const data = await response.json();
+        const company_name = data.razao_social || '';
+        const phone = data.ddd_telefone_1 ? `(${data.ddd_telefone_1.slice(0, 2)}) ${data.ddd_telefone_1.slice(2)}` : '';
+        const email = data.email || '';
+        const street = data.logradouro || '';
+        const numero = data.numero || '';
+        const bairro = data.bairro || '';
+        const municipio = data.municipio || '';
+        const uf = data.uf || '';
+        const cepStr = (data.cep || '').replace(/\D/g, '');
+        const cep_formatado = cepStr.length === 8 ? `${cepStr.slice(0, 5)}-${cepStr.slice(5)}` : data.cep || '';
+        const complement = `${street} Nº ${numero}, ${bairro}, ${municipio} - ${uf} CEP: ${cep_formatado}`.trim();
+
+        setFormData(prev => ({
+          ...prev,
+          company_name: company_name || prev.company_name,
+          phone: phone || prev.phone,
+          email: email || prev.email,
+          address_street: street || prev.address_street,
+          address_number: numero || prev.address_number,
+          address_complement: complement || prev.address_complement,
+          address_city: municipio || prev.address_city,
+          address_state: uf || prev.address_state,
+          address_zip: cep_formatado || prev.address_zip
+        }));
+
+        setDocStatus('valid');
+        setDocError(null);
+        setDocNotice(null);
+        return;
+      }
+    } catch (brasilApiErr) {
+      console.warn('[validateCnpjOnline] BrasilAPI direto falhou:', brasilApiErr);
+    }
+
+    // 4. Se todos os provedores online falharem (adblocker, instabilidade na Receita, etc.),
+    // mas o dígito verificador matematicamente é válido: NÃO BLOQUEIA o usuário!
+    setDocStatus('valid');
+    setDocError(null);
+    setDocNotice('CNPJ válido (dígitos verificadores corretos). Não foi possível carregar os dados automáticos da Receita Federal neste momento. Preencha os campos cadastrais manualmente.');
   };
 
   const handleDocTypeChange = (newType: 'cnpj' | 'cpf') => {
@@ -241,6 +314,7 @@ const ClientForm: React.FC = () => {
     if (clean.length === 0) {
       setDocStatus('idle');
       setDocError(null);
+      setDocNotice(null);
       return;
     }
     if (newType === 'cpf') {
@@ -307,12 +381,14 @@ const ClientForm: React.FC = () => {
       if (unmasked.length === 0) {
         setDocStatus('idle');
         setDocError(null);
+        setDocNotice(null);
         return;
       }
 
       if (unmasked.length < 14) {
         setDocStatus('invalid');
         setDocError('CNPJ incompleto (deve conter 14 dígitos).');
+        setDocNotice(null);
         return;
       }
 
@@ -555,24 +631,37 @@ const ClientForm: React.FC = () => {
                   <label className="text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-widest ml-1">
                     {docType === 'cpf' ? 'CPF *' : 'CNPJ *'}
                   </label>
-                  {docStatus === 'validating' && (
-                    <span className="text-[11px] text-amber-600 dark:text-amber-400 font-medium flex items-center gap-1">
-                      <div className="w-3 h-3 border-2 border-amber-500/30 border-t-amber-500 rounded-full animate-spin"></div>
-                      Consultando Receita...
-                    </span>
-                  )}
-                  {docStatus === 'valid' && (
-                    <span className="text-[11px] text-emerald-600 dark:text-emerald-400 font-bold flex items-center gap-0.5">
-                      <span className="material-symbols-outlined text-[15px]">check_circle</span>
-                      {docType === 'cpf' ? 'CPF Validado' : 'CNPJ Validado'}
-                    </span>
-                  )}
-                  {docStatus === 'invalid' && (
-                    <span className="text-[11px] text-red-600 dark:text-red-400 font-bold flex items-center gap-0.5">
-                      <span className="material-symbols-outlined text-[15px]">cancel</span>
-                      Não Validado
-                    </span>
-                  )}
+                  <div className="flex items-center gap-2">
+                    {docType === 'cnpj' && formData.cnpj.replace(/\D/g, '').length === 14 && docStatus !== 'validating' && (
+                      <button
+                        type="button"
+                        onClick={() => validateCnpjOnline(formData.cnpj.replace(/\D/g, ''))}
+                        className="text-[11px] text-mustard-600 dark:text-mustard-400 hover:underline font-medium flex items-center gap-0.5"
+                        title="Consultar novamente os dados cadastrais na Receita Federal"
+                      >
+                        <span className="material-symbols-outlined text-[13px]">refresh</span>
+                        Reconsultar
+                      </button>
+                    )}
+                    {docStatus === 'validating' && (
+                      <span className="text-[11px] text-amber-600 dark:text-amber-400 font-medium flex items-center gap-1">
+                        <div className="w-3 h-3 border-2 border-amber-500/30 border-t-amber-500 rounded-full animate-spin"></div>
+                        Consultando Receita...
+                      </span>
+                    )}
+                    {docStatus === 'valid' && (
+                      <span className="text-[11px] text-emerald-600 dark:text-emerald-400 font-bold flex items-center gap-0.5">
+                        <span className="material-symbols-outlined text-[15px]">check_circle</span>
+                        {docType === 'cpf' ? 'CPF Validado' : 'CNPJ Validado'}
+                      </span>
+                    )}
+                    {docStatus === 'invalid' && (
+                      <span className="text-[11px] text-red-600 dark:text-red-400 font-bold flex items-center gap-0.5">
+                        <span className="material-symbols-outlined text-[15px]">cancel</span>
+                        Não Validado
+                      </span>
+                    )}
+                  </div>
                 </div>
                 <div className="relative">
                   <input
@@ -610,6 +699,12 @@ const ClientForm: React.FC = () => {
                   <p className="text-xs text-red-600 dark:text-red-400 font-medium ml-1 flex items-center gap-1 mt-1">
                     <span className="material-symbols-outlined text-[14px]">error</span>
                     {docError}
+                  </p>
+                )}
+                {docNotice && (
+                  <p className="text-xs text-amber-600 dark:text-amber-400 font-medium ml-1 flex items-start gap-1 mt-1">
+                    <span className="material-symbols-outlined text-[14px] mt-0.5">info</span>
+                    <span>{docNotice}</span>
                   </p>
                 )}
               </div>

@@ -223,24 +223,41 @@ const ContractFormModal: React.FC<ContractFormModalProps> = ({ isOpen, onClose, 
         try {
           const cleanCnpj = formData.locatario_cnpj.replace(/\D/g, '');
           if (cleanCnpj.length === 14) {
-            const response = await fetch(`https://api.opencnpj.org/${cleanCnpj}`);
-            if (response.ok) {
-              const result = await response.json();
-              const logradouro = result.logradouro || '';
-              const numero = result.numero || 'S/N';
-              const bairro = result.bairro || '';
-              const municipio = result.municipio || result.cidade || '';
-              const uf = result.uf || '';
-              const cep = result.cep || '';
+            let fullAddress = '';
 
-              const parts = [
-                logradouro,
-                numero,
-                bairro,
-                municipio || uf || cep ? `${municipio}/${uf} - CEP: ${cep}` : ''
-              ].filter(Boolean);
+            try {
+              const { data } = await api.get(`/clients/lookup-cnpj/${cleanCnpj}`);
+              if (data && data.valid && data.address_complement) {
+                fullAddress = data.address_complement;
+              }
+            } catch {
+              // fallback direto se backend falhar
+              try {
+                const response = await fetch(`https://api.opencnpj.org/${cleanCnpj}`);
+                if (response.ok) {
+                  const result = await response.json();
+                  const logradouro = result.logradouro || '';
+                  const numero = result.numero || 'S/N';
+                  const bairro = result.bairro || '';
+                  const municipio = result.municipio || result.cidade || '';
+                  const uf = result.uf || '';
+                  const cep = result.cep || '';
 
-              const fullAddress = parts.join(', ').replace(/^[,\s]+|[,\s]+$/g, '');
+                  const parts = [
+                    logradouro,
+                    numero,
+                    bairro,
+                    municipio || uf || cep ? `${municipio}/${uf} - CEP: ${cep}` : ''
+                  ].filter(Boolean);
+
+                  fullAddress = parts.join(', ').replace(/^[,\s]+|[,\s]+$/g, '');
+                }
+              } catch {
+                // Silently fail
+              }
+            }
+
+            if (fullAddress) {
               setFormData((prev: any) => ({ ...prev, locatario_address_full: fullAddress }));
             }
           }

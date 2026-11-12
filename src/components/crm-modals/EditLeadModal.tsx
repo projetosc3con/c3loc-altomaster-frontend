@@ -130,20 +130,37 @@ const EditLeadModal: React.FC<EditLeadModalProps> = ({ isOpen, onClose, onSucces
         }
       }
 
-      try {
-        const response = await fetch(`https://api.opencnpj.org/${unmasked}`);
-        if (!response.ok) return;
-        const data = await response.json();
-        
-        const company_name = data.razao_scoial || data.razao_social || '';
-        const tel = data.telefones?.[0];
-        const phone = tel ? `(${tel.ddd}) ${tel.numero}` : '';
-        const email = data.email || '';
+      let company_name = '';
+      let phone = '';
+      let email = '';
 
-        setFormData(prev => ({
-          ...prev,
-          company_name: company_name || prev.company_name
-        }));
+      try {
+        const { data } = await api.get(`/clients/lookup-cnpj/${unmasked}`);
+        if (data && data.valid) {
+          company_name = data.company_name || '';
+          phone = data.phone || '';
+          email = data.email || '';
+        }
+      } catch {
+        // fallback direto se backend falhar
+        try {
+          const response = await fetch(`https://api.opencnpj.org/${unmasked}`);
+          if (response.ok) {
+            const data = await response.json();
+            company_name = data.razao_scoial || data.razao_social || '';
+            const tel = data.telefones?.[0];
+            phone = tel ? `(${tel.ddd}) ${tel.numero}` : '';
+            email = data.email || '';
+          }
+        } catch {
+          // Silently fail
+        }
+      }
+
+      setFormData(prev => ({
+        ...prev,
+        company_name: company_name || prev.company_name
+      }));
 
         if (email || phone) {
           setContacts(prev => [
@@ -159,11 +176,8 @@ const EditLeadModal: React.FC<EditLeadModalProps> = ({ isOpen, onClose, onSucces
           ]);
           setActiveTab('contacts');
         }
-      } catch (err) {
-        // Silently fail
       }
-    }
-  };
+    };
 
   const handleAddContact = () => {
     setContacts(prev => [

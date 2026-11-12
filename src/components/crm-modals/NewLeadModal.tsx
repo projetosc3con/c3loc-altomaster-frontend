@@ -105,14 +105,32 @@ const NewLeadModal: React.FC<NewLeadModalProps> = ({ isOpen, onClose, onSuccess 
           return;
         }
 
-        const response = await fetch(`https://api.opencnpj.org/${unmasked}`);
-        if (!response.ok) return;
-        const data = await response.json();
-        
-        const company_name = data.razao_scoial || data.razao_social || '';
-        const tel = data.telefones?.[0];
-        const phone = tel ? `(${tel.ddd}) ${tel.numero}` : '';
-        const email = data.email || '';
+        let company_name = '';
+        let phone = '';
+        let email = '';
+
+        try {
+          const { data } = await api.get(`/clients/lookup-cnpj/${unmasked}`);
+          if (data && data.valid) {
+            company_name = data.company_name || '';
+            phone = data.phone || '';
+            email = data.email || '';
+          }
+        } catch {
+          // fallback direto se backend falhar
+          try {
+            const response = await fetch(`https://api.opencnpj.org/${unmasked}`);
+            if (response.ok) {
+              const data = await response.json();
+              company_name = data.razao_scoial || data.razao_social || '';
+              const tel = data.telefones?.[0];
+              phone = tel ? `(${tel.ddd}) ${tel.numero}` : '';
+              email = data.email || '';
+            }
+          } catch {
+            // Silently fail
+          }
+        }
 
         setFormData(prev => ({
           ...prev,
