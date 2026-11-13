@@ -19,6 +19,8 @@ export interface ShippingInvoice {
   cfop: string;
   danfe_pdf_url?: string;
   xml_url?: string;
+  cce_pdf_url?: string;
+  cce_protocol?: string;
   created_at: string;
 }
 
@@ -57,6 +59,14 @@ export const shippingNfeService = {
     data: { access_key?: string; nfe_number?: number; danfe_pdf_url?: string }
   ): Promise<ShippingInvoice> => {
     const response = await api.post(`/fiscal/shipping/retorno-externo/${rentalId}`, data);
+    return response.data;
+  },
+
+  /**
+   * Cancela uma NF-e de remessa/retorno emitida na SEFAZ via Notaas
+   */
+  cancelShippingNfe: async (shippingInvoiceId: string, motivo: string): Promise<any> => {
+    const response = await api.post(`/fiscal/shipping/cancel/${shippingInvoiceId}`, { motivo });
     return response.data;
   },
 

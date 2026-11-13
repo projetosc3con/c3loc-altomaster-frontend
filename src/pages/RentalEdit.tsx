@@ -433,6 +433,8 @@ const RentalEdit: React.FC = () => {
   const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [deletingRental, setDeletingRental] = useState(false);
   const [deleteError, setDeleteError] = useState<string | null>(null);
+  const [deleteNfeAction, setDeleteNfeAction] = useState<'CANCELAR_REMESSA' | 'EMITIR_RETORNO'>('CANCELAR_REMESSA');
+  const [deleteCancelReason, setDeleteCancelReason] = useState('Cancelamento da locacao antes da saida fisica do equipamento');
 
   // Period Deletion state (Excluir período de prorrogação/locação)
   const [periodToDelete, setPeriodToDelete] = useState<PeriodGroup | null>(null);
@@ -1168,12 +1170,47 @@ const RentalEdit: React.FC = () => {
 
   const handleDeleteRental = async () => {
     if (!id) return;
+    if (deleteNfeAction === 'CANCELAR_REMESSA' && deleteCancelReason.trim().length < 15) {
+      setDeleteError('A justificativa para cancelamento da NF-e na SEFAZ deve conter pelo menos 15 caracteres.');
+      return;
+    }
+
     try {
       setDeletingRental(true);
       setDeleteError(null);
-      await api.delete(`/rentals/${id}`);
+      const res = await api.delete(`/rentals/${id}`, {
+        data: {
+          nfe_action: deleteNfeAction,
+          cancel_reason: deleteCancelReason.trim(),
+        },
+      });
+
+      const returnNfe = res.data?.returnNfe;
+      if (returnNfe?.pdfBase64) {
+        try {
+          const byteChars = atob(returnNfe.pdfBase64);
+          const byteNumbers = new Array(byteChars.length);
+          for (let i = 0; i < byteChars.length; i++) {
+            byteNumbers[i] = byteChars.charCodeAt(i);
+          }
+          const blob = new Blob([new Uint8Array(byteNumbers)], { type: 'application/pdf' });
+          saveAs(
+            blob,
+            `DANFE_Retorno_${generalData.invoice_number || id}_NFe_${returnNfe.nfeNumber || 1}.pdf`
+          );
+        } catch (dlErr) {
+          console.warn('Falha ao baixar DANFE de retorno:', dlErr);
+        }
+      } else if (returnNfe?.danfePdfUrl) {
+        window.open(returnNfe.danfePdfUrl, '_blank');
+      }
+
       navigate('/locacoes', {
-        state: { message: 'Locação, contas a receber e negociações do CRM vinculadas foram excluídas com sucesso.' }
+        state: {
+          message:
+            res.data?.message ||
+            'Locação, contas a receber e negociações do CRM vinculadas foram excluídas com sucesso.',
+        },
       });
     } catch (err: any) {
       console.error('Erro ao excluir locação:', err);
@@ -3111,39 +3148,70 @@ const RentalEdit: React.FC = () => {
                   {(() => {
                     const invSaida = shippingInvoices.find(i => i.direction === 'SAIDA' || (i as any).operation_type === 'REMESSA_SAIDA');
                     return (
-                      <div className="p-2.5 rounded-xl border border-blue-100 dark:border-blue-900/30 bg-blue-50/30 dark:bg-blue-950/20 flex items-center justify-between gap-2">
-                        <div className="flex items-center gap-2 min-w-0">
-                          <span className="material-symbols-outlined text-blue-500 text-base shrink-0">local_shipping</span>
-                          <div className="min-w-0">
-                            <p className="font-bold text-[11px] text-slate-800 dark:text-slate-200 truncate">
-                              2. NF-e Remessa (Saída)
-                            </p>
-                            <p className="text-[10px] text-slate-400 truncate">
-                              {invSaida ? `Nº ${invSaida.nfe_number || 'S/N'} • Autorizada` : 'Aguardando triagem'}
-                            </p>
+                      <div className="p-2.5 rounded-xl border border-blue-100 dark:border-blue-900/30 bg-blue-50/30 dark:bg-blue-950/20 space-y-2">
+                        <div className="flex items-center justify-between gap-2">
+                          <div className="flex items-center gap-2 min-w-0">
+                            <span className="material-symbols-outlined text-blue-500 text-base shrink-0">local_shipping</span>
+                            <div className="min-w-0">
+                              <p className="font-bold text-[11px] text-slate-800 dark:text-slate-200 truncate">
+                                2. NF-e Remessa (Saída)
+                              </p>
+                              <p className="text-[10px] text-slate-400 truncate">
+                                {invSaida ? `Nº ${invSaida.nfe_number || 'S/N'} • Autorizada` : 'Aguardando triagem'}
+                              </p>
+                            </div>
                           </div>
+                          {invSaida?.danfe_pdf_url ? (
+                            <div className="flex items-center gap-1 shrink-0">
+                              <button
+                                type="button"
+                                onClick={() => window.open(invSaida.danfe_pdf_url!, '_blank')}
+                                className="p-1 text-slate-500 hover:text-blue-600 rounded-lg hover:bg-blue-100 dark:hover:bg-blue-900/40 transition-colors"
+                                title="Visualizar DANFE"
+                              >
+                                <span className="material-symbols-outlined text-[15px]">visibility</span>
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => saveAs(invSaida.danfe_pdf_url!, `DANFE_Remessa_NFe_${invSaida.nfe_number || '1'}.pdf`)}
+                                className="p-1 text-slate-500 hover:text-blue-600 rounded-lg hover:bg-blue-100 dark:hover:bg-blue-900/40 transition-colors"
+                                title="Baixar DANFE"
+                              >
+                                <span className="material-symbols-outlined text-[15px]">download</span>
+                              </button>
+                            </div>
+                          ) : (
+                            <span className="text-[10px] text-slate-400 italic">Pendente</span>
+                          )}
                         </div>
-                        {invSaida?.danfe_pdf_url ? (
-                          <div className="flex items-center gap-1 shrink-0">
-                            <button
-                              type="button"
-                              onClick={() => window.open(invSaida.danfe_pdf_url!, '_blank')}
-                              className="p-1 text-slate-500 hover:text-blue-600 rounded-lg hover:bg-blue-100 dark:hover:bg-blue-900/40 transition-colors"
-                              title="Visualizar DANFE"
-                            >
-                              <span className="material-symbols-outlined text-[15px]">visibility</span>
-                            </button>
-                            <button
-                              type="button"
-                              onClick={() => saveAs(invSaida.danfe_pdf_url!, `DANFE_Remessa_NFe_${invSaida.nfe_number || '1'}.pdf`)}
-                              className="p-1 text-slate-500 hover:text-blue-600 rounded-lg hover:bg-blue-100 dark:hover:bg-blue-900/40 transition-colors"
-                              title="Baixar DANFE"
-                            >
-                              <span className="material-symbols-outlined text-[15px]">download</span>
-                            </button>
+
+                        {invSaida?.cce_pdf_url && (
+                          <div className="pt-1.5 border-t border-blue-100 dark:border-blue-900/40 flex items-center justify-between gap-2">
+                            <div className="flex items-center gap-1.5 min-w-0">
+                              <span className="material-symbols-outlined text-amber-500 text-[15px] shrink-0">edit_document</span>
+                              <span className="text-[10px] font-bold text-amber-700 dark:text-amber-300 truncate">
+                                Carta de Correção (CC-e){invSaida.cce_protocol ? ` • Prot. ${invSaida.cce_protocol}` : ''}
+                              </span>
+                            </div>
+                            <div className="flex items-center gap-1 shrink-0">
+                              <button
+                                type="button"
+                                onClick={() => window.open(invSaida.cce_pdf_url!, '_blank')}
+                                className="p-1 text-amber-600 hover:text-amber-700 rounded-lg hover:bg-amber-100 dark:hover:bg-amber-900/40 transition-colors"
+                                title="Visualizar Carta de Correção (DACCE)"
+                              >
+                                <span className="material-symbols-outlined text-[15px]">visibility</span>
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => saveAs(invSaida.cce_pdf_url!, `CCe_NFe_${invSaida.nfe_number || '74'}.pdf`)}
+                                className="p-1 text-amber-600 hover:text-amber-700 rounded-lg hover:bg-amber-100 dark:hover:bg-amber-900/40 transition-colors"
+                                title="Baixar Carta de Correção (DACCE)"
+                              >
+                                <span className="material-symbols-outlined text-[15px]">download</span>
+                              </button>
+                            </div>
                           </div>
-                        ) : (
-                          <span className="text-[10px] text-slate-400 italic">Pendente</span>
                         )}
                       </div>
                     );
@@ -3804,6 +3872,110 @@ const RentalEdit: React.FC = () => {
                 </ul>
               </div>
 
+              {/* Tratamento Fiscal da NF-e de Remessa ao Excluir Locação */}
+              {(() => {
+                const activeSaida = shippingInvoices.find(
+                  (inv) => inv.direction === 'SAIDA' && inv.status === 'issued'
+                );
+                return (
+                  <div className="space-y-3 pt-2 border-t border-slate-100 dark:border-slate-800">
+                    <div className="flex items-center justify-between">
+                      <label className="text-[11px] font-black uppercase tracking-wider text-slate-700 dark:text-slate-300 flex items-center gap-1.5">
+                        <span className="material-symbols-outlined text-[16px] text-amber-500">receipt_long</span>
+                        <span>Destino da NF-e de Remessa</span>
+                      </label>
+                      {activeSaida && (
+                        <span className="text-[10px] font-mono font-bold px-2 py-0.5 rounded-md bg-amber-100 dark:bg-amber-500/15 text-amber-800 dark:text-amber-300">
+                          NF-e Remessa Nº {activeSaida.nfe_number || '—'}
+                        </span>
+                      )}
+                    </div>
+
+                    <div className="grid grid-cols-1 gap-2.5">
+                      {/* Opção 1: Cancelar NF-e de Remessa */}
+                      <button
+                        type="button"
+                        disabled={deletingRental}
+                        onClick={() => setDeleteNfeAction('CANCELAR_REMESSA')}
+                        className={`w-full text-left p-3.5 rounded-2xl border transition-all flex items-start gap-3 ${
+                          deleteNfeAction === 'CANCELAR_REMESSA'
+                            ? 'border-red-500 bg-red-50/70 dark:bg-red-500/10 ring-2 ring-red-500/15'
+                            : 'border-slate-200 dark:border-slate-800 hover:border-slate-300 dark:hover:border-slate-700 bg-slate-50/50 dark:bg-slate-800/40'
+                        }`}
+                      >
+                        <div
+                          className={`mt-0.5 w-4 h-4 rounded-full border-2 flex items-center justify-center flex-shrink-0 ${
+                            deleteNfeAction === 'CANCELAR_REMESSA'
+                              ? 'border-red-600 bg-red-600'
+                              : 'border-slate-400 dark:border-slate-500'
+                          }`}
+                        >
+                          {deleteNfeAction === 'CANCELAR_REMESSA' && (
+                            <div className="w-1.5 h-1.5 rounded-full bg-white" />
+                          )}
+                        </div>
+                        <div className="flex-1 space-y-0.5">
+                          <div className="text-xs font-bold text-slate-900 dark:text-white flex items-center gap-1.5">
+                            <span>Cancelar a NF-e de Remessa</span>
+                          </div>
+                          <p className="text-[11px] text-slate-500 dark:text-slate-400 leading-relaxed">
+                            Selecione se o equipamento <strong>nem chegou a sair fisicamente</strong>. Cancela a NF-e de remessa diretamente na SEFAZ (dentro do prazo legal).
+                          </p>
+                        </div>
+                      </button>
+
+                      {/* Opção 2: Gerar NF-e de Retorno */}
+                      <button
+                        type="button"
+                        disabled={deletingRental}
+                        onClick={() => setDeleteNfeAction('EMITIR_RETORNO')}
+                        className={`w-full text-left p-3.5 rounded-2xl border transition-all flex items-start gap-3 ${
+                          deleteNfeAction === 'EMITIR_RETORNO'
+                            ? 'border-amber-500 bg-amber-50/70 dark:bg-amber-500/10 ring-2 ring-amber-500/15'
+                            : 'border-slate-200 dark:border-slate-800 hover:border-slate-300 dark:hover:border-slate-700 bg-slate-50/50 dark:bg-slate-800/40'
+                        }`}
+                      >
+                        <div
+                          className={`mt-0.5 w-4 h-4 rounded-full border-2 flex items-center justify-center flex-shrink-0 ${
+                            deleteNfeAction === 'EMITIR_RETORNO'
+                              ? 'border-amber-500 bg-amber-500'
+                              : 'border-slate-400 dark:border-slate-500'
+                          }`}
+                        >
+                          {deleteNfeAction === 'EMITIR_RETORNO' && (
+                            <div className="w-1.5 h-1.5 rounded-full bg-white" />
+                          )}
+                        </div>
+                        <div className="flex-1 space-y-0.5">
+                          <div className="text-xs font-bold text-slate-900 dark:text-white flex items-center gap-1.5">
+                            <span>Gerar NF-e de Retorno</span>
+                          </div>
+                          <p className="text-[11px] text-slate-500 dark:text-slate-400 leading-relaxed">
+                            Selecione se o equipamento <strong>já tiver ido para o cliente</strong> ou se o prazo de cancelamento na SEFAZ expirou. Emite a NF-e de Entrada (Retorno de Remessa) e baixa o DANFE antes de excluir.
+                          </p>
+                        </div>
+                      </button>
+                    </div>
+
+                    {deleteNfeAction === 'CANCELAR_REMESSA' && (
+                      <div className="space-y-1 pt-1">
+                        <label className="text-[10px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">
+                          Justificativa do Cancelamento SEFAZ (mín. 15 caracteres)
+                        </label>
+                        <input
+                          type="text"
+                          disabled={deletingRental}
+                          value={deleteCancelReason}
+                          onChange={(e) => setDeleteCancelReason(e.target.value)}
+                          placeholder="Ex.: Cancelamento da locação antes da saída física do equipamento"
+                          className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-xs text-slate-900 dark:text-white outline-none focus:border-red-500 transition-all"
+                        />
+                      </div>
+                    )}
+                  </div>
+                );
+              })()}
+
               <div className="pt-2 flex items-center justify-end gap-3 border-t border-slate-100 dark:border-slate-800">
                 <button
                   type="button"
@@ -3822,12 +3994,20 @@ const RentalEdit: React.FC = () => {
                   {deletingRental ? (
                     <>
                       <div className="w-3.5 h-3.5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-                      <span>Excluindo...</span>
+                      <span>
+                        {deleteNfeAction === 'EMITIR_RETORNO'
+                          ? 'Emitindo Retorno e Excluindo...'
+                          : 'Cancelando NF-e e Excluindo...'}
+                      </span>
                     </>
                   ) : (
                     <>
                       <span className="material-symbols-outlined text-[16px]">delete</span>
-                      <span>Sim, Excluir Locação</span>
+                      <span>
+                        {deleteNfeAction === 'EMITIR_RETORNO'
+                          ? 'Emitir Retorno e Excluir'
+                          : 'Cancelar NF-e e Excluir'}
+                      </span>
                     </>
                   )}
                 </button>
