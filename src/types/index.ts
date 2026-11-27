@@ -188,10 +188,17 @@ export type ReconciliationStatus = 'Pendente' | 'Atrasado' | 'Recebido' | 'Diver
 export type ServiceOrderStatus = 'Aberta' | 'Em Andamento' | 'Aguardando Peças' | 'Concluída' | 'Cancelada' | 'Encerrada com pendências';
 export type ServiceOrderType = 'Interna' | 'Externa';
 
+export type MaintenanceCategory = 'OS' | 'PREVENTIVA';
+export type PreventiveType = 'Elétrica' | 'Diesel';
+
 export interface ServiceOrder {
   id: string;
   os_number: number;
   order_type: ServiceOrderType;
+  maintenance_category?: MaintenanceCategory;
+  preventive_type?: PreventiveType | null;
+  contract_number?: string | null;
+  preventive_checklist?: any;
   rental_invoice_id?: string;
   equipment_id?: string;
   equipment_asset_number?: string;
@@ -394,6 +401,9 @@ export interface ServiceOrderLabor {
   start_time?: string;
   end_time?: string;
   labor_type: string;
+  vehicle_plate?: string | null;
+  km_start?: number | null;
+  km_end?: number | null;
   created_at?: string;
 }
 

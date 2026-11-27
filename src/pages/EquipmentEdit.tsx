@@ -8,8 +8,9 @@ import { EquipmentGeneralTab } from '../components/equipments/EquipmentGeneralTa
 import { EquipmentDocumentsTab } from '../components/equipments/EquipmentDocumentsTab';
 import { EquipmentRentalsTab } from '../components/equipments/EquipmentRentalsTab';
 import { EquipmentMaintenanceTab } from '../components/equipments/EquipmentMaintenanceTab';
+import { EquipmentPartsSection } from '../components/equipments/EquipmentPartsSection';
 
-type TabType = 'geral' | 'documentos' | 'locacoes' | 'manutencoes';
+type TabType = 'geral' | 'pecas' | 'documentos' | 'locacoes' | 'manutencoes';
 
 const EquipmentEdit: React.FC = () => {
   const { id } = useParams<{ id: string }>();
@@ -29,6 +30,7 @@ const EquipmentEdit: React.FC = () => {
     documents: 0,
     rentals: 0,
     serviceOrders: 0,
+    parts: 0,
   });
 
   const [formData, setFormData] = useState({
@@ -104,16 +106,18 @@ const EquipmentEdit: React.FC = () => {
   const fetchCounts = async () => {
     if (!id) return;
     try {
-      const [docsRes, rentalsRes, osRes] = await Promise.allSettled([
+      const [docsRes, rentalsRes, osRes, partsRes] = await Promise.allSettled([
         api.get(`/equipments/${id}/documents`),
         api.get(`/equipments/${id}/rentals`),
         api.get(`/equipments/${id}/service-orders`),
+        api.get(`/equipments/${id}/parts`),
       ]);
 
       setCounts({
         documents: docsRes.status === 'fulfilled' ? docsRes.value.data?.length || 0 : 0,
         rentals: rentalsRes.status === 'fulfilled' ? rentalsRes.value.data?.length || 0 : 0,
         serviceOrders: osRes.status === 'fulfilled' ? osRes.value.data?.length || 0 : 0,
+        parts: partsRes.status === 'fulfilled' ? partsRes.value.data?.length || 0 : 0,
       });
     } catch (e) {
       // Silencioso para não bloquear carregamento principal
@@ -281,6 +285,24 @@ const EquipmentEdit: React.FC = () => {
 
         <button
           type="button"
+          onClick={() => setActiveTab('pecas')}
+          className={`flex items-center gap-2 py-3.5 px-4 text-xs font-bold uppercase tracking-wider border-b-2 transition-all cursor-pointer whitespace-nowrap ${
+            activeTab === 'pecas'
+              ? 'border-mustard-500 text-mustard-600 dark:text-mustard-400'
+              : 'border-transparent text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200'
+          }`}
+        >
+          <span className="material-symbols-outlined text-lg">home_repair_service</span>
+          Lista de Peças
+          {counts.parts > 0 && (
+            <span className="ml-1 px-1.5 py-0.5 text-[10px] rounded-full bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 font-mono font-bold">
+              {counts.parts}
+            </span>
+          )}
+        </button>
+
+        <button
+          type="button"
           onClick={() => setActiveTab('documentos')}
           className={`flex items-center gap-2 py-3.5 px-4 text-xs font-bold uppercase tracking-wider border-b-2 transition-all cursor-pointer whitespace-nowrap ${
             activeTab === 'documentos'
@@ -356,6 +378,14 @@ const EquipmentEdit: React.FC = () => {
               loading={loading}
               onSubmit={handleSubmit}
               onCancel={() => navigate('/equipamentos')}
+            />
+          )}
+
+          {activeTab === 'pecas' && (
+            <EquipmentPartsSection
+              equipmentId={id!}
+              canEdit={canEditHourMeter}
+              onCountChange={(cnt) => setCounts((prev) => ({ ...prev, parts: cnt }))}
             />
           )}
 

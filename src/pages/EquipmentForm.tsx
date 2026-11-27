@@ -3,6 +3,8 @@ import { useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { supabase } from '../lib/supabase';
 import api from '../services/api';
+import { useAuth } from '../contexts/AuthContext';
+import { EquipmentPartsSection, type ReferencePartItem } from '../components/equipments/EquipmentPartsSection';
 
 const EQUIPMENT_TYPES = [
   'Elétrica',
@@ -12,10 +14,13 @@ const EQUIPMENT_TYPES = [
 
 const EquipmentForm: React.FC = () => {
   const navigate = useNavigate();
+  const { profile } = useAuth();
+  const canManageParts = profile?.access_level === 'Administrador' || profile?.access_level === 'Diretoria';
   const [loading, setLoading] = useState(false);
   const [photoPreview, setPhotoPreview] = useState<string | null>(null);
   const [photoFile, setPhotoFile] = useState<File | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [referenceParts, setReferenceParts] = useState<ReferencePartItem[]>([]);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const [formData, setFormData] = useState({
@@ -83,10 +88,19 @@ const EquipmentForm: React.FC = () => {
       const payload = {
         ...formData,
         height: formData.height ? parseFloat(formData.height) : null,
-        manufacture_year: formData.manufacture_year ? parseInt(formData.manufacture_year) : null,
+        manufacture_year: formData.manufacture_year ? parseInt(formData.manufacture_year, 10) : null,
         hour_meter: formData.hour_meter ? parseFloat(formData.hour_meter) : 0,
         value: formData.value ? parseFloat(formData.value) : null,
         photo_url,
+        ...(canManageParts && referenceParts.length > 0
+          ? {
+              reference_parts: referenceParts.map((p) => ({
+                part_id: p.part_id,
+                default_quantity: p.default_quantity || 1,
+                notes: p.notes || null,
+              })),
+            }
+          : {}),
       };
 
       await api.post('/equipments', payload);
@@ -370,9 +384,20 @@ const EquipmentForm: React.FC = () => {
                   />
                 </div>
               </div>
+            </div>
 
-              {/* Botões de Ação */}
-              <div className="p-6 bg-slate-50 dark:bg-slate-800/30 border-t border-slate-100 dark:border-slate-800 flex justify-end gap-3">
+            {/* Seção: Lista de Peças de Referência (Diretoria e Administrador) */}
+            {canManageParts && (
+              <EquipmentPartsSection
+                value={referenceParts}
+                onChange={setReferenceParts}
+                canEdit={canManageParts}
+              />
+            )}
+
+            {/* Botões de Ação */}
+            <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm overflow-hidden">
+              <div className="p-6 bg-slate-50 dark:bg-slate-800/30 flex justify-end gap-3">
                 <button
                   type="button"
                   onClick={() => navigate('/equipamentos')}

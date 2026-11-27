@@ -144,7 +144,7 @@ export const EquipmentMaintenanceTab: React.FC<EquipmentMaintenanceTabProps> = (
           </p>
           <button
             type="button"
-            onClick={() => navigate('/manutencao')}
+            onClick={() => navigate('/manutencoes')}
             className="mt-6 px-4 py-2 bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 font-bold text-xs uppercase tracking-widest rounded-xl transition-colors flex items-center gap-1.5 cursor-pointer"
           >
             <span className="material-symbols-outlined text-sm">open_in_new</span>
@@ -160,20 +160,27 @@ export const EquipmentMaintenanceTab: React.FC<EquipmentMaintenanceTabProps> = (
 
           {orders.map(os => {
             const executorName = (os as any).executor?.full_name || os.signer_tech_name || null;
+            const isPreventive = os.maintenance_category === 'PREVENTIVA';
             return (
               <div
                 key={os.id}
-                onClick={() => navigate(`/manutencao/editar/${os.id}`)}
+                onClick={() => navigate(isPreventive ? `/manutencoes/preventiva/editar/${os.id}` : `/manutencoes/editar/${os.id}`)}
                 className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-5 hover:border-mustard-500/50 hover:shadow-md transition-all space-y-4 cursor-pointer group"
               >
                 <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-100 dark:border-slate-800 pb-3">
-                  <div className="flex items-center gap-3">
+                  <div className="flex items-center gap-3 flex-wrap">
                     <span className="px-2.5 py-1 bg-mustard-500/10 text-mustard-600 dark:text-mustard-400 rounded-xl text-xs font-mono font-bold">
-                      OS #{String(os.os_number).padStart(5, '0')}
+                      {isPreventive ? 'PREV' : 'OS'} #{String(os.os_number).padStart(5, '0')}
                     </span>
-                    <span className="px-2 py-0.5 bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 rounded-lg text-xs font-medium">
-                      {os.order_type}
-                    </span>
+                    {isPreventive ? (
+                      <span className="px-2 py-0.5 bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 rounded-lg text-xs font-bold">
+                        Preventiva{os.preventive_type ? ` (${os.preventive_type})` : ''}
+                      </span>
+                    ) : (
+                      <span className="px-2 py-0.5 bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 rounded-lg text-xs font-medium">
+                        {os.order_type}
+                      </span>
+                    )}
                     {os.client_name && (
                       <span className="text-sm font-bold text-slate-800 dark:text-slate-200 truncate max-w-xs">
                         {os.client_name}

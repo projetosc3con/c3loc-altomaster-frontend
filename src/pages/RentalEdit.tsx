@@ -2213,7 +2213,7 @@ const RentalEdit: React.FC = () => {
                       </span>
                     </h3>
                     <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
-                      NF-e de remessa para locação (CFOP 5554/6554) e retorno de locação (CFOP 1554/2554) autorizadas na SEFAZ.
+                      NF-e de remessa por conta de contrato de locação (CFOP 5908/6908) e retorno de locação (CFOP 1909/2909) autorizadas na SEFAZ.
                     </p>
                   </div>
                   <button
@@ -2267,7 +2267,7 @@ const RentalEdit: React.FC = () => {
                                     </span>
                                   </p>
                                   <p className="text-xs text-slate-500 dark:text-slate-400">
-                                    {inv.created_at ? new Date(inv.created_at).toLocaleString('pt-BR') : ''} • CFOP {inv.cfop || (isSaida ? '5554' : '1554')}
+                                    {inv.created_at ? new Date(inv.created_at).toLocaleString('pt-BR') : ''} • CFOP {inv.cfop || (isSaida ? '5908' : '1909')}
                                   </p>
                                 </div>
                               </div>

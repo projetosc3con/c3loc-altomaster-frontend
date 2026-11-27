@@ -6,6 +6,7 @@ import { saveAs } from 'file-saver';
 import api from '../services/api';
 import type { ServiceOrder, UserProfile } from '../types';
 import ServiceOrderDocument from '../components/maintenance/ServiceOrderDocument';
+import PreventiveMaintenanceDocument from '../components/maintenance/PreventiveMaintenanceDocument';
 import { formatDate } from '../utils/date';
 
 const STATUS_OPTIONS = [
@@ -20,6 +21,7 @@ const STATUS_OPTIONS = [
 const STORAGE_KEY = 'c3loc_maintenance_filters';
 
 interface MaintenanceFiltersStorage {
+  categoryFilter: '' | 'OS' | 'PREVENTIVA';
   typeFilter: '' | 'Interna' | 'Externa';
   selectedStatuses: string[];
   technicianFilter: string;
@@ -31,6 +33,7 @@ const getInitialStoredFilters = (): MaintenanceFiltersStorage => {
     if (saved) {
       const parsed = JSON.parse(saved);
       return {
+        categoryFilter: parsed.categoryFilter || '',
         typeFilter: parsed.typeFilter || '',
         selectedStatuses: Array.isArray(parsed.selectedStatuses) ? parsed.selectedStatuses : [],
         technicianFilter: parsed.technicianFilter || '',
@@ -40,6 +43,7 @@ const getInitialStoredFilters = (): MaintenanceFiltersStorage => {
     console.warn('Erro ao carregar filtros de manutenção do localStorage:', e);
   }
   return {
+    categoryFilter: '',
     typeFilter: '',
     selectedStatuses: [],
     technicianFilter: '',
@@ -76,6 +80,7 @@ const Maintenance: React.FC = () => {
 
   // Filtros Avançados com persistência em localStorage
   const [showFilters, setShowFilters] = useState(false);
+  const [categoryFilter, setCategoryFilter] = useState<'' | 'OS' | 'PREVENTIVA'>(() => getInitialStoredFilters().categoryFilter);
   const [typeFilter, setTypeFilter] = useState<'' | 'Interna' | 'Externa'>(() => getInitialStoredFilters().typeFilter);
   const [selectedStatuses, setSelectedStatuses] = useState<string[]>(() => getInitialStoredFilters().selectedStatuses);
   const [technicianFilter, setTechnicianFilter] = useState<string>(() => getInitialStoredFilters().technicianFilter);
@@ -83,12 +88,13 @@ const Maintenance: React.FC = () => {
   // Salvar preferências de filtros automaticamente no localStorage
   useEffect(() => {
     try {
-      if (!typeFilter && selectedStatuses.length === 0 && !technicianFilter) {
+      if (!categoryFilter && !typeFilter && selectedStatuses.length === 0 && !technicianFilter) {
         localStorage.removeItem(STORAGE_KEY);
       } else {
         localStorage.setItem(
           STORAGE_KEY,
           JSON.stringify({
+            categoryFilter,
             typeFilter,
             selectedStatuses,
             technicianFilter,
@@ -98,12 +104,13 @@ const Maintenance: React.FC = () => {
     } catch (e) {
       console.warn('Erro ao salvar filtros de manutenção no localStorage:', e);
     }
-  }, [typeFilter, selectedStatuses, technicianFilter]);
+  }, [categoryFilter, typeFilter, selectedStatuses, technicianFilter]);
 
   const handleDownloadPdf = async (os: ServiceOrder) => {
     try {
       setGeneratingPdfId(os.id);
-      
+      const isPreventive = os.maintenance_category === 'PREVENTIVA';
+
       const partsUsed = (os as any).service_order_parts?.map((p: any) => ({
         part_id: p.part_id,
         description: p.parts?.description || p.part_description || '',
@@ -120,21 +127,26 @@ const Maintenance: React.FC = () => {
         start_time: l.start_time || '',
         end_time: l.end_time || '',
         labor_type: l.labor_type || 'T',
+        vehicle_plate: l.vehicle_plate || '',
+        km_start: l.km_start ?? null,
+        km_end: l.km_end ?? null,
       })) || [];
 
       const blob = await pdf(
-        <ServiceOrderDocument
-          data={os}
-          parts={partsUsed}
-          labor={laborEntries}
-        />
+        isPreventive ? (
+          <PreventiveMaintenanceDocument data={os} parts={partsUsed} labor={laborEntries} />
+        ) : (
+          <ServiceOrderDocument data={os} parts={partsUsed} labor={laborEntries} />
+        )
       ).toBlob();
-      
-      const fileName = `OS-${os.os_number || 'nova'}-${os.order_type || 'Interna'}.pdf`;
+
+      const fileName = isPreventive
+        ? `Preventiva-${os.os_number || 'nova'}-${os.preventive_type || 'Eletrica'}.pdf`
+        : `OS-${os.os_number || 'nova'}-${os.order_type || 'Interna'}.pdf`;
       saveAs(blob, fileName);
     } catch (err) {
       console.error('Erro ao gerar PDF:', err);
-      alert('Erro ao gerar o PDF da Ordem de Serviço.');
+      alert('Erro ao gerar o PDF da manutenção.');
     } finally {
       setGeneratingPdfId(null);
     }
@@ -143,7 +155,8 @@ const Maintenance: React.FC = () => {
   const handleViewPdf = async (os: ServiceOrder) => {
     try {
       setViewingPdfId(os.id);
-      
+      const isPreventive = os.maintenance_category === 'PREVENTIVA';
+
       const partsUsed = (os as any).service_order_parts?.map((p: any) => ({
         part_id: p.part_id,
         description: p.parts?.description || p.part_description || '',
@@ -160,20 +173,23 @@ const Maintenance: React.FC = () => {
         start_time: l.start_time || '',
         end_time: l.end_time || '',
         labor_type: l.labor_type || 'T',
+        vehicle_plate: l.vehicle_plate || '',
+        km_start: l.km_start ?? null,
+        km_end: l.km_end ?? null,
       })) || [];
 
       const blob = await pdf(
-        <ServiceOrderDocument
-          data={os}
-          parts={partsUsed}
-          labor={laborEntries}
-        />
+        isPreventive ? (
+          <PreventiveMaintenanceDocument data={os} parts={partsUsed} labor={laborEntries} />
+        ) : (
+          <ServiceOrderDocument data={os} parts={partsUsed} labor={laborEntries} />
+        )
       ).toBlob();
       const blobUrl = URL.createObjectURL(blob);
       window.open(blobUrl, '_blank');
     } catch (err) {
       console.error('Erro ao abrir PDF:', err);
-      alert('Erro ao visualizar o PDF da Ordem de Serviço.');
+      alert('Erro ao visualizar o PDF da manutenção.');
     } finally {
       setViewingPdfId(null);
     }
@@ -259,6 +275,12 @@ const Maintenance: React.FC = () => {
         if (!match) return false;
       }
 
+      // 1.5 Categoria (OS Normal vs Preventiva)
+      if (categoryFilter) {
+        const cat = os.maintenance_category === 'PREVENTIVA' ? 'PREVENTIVA' : 'OS';
+        if (cat !== categoryFilter) return false;
+      }
+
       // 2. Tipo de OS (Interna ou Externa)
       if (typeFilter) {
         const osType = os.order_type || 'Interna';
@@ -290,18 +312,20 @@ const Maintenance: React.FC = () => {
 
       return true;
     });
-  }, [orders, search, typeFilter, selectedStatuses, technicianFilter]);
+  }, [orders, search, categoryFilter, typeFilter, selectedStatuses, technicianFilter]);
 
   const activeFiltersCount = useMemo(() => {
     let count = 0;
+    if (categoryFilter) count++;
     if (typeFilter) count++;
     if (selectedStatuses.length > 0) count++;
     if (technicianFilter) count++;
     return count;
-  }, [typeFilter, selectedStatuses, technicianFilter]);
+  }, [categoryFilter, typeFilter, selectedStatuses, technicianFilter]);
 
   const clearAllFilters = () => {
     setSearch('');
+    setCategoryFilter('');
     setTypeFilter('');
     setSelectedStatuses([]);
     setTechnicianFilter('');
@@ -356,14 +380,21 @@ const Maintenance: React.FC = () => {
           initial={{ x: 20, opacity: 0 }}
           animate={{ x: 0, opacity: 1 }}
           transition={{ duration: 0.4 }}
-          className="flex items-center gap-3"
+          className="flex flex-wrap items-center gap-3"
         >
           <button
             onClick={() => navigate('/manutencoes/nova')}
-            className="bg-mustard-500 text-white px-5 py-2.5 rounded-xl font-bold flex items-center gap-2 hover:bg-mustard-600 active:scale-[0.98] transition-all shadow-lg shadow-mustard-500/20"
+            className="bg-mustard-500 text-white px-5 py-2.5 rounded-xl font-bold flex items-center gap-2 hover:bg-mustard-600 active:scale-[0.98] transition-all shadow-lg shadow-mustard-500/20 cursor-pointer"
           >
             <span className="material-symbols-outlined text-[20px]">add</span>
             <span>Nova OS</span>
+          </button>
+          <button
+            onClick={() => navigate('/manutencoes/preventiva/nova')}
+            className="bg-emerald-600 text-white px-5 py-2.5 rounded-xl font-bold flex items-center gap-2 hover:bg-emerald-700 active:scale-[0.98] transition-all shadow-lg shadow-emerald-600/20 cursor-pointer"
+          >
+            <span className="material-symbols-outlined text-[20px]">fact_check</span>
+            <span>Nova Preventiva</span>
           </button>
         </motion.div>
       </div>
@@ -407,11 +438,10 @@ const Maintenance: React.FC = () => {
             {/* Botão para abrir o Offcanvas */}
             <button
               onClick={() => setShowFilters(true)}
-              className={`relative flex items-center gap-2 px-4 py-2.5 rounded-xl border text-xs font-bold transition-all shrink-0 cursor-pointer ${
-                activeFiltersCount > 0
+              className={`relative flex items-center gap-2 px-4 py-2.5 rounded-xl border text-xs font-bold transition-all shrink-0 cursor-pointer ${activeFiltersCount > 0
                   ? 'bg-mustard-50 dark:bg-mustard-500/10 border-mustard-500 text-mustard-600 dark:text-mustard-400 ring-2 ring-mustard-500/20'
                   : 'bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-700'
-              }`}
+                }`}
             >
               <span className="material-symbols-outlined text-[18px]">tune</span>
               <span>Filtros</span>
@@ -421,6 +451,29 @@ const Maintenance: React.FC = () => {
                 </span>
               )}
             </button>
+
+            {/* Filtro rápido: Todas / OS Normal / Preventiva */}
+            <div className="inline-flex items-center p-1 bg-slate-100 dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 shrink-0">
+              {(
+                [
+                  { label: 'Todas', value: '' },
+                  { label: 'OS Normal', value: 'OS' },
+                  { label: 'Preventiva', value: 'PREVENTIVA' },
+                ] as const
+              ).map((tab) => (
+                <button
+                  key={tab.label}
+                  type="button"
+                  onClick={() => setCategoryFilter(tab.value)}
+                  className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${categoryFilter === tab.value
+                      ? 'bg-white dark:bg-slate-900 text-slate-900 dark:text-white shadow-xs'
+                      : 'text-slate-500 dark:text-slate-400 hover:text-slate-800 dark:hover:text-slate-200'
+                    }`}
+                >
+                  {tab.label}
+                </button>
+              ))}
+            </div>
           </div>
 
           <div className="flex items-center gap-3 px-4 py-2.5 bg-slate-50 dark:bg-slate-800/50 rounded-xl border border-slate-100 dark:border-slate-800 w-full md:w-auto transition-colors shrink-0">
@@ -534,13 +587,23 @@ const Maintenance: React.FC = () => {
                         <span className="font-bold text-slate-900 dark:text-white">#{os.os_number}</span>
                       </td>
                       <td className="px-6 py-4">
-                        <span className={`inline-flex items-center px-2 py-0.5 rounded text-[10px] font-black uppercase tracking-widest ${
-                          os.order_type === 'Externa'
-                            ? 'bg-orange-50 dark:bg-orange-500/10 text-orange-600 dark:text-orange-400 border border-orange-200/50 dark:border-orange-500/20'
-                            : 'bg-blue-50 dark:bg-blue-500/10 text-blue-600 dark:text-blue-400 border border-blue-200/50 dark:border-blue-500/20'
-                        }`}>
-                          {os.order_type || 'Interna'}
-                        </span>
+                        {os.maintenance_category === 'PREVENTIVA' ? (
+                          <span
+                            className={`inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-black uppercase tracking-widest border ${os.preventive_type === 'Diesel'
+                                ? 'bg-amber-50 dark:bg-amber-500/10 text-amber-700 dark:text-amber-300 border-amber-200/70 dark:border-amber-500/30'
+                                : 'bg-emerald-50 dark:bg-emerald-500/10 text-emerald-700 dark:text-emerald-300 border-emerald-200/70 dark:border-emerald-500/30'
+                              }`}
+                          >
+                            Preventiva {os.preventive_type || ''}
+                          </span>
+                        ) : (
+                          <span className={`inline-flex items-center px-2 py-0.5 rounded text-[10px] font-black uppercase tracking-widest ${os.order_type === 'Externa'
+                              ? 'bg-orange-50 dark:bg-orange-500/10 text-orange-600 dark:text-orange-400 border border-orange-200/50 dark:border-orange-500/20'
+                              : 'bg-blue-50 dark:bg-blue-500/10 text-blue-600 dark:text-blue-400 border border-blue-200/50 dark:border-blue-500/20'
+                            }`}>
+                            {os.order_type || 'Interna'}
+                          </span>
+                        )}
                       </td>
                       <td className="px-6 py-4">
                         <div className="flex flex-col">
@@ -650,7 +713,13 @@ const Maintenance: React.FC = () => {
                             )}
                           </button>
                           <button
-                            onClick={() => navigate(`/manutencoes/editar/${os.id}`)}
+                            onClick={() =>
+                              navigate(
+                                os.maintenance_category === 'PREVENTIVA'
+                                  ? `/manutencoes/preventiva/editar/${os.id}`
+                                  : `/manutencoes/editar/${os.id}`
+                              )
+                            }
                             className="p-1.5 text-slate-400 hover:text-mustard-600 dark:hover:text-mustard-400 hover:bg-mustard-50 dark:hover:bg-mustard-500/10 rounded transition-colors"
                             title="Editar"
                           >
@@ -763,17 +832,15 @@ const Maintenance: React.FC = () => {
                           key={item.label}
                           type="button"
                           onClick={() => setTypeFilter(item.value as '' | 'Interna' | 'Externa')}
-                          className={`px-3 py-3 rounded-2xl text-xs font-bold text-center transition-all flex flex-col items-center gap-1.5 cursor-pointer ${
-                            isSelected
+                          className={`px-3 py-3 rounded-2xl text-xs font-bold text-center transition-all flex flex-col items-center gap-1.5 cursor-pointer ${isSelected
                               ? 'bg-mustard-500 text-white shadow-lg shadow-mustard-500/25 ring-2 ring-mustard-500'
                               : 'bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-700'
-                          }`}
+                            }`}
                         >
                           <span className="material-symbols-outlined text-[20px]">{item.icon}</span>
                           <span>{item.label}</span>
-                          <span className={`text-[10px] font-mono px-1.5 py-0.5 rounded-full ${
-                            isSelected ? 'bg-white/25 text-white' : 'bg-slate-200/60 dark:bg-slate-700 text-slate-500 dark:text-slate-400'
-                          }`}>
+                          <span className={`text-[10px] font-mono px-1.5 py-0.5 rounded-full ${isSelected ? 'bg-white/25 text-white' : 'bg-slate-200/60 dark:bg-slate-700 text-slate-500 dark:text-slate-400'
+                            }`}>
                             {count}
                           </span>
                         </button>
@@ -808,19 +875,17 @@ const Maintenance: React.FC = () => {
                           key={item.label}
                           type="button"
                           onClick={() => toggleStatus(item.value)}
-                          className={`px-3 py-2.5 rounded-xl text-xs font-bold text-left transition-all flex items-center justify-between border cursor-pointer ${
-                            isSelected
+                          className={`px-3 py-2.5 rounded-xl text-xs font-bold text-left transition-all flex items-center justify-between border cursor-pointer ${isSelected
                               ? 'bg-mustard-500 text-white border-mustard-500 shadow-md shadow-mustard-500/20'
                               : 'bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700'
-                          }`}
+                            }`}
                         >
                           <div className="flex items-center gap-2 truncate">
                             <span className={`w-2.5 h-2.5 rounded-full shrink-0 ${isSelected ? 'bg-white' : item.dotColor}`} />
                             <span className="truncate">{item.label}</span>
                           </div>
-                          <span className={`text-[10px] font-mono px-1.5 py-0.2 rounded-full shrink-0 ml-1.5 ${
-                            isSelected ? 'bg-white/20 text-white' : 'bg-slate-200 dark:bg-slate-700 text-slate-600 dark:text-slate-400'
-                          }`}>
+                          <span className={`text-[10px] font-mono px-1.5 py-0.2 rounded-full shrink-0 ml-1.5 ${isSelected ? 'bg-white/20 text-white' : 'bg-slate-200 dark:bg-slate-700 text-slate-600 dark:text-slate-400'
+                            }`}>
                             {count}
                           </span>
                         </button>
